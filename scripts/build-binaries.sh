@@ -10,7 +10,7 @@
 #   --skip-install      Skip npm ci
 #   --skip-deps         Skip installing cross-platform dependencies
 #   --skip-build        Skip npm run build
-#   --platform <name>   Build only for specified platform (darwin-arm64, darwin-x64, linux-x64, linux-arm64, windows-x64, windows-arm64)
+#   --platform <name>   Build only for specified platform (linux-x64, linux-arm64, windows-x64, windows-arm64)
 #   --out <dir>         Output directory (default: packages/coding-agent/binaries)
 #
 # Output:
@@ -62,11 +62,11 @@ done
 # Validate platform if specified
 if [[ -n "$PLATFORM" ]]; then
     case "$PLATFORM" in
-        darwin-arm64|darwin-x64|linux-x64|linux-arm64|windows-x64|windows-arm64)
+        linux-x64|linux-arm64|windows-x64|windows-arm64)
             ;;
         *)
             echo "Invalid platform: $PLATFORM"
-            echo "Valid platforms: darwin-arm64, darwin-x64, linux-x64, linux-arm64, windows-x64, windows-arm64"
+            echo "Valid platforms: linux-x64, linux-arm64, windows-x64, windows-arm64"
             exit 1
             ;;
     esac
@@ -89,18 +89,28 @@ fi
 if [[ "$SKIP_DEPS" == "false" ]]; then
     echo "==> Installing cross-platform native bindings..."
     CLIPBOARD_VERSION=$(node -p "require('./packages/coding-agent/package.json').optionalDependencies['@mariozechner/clipboard']")
-    # npm ci only installs optional deps for the current platform
-    # We need the base clipboard package and all platform bindings for bun cross-compilation
-    # Use --force to bypass platform checks (os/cpu restrictions in package.json)
-    # Install all in one command to avoid npm removing packages from previous installs
-    npm install --include=optional --no-save --package-lock=false --force --ignore-scripts \
-        @mariozechner/clipboard@"$CLIPBOARD_VERSION" \
-        @mariozechner/clipboard-darwin-arm64@"$CLIPBOARD_VERSION" \
-        @mariozechner/clipboard-darwin-x64@"$CLIPBOARD_VERSION" \
-        @mariozechner/clipboard-linux-x64-gnu@"$CLIPBOARD_VERSION" \
-        @mariozechner/clipboard-linux-arm64-gnu@"$CLIPBOARD_VERSION" \
-        @mariozechner/clipboard-win32-x64-msvc@"$CLIPBOARD_VERSION" \
-        @mariozechner/clipboard-win32-arm64-msvc@"$CLIPBOARD_VERSION"
+    # npm rejects optional native packages for other operating systems and CPUs.
+    # Download their tarballs and extract them directly for Bun cross-compilation.
+    NATIVE_TMP=$(mktemp -d)
+    cleanup_native_tmp() {
+        rm -rf "$NATIVE_TMP"
+    }
+    trap cleanup_native_tmp EXIT
+
+    for package in \
+        clipboard-linux-x64-gnu \
+        clipboard-linux-arm64-gnu \
+        clipboard-win32-x64-msvc \
+        clipboard-win32-arm64-msvc; do
+        archive=$(npm pack "@mariozechner/$package@$CLIPBOARD_VERSION" --pack-destination "$NATIVE_TMP" --silent)
+        destination="node_modules/@mariozechner/$package"
+        rm -rf "$destination"
+        mkdir -p "$destination"
+        tar -xzf "$NATIVE_TMP/$archive" -C "$destination" --strip-components=1
+    done
+
+    cleanup_native_tmp
+    trap - EXIT
 else
     echo "==> Skipping cross-platform native bindings (--skip-deps)"
 fi
@@ -117,7 +127,7 @@ cd packages/coding-agent
 
 # Clean previous builds
 rm -rf "$OUTPUT_DIR"
-mkdir -p "$OUTPUT_DIR"/{darwin-arm64,darwin-x64,linux-x64,linux-arm64,windows-x64,windows-arm64}
+mkdir -p "$OUTPUT_DIR"/{linux-x64,linux-arm64,windows-x64,windows-arm64}
 
 # Determine which platforms to build
 if [[ -n "$PLATFORM" ]]; then
