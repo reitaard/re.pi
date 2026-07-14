@@ -3,6 +3,7 @@ import type { WorkingIndicatorOptions } from "../../../core/extensions/index.ts"
 import { theme } from "../theme/theme.ts";
 import { CountdownTimer } from "./countdown-timer.ts";
 import { keyText } from "./keybinding-hints.ts";
+import { createRecodeGeneratingTransition, createRecodeLoaderIndicator } from "./recode-magic-indicator.ts";
 
 export type StatusIndicatorKind = "working" | "retry" | "compaction" | "branchSummary";
 
@@ -27,15 +28,62 @@ export class StatusIndicator extends Loader {
 }
 
 export class WorkingStatusIndicator extends StatusIndicator {
+	private generating = false;
+	private transitionTimer: NodeJS.Timeout | undefined;
+	private usesCustomIndicator: boolean;
+	private workingMessage: string;
+
 	constructor(ui: TUI, message: string, indicator?: WorkingIndicatorOptions) {
 		super(
 			"working",
 			ui,
-			(spinner) => theme.fg("accent", spinner),
+			(spinner) => theme.fg("borderAccent", spinner),
 			(text) => theme.fg("muted", text),
 			message,
-			indicator,
+			indicator ?? createRecodeLoaderIndicator(),
 		);
+		this.usesCustomIndicator = indicator !== undefined;
+		this.workingMessage = message;
+	}
+
+	setGenerating(): void {
+		if (this.generating || this.usesCustomIndicator) return;
+		this.generating = true;
+		const transition = createRecodeGeneratingTransition();
+		super.setMessage("");
+		super.setIndicator(transition.indicator);
+		this.transitionTimer = setTimeout(() => {
+			this.transitionTimer = undefined;
+			super.setIndicator(createRecodeLoaderIndicator());
+			super.setMessage("Generating...");
+		}, transition.durationMs);
+	}
+
+	applyIndicator(indicator?: WorkingIndicatorOptions): void {
+		this.clearTransitionTimer();
+		this.generating = false;
+		this.usesCustomIndicator = indicator !== undefined;
+		super.setIndicator(indicator ?? createRecodeLoaderIndicator());
+		super.setMessage(this.workingMessage);
+	}
+
+	override setMessage(message: string): void {
+		this.workingMessage = message;
+		if (!this.generating) {
+			super.setMessage(message);
+		}
+	}
+
+	override dispose(): void {
+		this.clearTransitionTimer();
+		super.dispose();
+	}
+
+	private clearTransitionTimer(): void {
+		if (this.transitionTimer) {
+			clearTimeout(this.transitionTimer);
+			this.transitionTimer = undefined;
+		}
 	}
 }
 

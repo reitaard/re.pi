@@ -43,6 +43,7 @@ const ThemeJsonSchema = Type.Object({
 		warning: ColorValueSchema,
 		muted: ColorValueSchema,
 		dim: ColorValueSchema,
+		footer: Type.Optional(ColorValueSchema),
 		text: ColorValueSchema,
 		thinkingText: ColorValueSchema,
 		// Backgrounds & Content Text (11 colors)
@@ -116,6 +117,7 @@ export type ThemeColor =
 	| "warning"
 	| "muted"
 	| "dim"
+	| "footer"
 	| "text"
 	| "thinkingText"
 	| "userMessageText"
@@ -319,8 +321,14 @@ function resolveThemeColors<T extends Record<string, ColorValue>>(
 	return resolved as Record<keyof T, string | number>;
 }
 
-function withThemeColorFallbacks(colors: ThemeJson["colors"]): ThemeJson["colors"] & { thinkingMax: ColorValue } {
-	return { ...colors, thinkingMax: colors.thinkingMax ?? colors.thinkingXhigh };
+function withThemeColorFallbacks(
+	colors: ThemeJson["colors"],
+): ThemeJson["colors"] & { footer: ColorValue; thinkingMax: ColorValue } {
+	return {
+		...colors,
+		footer: colors.footer ?? colors.dim,
+		thinkingMax: colors.thinkingMax ?? colors.thinkingXhigh,
+	};
 }
 
 // ============================================================================

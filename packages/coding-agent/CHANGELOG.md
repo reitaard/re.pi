@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.81.0] - 2026-07-15
+
+### re.pi Checkpoint
+
+- Added the responsive re.pi startup header, re.code palette, terminal background lifecycle, and compact terminal layout.
+- Added the built-in Open Provider with Base URL and optional API-key configuration through `/open-provider` or `/login open-provider`.
+- Added dynamic OpenAI-compatible model discovery with LM Studio name, context, vision, and binary reasoning enrichment.
+- Added truthful `thinking off` and `thinking on` labels for binary reasoning models while preserving graded labels for compatible models.
+- Added the green working loader and encrypted transition to `Generating...` when model output begins.
+- Added `repi`, `re.pi`, and `pi` executable aliases and Windows/Linux release artifacts.
+
 ### Breaking Changes
 
 - Removed the `openai-responses` `compat.sendSessionIdHeader` flag from `models.json`. Session-affinity behavior is now controlled by `compat.sessionAffinityFormat` (`"openai"`, `"openai-nosession"`, or `"openrouter"`). Replace `sendSessionIdHeader: false` with `sessionAffinityFormat: "openai-nosession"` ([#6366](https://github.com/earendil-works/pi/issues/6366)).

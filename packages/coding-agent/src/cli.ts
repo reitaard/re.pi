@@ -8,6 +8,7 @@
 import { APP_NAME } from "./config.ts";
 import { configureHttpDispatcher } from "./core/http-dispatcher.ts";
 import { main } from "./main.ts";
+import { recodeOpenProvider } from "./recode-open-provider.ts";
 
 process.title = APP_NAME;
 process.env.PI_CODING_AGENT = "true";
@@ -17,4 +18,6 @@ process.emitWarning = (() => {}) as typeof process.emitWarning;
 // Runtime settings are applied once SettingsManager has loaded global/project settings.
 configureHttpDispatcher();
 
-main(process.argv.slice(2));
+main(process.argv.slice(2), {
+	extensionFactories: [{ name: "recode-open-provider", factory: recodeOpenProvider }],
+});

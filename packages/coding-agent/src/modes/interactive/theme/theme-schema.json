@@ -125,6 +125,10 @@
 					"$ref": "#/$defs/colorValue",
 					"description": "Very dimmed text (more subtle than muted)"
 				},
+				"footer": {
+					"$ref": "#/$defs/colorValue",
+					"description": "Footer path, usage, and model status text"
+				},
 				"text": {
 					"$ref": "#/$defs/colorValue",
 					"description": "Default text color (usually empty string)"

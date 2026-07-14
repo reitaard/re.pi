@@ -28,6 +28,7 @@
 		"warning": "yellow",
 		"muted": "mediumGray",
 		"dim": "dimGray",
+		"footer": "blue",
 		"text": "text",
 		"thinkingText": "mediumGray",
 

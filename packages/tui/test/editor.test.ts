@@ -2090,6 +2090,31 @@ describe("Editor component", () => {
 	});
 
 	describe("Autocomplete", () => {
+		it("renders command suggestions above the composer", async () => {
+			const editor = new Editor(createTestTUI(), defaultEditorTheme);
+			const mockProvider: AutocompleteProvider = {
+				getSuggestions: async () => ({
+					items: [
+						{ value: "/settings", label: "settings" },
+						{ value: "/model", label: "model" },
+					],
+					prefix: "/",
+				}),
+				applyCompletion,
+			};
+
+			editor.setAutocompleteProvider(mockProvider);
+			editor.handleInput("/");
+			await flushAutocomplete();
+
+			const lines = editor.render(60).map(stripVTControlCharacters);
+			const suggestionsRow = lines.findIndex((line) => line.includes("settings"));
+			const composerTopBorder = lines.findIndex((line) => line.startsWith("─"));
+
+			assert.ok(suggestionsRow >= 0);
+			assert.ok(composerTopBorder > suggestionsRow);
+		});
+
 		it("auto-applies single force-file suggestion without showing menu", async () => {
 			const editor = new Editor(createTestTUI(), defaultEditorTheme);
 

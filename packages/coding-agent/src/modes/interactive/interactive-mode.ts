@@ -37,7 +37,6 @@ import {
 	hyperlink,
 	Markdown,
 	matchesKey,
-	ProcessTerminal,
 	Spacer,
 	setKeybindings,
 	Text,
@@ -127,6 +126,8 @@ import {
 	formatAuthSelectorProviderType,
 	OAuthSelectorComponent,
 } from "./components/oauth-selector.ts";
+import { RecodeHeader } from "./components/recode-header.ts";
+import { formatRecodeThinkingLevel } from "./components/recode-thinking-label.ts";
 import { ScopedModelsSelectorComponent } from "./components/scoped-models-selector.ts";
 import { SessionSelectorComponent } from "./components/session-selector.ts";
 import { SettingsSelectorComponent } from "./components/settings-selector.ts";
@@ -145,6 +146,7 @@ import { TrustSelectorComponent } from "./components/trust-selector.ts";
 import { UserMessageComponent } from "./components/user-message.ts";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.ts";
 import { getModelSearchText } from "./model-search.ts";
+import { RecodeProcessTerminal } from "./recode-process-terminal.ts";
 import {
 	getAvailableThemes,
 	getAvailableThemesWithPaths,
@@ -473,7 +475,7 @@ export class InteractiveMode {
 			await this.rebindCurrentSession({ renderBeforeBind: true });
 		});
 		this.version = VERSION;
-		this.ui = new TUI(new ProcessTerminal(), this.settingsManager.getShowHardwareCursor());
+		this.ui = new TUI(new RecodeProcessTerminal(), this.settingsManager.getShowHardwareCursor());
 		this.ui.setClearOnShrink(this.settingsManager.getClearOnShrink());
 		this.headerContainer = new Container();
 		this.loadedResourcesContainer = new Container();
@@ -747,8 +749,6 @@ export class InteractiveMode {
 
 		// Add header with keybindings from config (unless silenced)
 		if (this.options.verbose || !this.settingsManager.getQuietStartup()) {
-			const logo = theme.bold(theme.fg("accent", APP_NAME)) + theme.fg("dim", ` v${this.version}`);
-
 			// Build startup instructions using keybinding hint helpers
 			const hint = (keybinding: AppKeybinding, description: string) => keyHint(keybinding, description);
 
@@ -773,24 +773,13 @@ export class InteractiveMode {
 				hint("app.clipboard.pasteImage", "to paste image (with text fallback)"),
 				rawKeyHint("drop files", "to attach"),
 			].join("\n");
-			const compactInstructions = [
-				hint("app.interrupt", "interrupt"),
-				rawKeyHint(`${keyText("app.clear")}/${keyText("app.exit")}`, "clear/exit"),
-				rawKeyHint("/", "commands"),
-				rawKeyHint("!", "bash"),
-				hint("app.tools.expand", "more"),
-			].join(theme.fg("muted", " · "));
-			const compactOnboarding = theme.fg(
-				"dim",
-				`Press ${keyText("app.tools.expand")} to show full startup help and loaded resources.`,
-			);
 			const onboarding = theme.fg(
 				"dim",
 				`Pi can explain its own features and look up its docs. Ask it how to use or extend Pi.`,
 			);
 			this.builtInHeader = new ExpandableText(
-				() => `${logo}\n${compactInstructions}\n${compactOnboarding}\n\n${onboarding}`,
-				() => `${logo}\n${expandedInstructions}\n\n${onboarding}`,
+				() => "",
+				() => `${expandedInstructions}\n\n${onboarding}`,
 				this.getStartupExpansionState(),
 				1,
 				0,
@@ -798,6 +787,17 @@ export class InteractiveMode {
 
 			// Setup UI layout
 			this.headerContainer.addChild(new Spacer(1));
+			this.headerContainer.addChild(
+				new RecodeHeader(
+					this.version,
+					() => (this.session.state.messages.length === 0 ? "welcome" : "hidden"),
+					() => ({
+						model: this.session.model?.id ?? "No model selected",
+						provider: this.session.model?.provider ?? "unknown",
+						cwd: path.basename(this.sessionManager.getCwd()) || ".",
+					}),
+				),
+			);
 			this.headerContainer.addChild(this.builtInHeader);
 			this.headerContainer.addChild(new Spacer(1));
 		} else {
@@ -1869,8 +1869,8 @@ export class InteractiveMode {
 
 	private setWorkingIndicator(options?: WorkingIndicatorOptions): void {
 		this.workingIndicatorOptions = options;
-		if (this.activeStatusIndicator?.kind === "working") {
-			this.activeStatusIndicator.setIndicator(options);
+		if (this.activeStatusIndicator instanceof WorkingStatusIndicator) {
+			this.activeStatusIndicator.applyIndicator(options);
 		}
 		this.ui.requestRender();
 	}
@@ -2907,6 +2907,14 @@ export class InteractiveMode {
 
 			case "message_update":
 				if (this.streamingComponent && event.message.role === "assistant") {
+					if (
+						this.activeStatusIndicator instanceof WorkingStatusIndicator &&
+						["text_delta", "thinking_delta", "toolcall_start", "toolcall_delta"].includes(
+							event.assistantMessageEvent.type,
+						)
+					) {
+						this.activeStatusIndicator.setGenerating();
+					}
 					this.streamingMessage = event.message;
 					this.streamingComponent.updateContent(this.streamingMessage);
 
@@ -3714,8 +3722,7 @@ export class InteractiveMode {
 		if (this.isBashMode) {
 			this.editor.borderColor = theme.getBashModeBorderColor();
 		} else {
-			const level = this.session.thinkingLevel || "off";
-			this.editor.borderColor = theme.getThinkingBorderColor(level);
+			this.editor.borderColor = (text) => theme.fg("border", text);
 		}
 		this.ui.requestRender();
 	}
@@ -3727,7 +3734,8 @@ export class InteractiveMode {
 		} else {
 			this.footer.invalidate();
 			this.updateEditorBorderColor();
-			this.showStatus(`Thinking level: ${newLevel}`);
+			const label = formatRecodeThinkingLevel(newLevel, this.session.getAvailableThinkingLevels());
+			this.showStatus(`Thinking: ${label}`);
 		}
 	}
 
@@ -3740,8 +3748,11 @@ export class InteractiveMode {
 			} else {
 				this.footer.invalidate();
 				this.updateEditorBorderColor();
-				const thinkingStr =
-					result.model.reasoning && result.thinkingLevel !== "off" ? ` (thinking: ${result.thinkingLevel})` : "";
+				const thinkingLabel = formatRecodeThinkingLevel(
+					result.thinkingLevel,
+					this.session.getAvailableThinkingLevels(),
+				);
+				const thinkingStr = result.model.reasoning ? ` (thinking: ${thinkingLabel})` : "";
 				this.showStatus(`Switched to ${result.model.name || result.model.id}${thinkingStr}`);
 				void this.maybeWarnAboutAnthropicSubscriptionAuth(result.model);
 			}
@@ -4815,6 +4826,9 @@ export class InteractiveMode {
 		}));
 
 		const modelProviders = new Set(this.session.modelRegistry.getAll().map((model) => model.provider));
+		if (this.session.extensionRunner.getCommand("open-provider")) {
+			modelProviders.add("open-provider");
+		}
 		for (const providerId of modelProviders) {
 			if (!isApiKeyLoginProvider(providerId, oauthProviderIds)) {
 				continue;
@@ -4886,6 +4900,10 @@ export class InteractiveMode {
 	}
 
 	private async startProviderLogin(providerOption: AuthSelectorProvider): Promise<void> {
+		if (providerOption.id === "open-provider" && this.session.extensionRunner.getCommand("open-provider")) {
+			await this.session.prompt("/open-provider");
+			return;
+		}
 		if (providerOption.authType === "oauth") {
 			await this.showLoginDialog(providerOption.id, providerOption.name);
 		} else {

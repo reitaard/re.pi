@@ -504,6 +504,17 @@ export class Editor implements Component, Focusable {
 		const leftPadding = " ".repeat(paddingX);
 		const rightPadding = leftPadding;
 
+		// Render autocomplete above the editor so opening a command menu does not
+		// push the composer upward when the terminal viewport is already full.
+		if (this.autocompleteState && this.autocompleteList) {
+			const autocompleteResult = this.autocompleteList.render(contentWidth);
+			for (const line of autocompleteResult) {
+				const lineWidth = visibleWidth(line);
+				const linePadding = " ".repeat(Math.max(0, contentWidth - lineWidth));
+				result.push(`${leftPadding}${line}${linePadding}${rightPadding}`);
+			}
+		}
+
 		// Render top border (with scroll indicator if scrolled down)
 		if (this.scrollOffset > 0) {
 			const indicator = `─── ↑ ${this.scrollOffset} more `;
@@ -573,16 +584,6 @@ export class Editor implements Component, Focusable {
 			result.push(this.borderColor(indicator + "─".repeat(Math.max(0, remaining))));
 		} else {
 			result.push(horizontal.repeat(width));
-		}
-
-		// Add autocomplete list if active
-		if (this.autocompleteState && this.autocompleteList) {
-			const autocompleteResult = this.autocompleteList.render(contentWidth);
-			for (const line of autocompleteResult) {
-				const lineWidth = visibleWidth(line);
-				const linePadding = " ".repeat(Math.max(0, contentWidth - lineWidth));
-				result.push(`${leftPadding}${line}${linePadding}${rightPadding}`);
-			}
 		}
 
 		return result;

@@ -1,6 +1,7 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { Container, Markdown, type MarkdownTheme, Spacer, Text } from "@earendil-works/pi-tui";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
+import { RecodeThinkingBlock } from "./recode-thinking-block.ts";
 
 const OSC133_ZONE_START = "\x1b]133;A\x07";
 const OSC133_ZONE_END = "\x1b]133;B\x07";
@@ -119,10 +120,12 @@ export class AssistantMessageComponent extends Container {
 				} else {
 					// Thinking traces in thinkingText color, italic
 					this.contentContainer.addChild(
-						new Markdown(content.thinking.trim(), this.outputPad, 0, this.markdownTheme, {
-							color: (text: string) => theme.fg("thinkingText", text),
-							italic: true,
-						}),
+						new RecodeThinkingBlock(
+							new Markdown(content.thinking.trim(), this.outputPad, 0, this.markdownTheme, {
+								color: (text: string) => theme.fg("thinkingText", text),
+								italic: true,
+							}),
+						),
 					);
 					if (hasVisibleContentAfter) {
 						this.contentContainer.addChild(new Spacer(1));

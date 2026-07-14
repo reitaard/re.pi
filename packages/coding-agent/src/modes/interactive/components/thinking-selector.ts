@@ -2,6 +2,7 @@ import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import { Container, type SelectItem, SelectList, type SelectListLayoutOptions } from "@earendil-works/pi-tui";
 import { getSelectListTheme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
+import { formatRecodeThinkingLevel, hasBinaryThinkingLevels } from "./recode-thinking-label.ts";
 
 const THINKING_SELECT_LIST_LAYOUT: SelectListLayoutOptions = {
 	minPrimaryColumnWidth: 12,
@@ -34,8 +35,11 @@ export class ThinkingSelectorComponent extends Container {
 
 		const thinkingLevels: SelectItem[] = availableLevels.map((level) => ({
 			value: level,
-			label: level,
-			description: LEVEL_DESCRIPTIONS[level],
+			label: formatRecodeThinkingLevel(level, availableLevels),
+			description:
+				hasBinaryThinkingLevels(availableLevels) && level === "medium"
+					? "Reasoning enabled"
+					: LEVEL_DESCRIPTIONS[level],
 		}));
 
 		// Add top border

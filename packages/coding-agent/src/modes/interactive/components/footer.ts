@@ -4,6 +4,7 @@ import type { AgentSession } from "../../../core/agent-session.ts";
 import { areExperimentalFeaturesEnabled } from "../../../core/experimental.ts";
 import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.ts";
 import { theme } from "../theme/theme.ts";
+import { formatRecodeThinkingLevel } from "./recode-thinking-label.ts";
 
 /**
  * Sanitize text for display in a single-line status.
@@ -183,8 +184,8 @@ export class FooterComponent implements Component {
 		let rightSideWithoutProvider = modelName;
 		if (state.model?.reasoning) {
 			const thinkingLevel = state.thinkingLevel || "off";
-			rightSideWithoutProvider =
-				thinkingLevel === "off" ? `${modelName} • thinking off` : `${modelName} • ${thinkingLevel}`;
+			const thinkingLabel = formatRecodeThinkingLevel(thinkingLevel, this.session.getAvailableThinkingLevels());
+			rightSideWithoutProvider = `${modelName} • thinking ${thinkingLabel}`;
 		}
 
 		// Prepend the provider in parentheses if there are multiple providers and there's enough room
@@ -222,11 +223,11 @@ export class FooterComponent implements Component {
 		// Apply dim to each part separately. statsLeft may contain color codes (for context %)
 		// that end with a reset, which would clear an outer dim wrapper. So we dim the parts
 		// before and after the colored section independently.
-		const dimStatsLeft = theme.fg("dim", statsLeft);
+		const dimStatsLeft = theme.fg("footer", statsLeft);
 		const remainder = statsLine.slice(statsLeft.length); // padding + rightSide
-		const dimRemainder = theme.fg("dim", remainder);
+		const dimRemainder = theme.fg("footer", remainder);
 
-		const pwdLine = truncateToWidth(theme.fg("dim", pwd), width, theme.fg("dim", "..."));
+		const pwdLine = truncateToWidth(theme.fg("footer", pwd), width, theme.fg("footer", "..."));
 		const lines = [pwdLine, dimStatsLeft + dimRemainder];
 
 		// Add extension statuses on a single line, sorted by key alphabetically
@@ -237,7 +238,7 @@ export class FooterComponent implements Component {
 				.map(([, text]) => sanitizeStatusText(text));
 			const statusLine = sortedStatuses.join(" ");
 			// Truncate to terminal width with dim ellipsis for consistency with footer style
-			lines.push(truncateToWidth(statusLine, width, theme.fg("dim", "...")));
+			lines.push(truncateToWidth(statusLine, width, theme.fg("footer", "...")));
 		}
 
 		return lines;
