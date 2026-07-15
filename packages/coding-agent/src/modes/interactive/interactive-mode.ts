@@ -93,6 +93,17 @@ import type { SourceInfo } from "../../core/source-info.ts";
 import { isInstallTelemetryEnabled } from "../../core/telemetry.ts";
 import type { TruncationResult } from "../../core/tools/truncate.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../../core/trust-manager.ts";
+import {
+	clearLspmuxDetectionCache,
+	detectLspmux,
+	getLspLifecycleStatuses,
+	LSP_CONTROL_USAGE,
+	LSPMUX_CONTROL_USAGE,
+	loadLspConfig,
+	parseLspControlCommand,
+	shutdownLspClientsForCwd,
+	subscribeLspLifecycle,
+} from "../../lsp/index.ts";
 import { getChangelogPath, getNewEntries, normalizeChangelogLinks, parseChangelog } from "../../utils/changelog.ts";
 import { copyToClipboard, readClipboardText } from "../../utils/clipboard.ts";
 import { extensionForImageMimeType, readClipboardImage } from "../../utils/clipboard-image.ts";
@@ -746,6 +757,12 @@ export class InteractiveMode {
 		// Start the UI before initializing extensions so session_start handlers can use interactive dialogs
 		this.ui.start();
 		this.isInitialized = true;
+		this.signalCleanupHandlers.push(
+			subscribeLspLifecycle((event) => {
+				if (event.cwd !== path.resolve(this.sessionManager.getCwd()) || !this.isInitialized) return;
+				this.showLoadedResources({ force: false, showDiagnosticsWhenQuiet: true });
+			}),
+		);
 
 		await this.themeController.applyFromSettings();
 
@@ -1540,7 +1557,7 @@ export class InteractiveMode {
 					formatPackagePath: (item) =>
 						this.formatExtensionDisplayPath(this.getShortPath(item.path, item.sourceInfo)),
 				});
-				const extensionCompactList = formatDottedList(this.getCompactExtensionLabels(extensions));
+				const extensionCompactList = formatDottedList(this.getCompactExtensionLabels(extensions), "borderAccent");
 				addLoadedSection("Extensions", extensionCompactList, extList, "mdHeading");
 
 				const hasMcpAdapter = extensions.some(
@@ -1562,6 +1579,45 @@ export class InteractiveMode {
 					const statusLine = status ? `\n${theme.fg("muted", `  ${status}`)}` : "";
 					addLoadedSection("MCPs", `${serverList}${statusLine}`, `${serverList}${statusLine}`, "mdHeading");
 				}
+			}
+
+			const lspCwd = this.sessionManager.getCwd();
+			const lspControls = this.settingsManager.getLspSettings();
+			const lspConfig = loadLspConfig(lspCwd, getAgentDir(), lspControls);
+			const lspEntries = Object.entries(lspConfig.servers);
+			const disabledLspServers = Object.entries(lspControls.servers ?? {})
+				.filter(([, enabled]) => !enabled)
+				.map(([name]) => name);
+			if (!lspControls.enabled) {
+				addLoadedSection("LSPs", theme.fg("muted", "  Disabled"));
+			} else if (lspEntries.length === 0 && disabledLspServers.length === 0) {
+				addLoadedSection("LSPs", theme.fg("muted", "  None"));
+			} else {
+				const lifecycleStatuses = new Map(
+					getLspLifecycleStatuses(lspCwd, lspConfig).map((status) => [status.name, status]),
+				);
+				const lspList = [
+					...lspEntries.map(([name]) => {
+						const state = lifecycleStatuses.get(name)?.state ?? "unstarted";
+						const dotColor: ThemeColor =
+							state === "error"
+								? "error"
+								: state === "backoff"
+									? "warning"
+									: state === "ready"
+										? "success"
+										: state === "starting"
+											? "borderAccent"
+											: "muted";
+						return `${theme.fg(dotColor, "  ●")} ${theme.fg("dim", name)} ${theme.fg("muted", state)}`;
+					}),
+					...disabledLspServers
+						.filter((name) => !lspConfig.servers[name])
+						.map(
+							(name) => `${theme.fg("muted", "  ●")} ${theme.fg("dim", name)} ${theme.fg("muted", "disabled")}`,
+						),
+				].join("\n");
+				addLoadedSection("LSPs", lspList);
 			}
 
 			// Show loaded themes (excluding built-in)
@@ -2668,6 +2724,11 @@ export class InteractiveMode {
 			if (text === "/settings") {
 				this.showSettingsSelector();
 				this.editor.setText("");
+				return;
+			}
+			if (text === "/lsp" || text.startsWith("/lsp ") || text === "/lspmux" || text.startsWith("/lspmux ")) {
+				this.editor.setText("");
+				await this.handleLspControlCommand(text);
 				return;
 			}
 			if (text === "/scoped-models") {
@@ -5321,6 +5382,123 @@ export class InteractiveMode {
 	// =========================================================================
 	// Command handlers
 	// =========================================================================
+
+	private showLspControlDetails(title: string, state: string, stateColor: ThemeColor, lines: string[]): void {
+		this.chatContainer.addChild(new Spacer(1));
+		this.chatContainer.addChild(
+			new Text(
+				`${theme.bold(theme.fg("mdHeading", title))}\n${theme.fg(stateColor, "  ●")} ${theme.fg(stateColor, state)}${lines.length > 0 ? `\n${lines.join("\n")}` : ""}`,
+				1,
+				0,
+			),
+		);
+		this.ui.requestRender();
+	}
+
+	private async handleLspControlCommand(text: string): Promise<void> {
+		const command = parseLspControlCommand(text);
+		if (!command) {
+			this.showWarning(text.startsWith("/lspmux") ? LSPMUX_CONTROL_USAGE : LSP_CONTROL_USAGE);
+			return;
+		}
+
+		const controls = this.settingsManager.getLspSettings();
+		if (command.action === "status") {
+			if (command.target === "lspmux") {
+				if (!controls.lspmux) {
+					this.showLspControlDetails("lspmux", "disabled", "muted", [
+						theme.fg("muted", "  Rust language servers use direct processes."),
+					]);
+					return;
+				}
+				clearLspmuxDetectionCache();
+				const mux = await detectLspmux();
+				if (mux.running) {
+					this.showLspControlDetails("lspmux", "active", "success", [
+						theme.fg("muted", `  ${mux.binaryPath ?? "lspmux"}`),
+						theme.fg("muted", "  Multiplexing: rust-analyzer"),
+					]);
+				} else if (mux.available) {
+					this.showLspControlDetails("lspmux", "installed, daemon not running", "warning", [
+						theme.fg("muted", "  Direct-process fallback is active."),
+						theme.fg("muted", "  Start lspmux, then run /lspmux status again."),
+					]);
+				} else {
+					this.showLspControlDetails("lspmux", "not installed", "muted", [
+						theme.fg("muted", "  Direct-process fallback is active."),
+						theme.fg("muted", "  Install lspmux and add it to PATH to enable shared rust-analyzer processes."),
+					]);
+				}
+				return;
+			}
+
+			const cwd = this.sessionManager.getCwd();
+			const config = loadLspConfig(cwd, getAgentDir(), controls);
+			const statuses = new Map(getLspLifecycleStatuses(cwd, config).map((status) => [status.name, status]));
+			const lines = Object.entries(config.servers).map(([name]) => {
+				const status = statuses.get(name);
+				const state = status?.state ?? "unstarted";
+				const color: ThemeColor =
+					state === "error"
+						? "error"
+						: state === "backoff"
+							? "warning"
+							: state === "ready"
+								? "success"
+								: state === "starting"
+									? "borderAccent"
+									: "muted";
+				const retry = status?.retryAt
+					? ` retry ${Math.max(0, Math.ceil((status.retryAt - Date.now()) / 1000))}s`
+					: "";
+				const error = status?.error ? ` · ${status.error.split("\n", 1)[0]}` : "";
+				return `${theme.fg(color, "  ●")} ${theme.fg("dim", name)} ${theme.fg("muted", `${state}${retry}${error}`)}`;
+			});
+			for (const [name, enabled] of Object.entries(controls.servers ?? {})) {
+				if (!enabled && !config.servers[name]) {
+					lines.push(`${theme.fg("muted", "  ●")} ${theme.fg("dim", name)} ${theme.fg("muted", "disabled")}`);
+				}
+			}
+			this.showLspControlDetails(
+				"LSP",
+				controls.enabled ? "enabled" : "disabled",
+				controls.enabled ? "success" : "muted",
+				lines.length > 0 ? lines : [theme.fg("muted", "  No matching language servers detected.")],
+			);
+			return;
+		}
+
+		if (this.session.isStreaming || this.session.isCompacting) {
+			this.showWarning("Wait for the current operation to finish before changing LSP settings.");
+			return;
+		}
+
+		let statusMessage: string;
+		if (command.target === "lspmux") {
+			const enabled = command.action === "enable";
+			this.settingsManager.setLspmuxEnabled(enabled);
+			statusMessage = `lspmux ${enabled ? "enabled" : "disabled"}`;
+		} else if (command.action === "server") {
+			this.settingsManager.setLspServerEnabled(command.server, command.enabled);
+			statusMessage = `${command.server} ${command.enabled ? "enabled" : "disabled"}`;
+		} else {
+			const enabled = command.action === "enable";
+			this.settingsManager.setLspEnabled(enabled);
+			statusMessage = `LSP ${enabled ? "enabled" : "disabled"}`;
+		}
+		await this.settingsManager.flush();
+		clearLspmuxDetectionCache();
+		await shutdownLspClientsForCwd(this.sessionManager.getCwd());
+		await this.handleReloadCommand();
+
+		const refreshedControls = this.settingsManager.getLspSettings();
+		const hasServers =
+			Object.keys(loadLspConfig(this.sessionManager.getCwd(), getAgentDir(), refreshedControls).servers).length > 0;
+		if (refreshedControls.enabled && hasServers && !this.session.getActiveToolNames().includes("lsp")) {
+			this.session.setActiveToolsByName([...this.session.getActiveToolNames(), "lsp"]);
+		}
+		this.showStatus(statusMessage);
+	}
 
 	private async handleReloadCommand(): Promise<void> {
 		if (this.session.isStreaming) {

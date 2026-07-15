@@ -3,6 +3,7 @@ import { Box, Container, Spacer, Text } from "@reitaard/repi-tui";
 import { constants } from "fs";
 import { access as fsAccess, readFile as fsReadFile, writeFile as fsWriteFile } from "fs/promises";
 import { type Static, Type } from "typebox";
+import type { LspFileDiagnosticsResult, LspWritethrough } from "../../lsp/writethrough.ts";
 import { renderDiff } from "../../modes/interactive/components/diff.ts";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import type { ToolDefinition } from "../extensions/types.ts";
@@ -65,6 +66,7 @@ export interface EditToolDetails {
 	patch: string;
 	/** Line number of the first change in the new file (for editor navigation) */
 	firstChangedLine?: number;
+	diagnostics?: LspFileDiagnosticsResult;
 }
 
 /**
@@ -89,6 +91,8 @@ const defaultEditOperations: EditOperations = {
 export interface EditToolOptions {
 	/** Custom operations for file editing. Default: local filesystem */
 	operations?: EditOperations;
+	/** Optional post-write language-server synchronization and diagnostics. */
+	lspWritethrough?: LspWritethrough;
 }
 
 function prepareEditArguments(input: unknown): EditToolInput {
@@ -219,11 +223,18 @@ function formatEditResult(
 	}
 
 	const resultDiff = result.details?.diff;
+	const diagnostics = result.details?.diagnostics;
+	const diagnosticOutput = diagnostics
+		? theme.fg(
+				diagnostics.errored ? "error" : diagnostics.checking ? "warning" : "success",
+				[diagnostics.summary, ...diagnostics.messages].join("\n"),
+			)
+		: undefined;
 	if (resultDiff && resultDiff !== previewDiff) {
-		return renderDiff(resultDiff, { filePath: rawPath ?? undefined });
+		const diff = renderDiff(resultDiff, { filePath: rawPath ?? undefined });
+		return diagnosticOutput ? `${diff}\n\n${diagnosticOutput}` : diff;
 	}
-
-	return undefined;
+	return diagnosticOutput;
 }
 
 function buildEditCallComponent(
@@ -272,6 +283,7 @@ export function createEditToolDefinition(
 	options?: EditToolOptions,
 ): ToolDefinition<typeof editSchema, EditToolDetails | undefined, EditRenderState> {
 	const ops = options?.operations ?? defaultEditOperations;
+	const lspWritethrough = options?.lspWritethrough;
 	return {
 		name: "edit",
 		label: "edit",
@@ -329,6 +341,8 @@ export function createEditToolDefinition(
 				const finalContent = bom + restoreLineEndings(newContent, originalEnding);
 				await ops.writeFile(absolutePath, finalContent);
 				throwIfAborted();
+				const diagnostics = await lspWritethrough?.(absolutePath, finalContent, signal);
+				throwIfAborted();
 
 				const diffResult = generateDiffString(baseContent, newContent);
 				const patch = generateUnifiedPatch(path, baseContent, newContent);
@@ -336,10 +350,16 @@ export function createEditToolDefinition(
 					content: [
 						{
 							type: "text",
-							text: `Successfully replaced ${edits.length} block(s) in ${path}.`,
+							text: [
+								`Successfully replaced ${edits.length} block(s) in ${path}.`,
+								diagnostics?.summary,
+								...(diagnostics?.messages ?? []),
+							]
+								.filter((line): line is string => line !== undefined)
+								.join("\n"),
 						},
 					],
-					details: { diff: diffResult.diff, patch, firstChangedLine: diffResult.firstChangedLine },
+					details: { diff: diffResult.diff, patch, firstChangedLine: diffResult.firstChangedLine, diagnostics },
 				};
 			});
 		},

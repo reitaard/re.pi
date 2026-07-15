@@ -3,6 +3,7 @@ import { Container, Text } from "@reitaard/repi-tui";
 import { mkdir as fsMkdir, writeFile as fsWriteFile } from "fs/promises";
 import { dirname } from "path";
 import { type Static, Type } from "typebox";
+import type { LspFileDiagnosticsResult, LspWritethrough } from "../../lsp/writethrough.ts";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
 import { getLanguageFromPath, highlightCode, type Theme } from "../../modes/interactive/theme/theme.ts";
 import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
@@ -17,6 +18,10 @@ const writeSchema = Type.Object({
 });
 
 export type WriteToolInput = Static<typeof writeSchema>;
+
+export interface WriteToolDetails {
+	diagnostics?: LspFileDiagnosticsResult;
+}
 
 /**
  * Pluggable operations for the write tool.
@@ -37,6 +42,8 @@ const defaultWriteOperations: WriteOperations = {
 export interface WriteToolOptions {
 	/** Custom operations for file writing. Default: local filesystem */
 	operations?: WriteOperations;
+	/** Optional post-write language-server synchronization and diagnostics. */
+	lspWritethrough?: LspWritethrough;
 }
 
 type WriteHighlightCache = {
@@ -162,12 +169,18 @@ function formatWriteCall(
 }
 
 function formatWriteResult(
-	result: { content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>; isError?: boolean },
+	result: {
+		content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
+		details?: WriteToolDetails;
+		isError?: boolean;
+	},
 	theme: Theme,
 ): string | undefined {
-	if (!result.isError) {
-		return undefined;
+	if (!result.isError && result.details?.diagnostics) {
+		const diagnostics = result.details.diagnostics;
+		return `\n${theme.fg(diagnostics.errored ? "error" : diagnostics.checking ? "warning" : "success", [diagnostics.summary, ...diagnostics.messages].join("\n"))}`;
 	}
+	if (!result.isError) return undefined;
 	const output = result.content
 		.filter((c) => c.type === "text")
 		.map((c) => c.text || "")
@@ -181,8 +194,9 @@ function formatWriteResult(
 export function createWriteToolDefinition(
 	cwd: string,
 	options?: WriteToolOptions,
-): ToolDefinition<typeof writeSchema, undefined> {
+): ToolDefinition<typeof writeSchema, WriteToolDetails | undefined> {
 	const ops = options?.operations ?? defaultWriteOperations;
+	const lspWritethrough = options?.lspWritethrough;
 	return {
 		name: "write",
 		label: "write",
@@ -217,10 +231,23 @@ export function createWriteToolDefinition(
 				// Write the file contents.
 				await ops.writeFile(absolutePath, content);
 				throwIfAborted();
+				const diagnostics = await lspWritethrough?.(absolutePath, content, signal);
+				throwIfAborted();
 
 				return {
-					content: [{ type: "text", text: `Successfully wrote ${content.length} bytes to ${path}` }],
-					details: undefined,
+					content: [
+						{
+							type: "text",
+							text: [
+								`Successfully wrote ${content.length} bytes to ${path}`,
+								diagnostics?.summary,
+								...(diagnostics?.messages ?? []),
+							]
+								.filter((line): line is string => line !== undefined)
+								.join("\n"),
+						},
+					],
+					details: diagnostics ? { diagnostics } : undefined,
 				};
 			});
 		},

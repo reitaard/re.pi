@@ -247,6 +247,7 @@ export {
 	type CompactionSettings,
 	type DefaultProjectTrust,
 	type ImageSettings,
+	type LspSettings,
 	type PackageSource,
 	type RetrySettings,
 	SettingsManager,

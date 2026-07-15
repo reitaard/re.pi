@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added RePi language-server support with proactive warmup, bounded crash recovery, idle shutdown, configuration reloads, automatic server discovery, persistent `/lsp` and `/lspmux` controls, per-server toggles, `lspmux` fallback, definitions, implementations, workspace symbols, call hierarchy, project diagnostics, previewable symbol/file rename, post-edit diagnostics, formatting, code actions, lifecycle cleanup, queued protocol writes, and surfaced startup errors.
+
 ## [0.81.0] - 2026-07-15
 
 ### re.pi Checkpoint

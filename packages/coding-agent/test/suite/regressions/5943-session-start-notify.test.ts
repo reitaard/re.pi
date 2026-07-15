@@ -50,7 +50,10 @@ type LoadedResourcesContext = {
 	loadedResourcesContainer: Container;
 	chatContainer: Container;
 	options: { verbose?: boolean };
-	settingsManager: { getQuietStartup: () => boolean };
+	settingsManager: {
+		getQuietStartup: () => boolean;
+		getLspSettings: () => { enabled: boolean; lspmux: boolean; servers: Record<string, boolean> };
+	};
 	sessionManager: { getCwd: () => string };
 	session: {
 		promptTemplates: [];
@@ -224,7 +227,10 @@ function createLoadedResourcesContext(): LoadedResourcesContext {
 		loadedResourcesContainer: new Container(),
 		chatContainer: new Container(),
 		options: { verbose: true },
-		settingsManager: { getQuietStartup: () => false },
+		settingsManager: {
+			getQuietStartup: () => false,
+			getLspSettings: () => ({ enabled: false, lspmux: true, servers: {} }),
+		},
 		sessionManager: { getCwd: () => "/repo" },
 		session: {
 			promptTemplates: [],

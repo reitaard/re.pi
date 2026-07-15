@@ -1,5 +1,6 @@
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
+import { stopLspLifecycleForCwd } from "../lsp/lifecycle.ts";
 import { resolvePath } from "../utils/paths.ts";
 import type { AgentSession } from "./agent-session.ts";
 import type { AgentSessionRuntimeDiagnostic, AgentSessionServices } from "./agent-session-services.ts";
@@ -165,6 +166,7 @@ export class AgentSessionRuntime {
 	}
 
 	private async teardownCurrent(reason: SessionShutdownEvent["reason"], targetSessionFile?: string): Promise<void> {
+		const currentCwd = this.cwd;
 		await emitSessionShutdownEvent(this.session.extensionRunner, {
 			type: "session_shutdown",
 			reason,
@@ -172,6 +174,7 @@ export class AgentSessionRuntime {
 		});
 		this.beforeSessionInvalidate?.();
 		this.session.dispose();
+		await stopLspLifecycleForCwd(currentCwd);
 	}
 
 	private apply(result: CreateAgentSessionRuntimeResult): void {
@@ -388,12 +391,14 @@ export class AgentSessionRuntime {
 	}
 
 	async dispose(): Promise<void> {
+		const currentCwd = this.cwd;
 		await emitSessionShutdownEvent(this.session.extensionRunner, {
 			type: "session_shutdown",
 			reason: "quit",
 		});
 		this.beforeSessionInvalidate?.();
 		this.session.dispose();
+		await stopLspLifecycleForCwd(currentCwd);
 	}
 }
 

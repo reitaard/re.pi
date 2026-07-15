@@ -35,6 +35,9 @@ import {
 	resetApiProviders,
 	streamSimple,
 } from "@reitaard/repi-ai/compat";
+import { loadLspConfig } from "../lsp/config.ts";
+import { startLspLifecycle } from "../lsp/lifecycle.ts";
+import { createLspWritethrough } from "../lsp/writethrough.ts";
 import { getThemeByName, theme } from "../modes/interactive/theme/theme.ts";
 import { stripFrontmatter } from "../utils/frontmatter.ts";
 import { resolvePath } from "../utils/paths.ts";
@@ -2495,6 +2498,15 @@ export class AgentSession {
 		const autoResizeImages = this.settingsManager.getImageAutoResize();
 		const shellCommandPrefix = this.settingsManager.getShellCommandPrefix();
 		const shellPath = this.settingsManager.getShellPath();
+		const lspControls = this.settingsManager.getLspSettings();
+		const lspConfig = loadLspConfig(this._cwd, undefined, lspControls);
+		const hasLspServers = Object.keys(lspConfig.servers).length > 0;
+		void startLspLifecycle({
+			cwd: this._cwd,
+			config: lspConfig,
+			loadConfig: () => loadLspConfig(this._cwd, undefined, this.settingsManager.getLspSettings()),
+		});
+		const lspWritethrough = hasLspServers ? createLspWritethrough(this._cwd, lspControls) : undefined;
 		const baseToolDefinitions = this._baseToolsOverride
 			? Object.fromEntries(
 					Object.entries(this._baseToolsOverride).map(([name, tool]) => [
@@ -2505,6 +2517,9 @@ export class AgentSession {
 			: createAllToolDefinitions(this._cwd, {
 					read: { autoResizeImages },
 					bash: { commandPrefix: shellCommandPrefix, shellPath },
+					edit: { lspWritethrough },
+					write: { lspWritethrough },
+					lsp: { controls: lspControls },
 				});
 
 		this._baseToolDefinitions = new Map(
@@ -2533,8 +2548,10 @@ export class AgentSession {
 
 		const defaultActiveToolNames = this._baseToolsOverride
 			? Object.keys(this._baseToolsOverride)
-			: ["read", "bash", "edit", "write"];
-		const baseActiveToolNames = options.activeToolNames ?? defaultActiveToolNames;
+			: ["read", "bash", "edit", "write", ...(hasLspServers ? ["lsp"] : [])];
+		const baseActiveToolNames = (options.activeToolNames ?? defaultActiveToolNames).filter(
+			(name) => name !== "lsp" || hasLspServers,
+		);
 		this._refreshToolRegistry({
 			activeToolNames: baseActiveToolNames,
 			includeAllExtensionTools: options.includeAllExtensionTools,

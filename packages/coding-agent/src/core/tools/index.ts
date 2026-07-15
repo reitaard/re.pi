@@ -1,4 +1,11 @@
 export {
+	createLspTool,
+	createLspToolDefinition,
+	type LspToolDetails,
+	type LspToolInput,
+	type LspToolOptions,
+} from "../../lsp/tool.ts";
+export {
 	type BashOperations,
 	type BashSpawnContext,
 	type BashSpawnHook,
@@ -64,11 +71,13 @@ export {
 	createWriteTool,
 	createWriteToolDefinition,
 	type WriteOperations,
+	type WriteToolDetails,
 	type WriteToolInput,
 	type WriteToolOptions,
 } from "./write.ts";
 
 import type { AgentTool } from "@reitaard/repi-agent-core";
+import { createLspTool, createLspToolDefinition, type LspToolOptions } from "../../lsp/tool.ts";
 import type { ToolDefinition } from "../extensions/types.ts";
 import { type BashToolOptions, createBashTool, createBashToolDefinition } from "./bash.ts";
 import { createEditTool, createEditToolDefinition, type EditToolOptions } from "./edit.ts";
@@ -80,8 +89,8 @@ import { createWriteTool, createWriteToolDefinition, type WriteToolOptions } fro
 
 export type Tool = AgentTool<any>;
 export type ToolDef = ToolDefinition<any, any>;
-export type ToolName = "read" | "bash" | "edit" | "write" | "grep" | "find" | "ls";
-export const allToolNames: Set<ToolName> = new Set(["read", "bash", "edit", "write", "grep", "find", "ls"]);
+export type ToolName = "read" | "bash" | "edit" | "write" | "grep" | "find" | "ls" | "lsp";
+export const allToolNames: Set<ToolName> = new Set(["read", "bash", "edit", "write", "grep", "find", "ls", "lsp"]);
 
 export interface ToolsOptions {
 	read?: ReadToolOptions;
@@ -91,6 +100,7 @@ export interface ToolsOptions {
 	grep?: GrepToolOptions;
 	find?: FindToolOptions;
 	ls?: LsToolOptions;
+	lsp?: LspToolOptions;
 }
 
 export function createToolDefinition(toolName: ToolName, cwd: string, options?: ToolsOptions): ToolDef {
@@ -109,6 +119,8 @@ export function createToolDefinition(toolName: ToolName, cwd: string, options?: 
 			return createFindToolDefinition(cwd, options?.find);
 		case "ls":
 			return createLsToolDefinition(cwd, options?.ls);
+		case "lsp":
+			return createLspToolDefinition(cwd, options?.lsp);
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -130,6 +142,8 @@ export function createTool(toolName: ToolName, cwd: string, options?: ToolsOptio
 			return createFindTool(cwd, options?.find);
 		case "ls":
 			return createLsTool(cwd, options?.ls);
+		case "lsp":
+			return createLspTool(cwd, options?.lsp);
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -141,6 +155,7 @@ export function createCodingToolDefinitions(cwd: string, options?: ToolsOptions)
 		createBashToolDefinition(cwd, options?.bash),
 		createEditToolDefinition(cwd, options?.edit),
 		createWriteToolDefinition(cwd, options?.write),
+		createLspToolDefinition(cwd, options?.lsp),
 	];
 }
 
@@ -150,6 +165,7 @@ export function createReadOnlyToolDefinitions(cwd: string, options?: ToolsOption
 		createGrepToolDefinition(cwd, options?.grep),
 		createFindToolDefinition(cwd, options?.find),
 		createLsToolDefinition(cwd, options?.ls),
+		createLspToolDefinition(cwd, options?.lsp),
 	];
 }
 
@@ -162,6 +178,7 @@ export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): R
 		grep: createGrepToolDefinition(cwd, options?.grep),
 		find: createFindToolDefinition(cwd, options?.find),
 		ls: createLsToolDefinition(cwd, options?.ls),
+		lsp: createLspToolDefinition(cwd, options?.lsp),
 	};
 }
 
@@ -171,6 +188,7 @@ export function createCodingTools(cwd: string, options?: ToolsOptions): Tool[] {
 		createBashTool(cwd, options?.bash),
 		createEditTool(cwd, options?.edit),
 		createWriteTool(cwd, options?.write),
+		createLspTool(cwd, options?.lsp),
 	];
 }
 
@@ -180,6 +198,7 @@ export function createReadOnlyTools(cwd: string, options?: ToolsOptions): Tool[]
 		createGrepTool(cwd, options?.grep),
 		createFindTool(cwd, options?.find),
 		createLsTool(cwd, options?.ls),
+		createLspTool(cwd, options?.lsp),
 	];
 }
 
@@ -192,5 +211,6 @@ export function createAllTools(cwd: string, options?: ToolsOptions): Record<Tool
 		grep: createGrepTool(cwd, options?.grep),
 		find: createFindTool(cwd, options?.find),
 		ls: createLsTool(cwd, options?.ls),
+		lsp: createLspTool(cwd, options?.lsp),
 	};
 }

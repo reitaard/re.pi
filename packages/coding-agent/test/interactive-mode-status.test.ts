@@ -503,6 +503,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 			chatContainer: new Container(),
 			settingsManager: {
 				getQuietStartup: () => options.quietStartup,
+				getLspSettings: () => ({ enabled: false, lspmux: true, servers: {} }),
 			},
 			sessionManager: {
 				getCwd: () => options.cwd ?? "/tmp/project",
@@ -757,7 +758,10 @@ describe("InteractiveMode.showLoadedResources", () => {
 			  ● @scope/pi-scoped
 			  ● HazAT/pi-interactive-subagents
 			  ● HazAT/pi-interactive-subagents:subagents
-			  ● cli-extension.ts"
+			  ● cli-extension.ts
+
+			[LSPs]
+			  Disabled"
 		`);
 	});
 
@@ -806,7 +810,10 @@ describe("InteractiveMode.showLoadedResources", () => {
 			"[Extensions]
 			  ● alpha/one
 			  ● beta/one
-			  ● gamma/one"
+			  ● gamma/one
+
+			[LSPs]
+			  Disabled"
 		`);
 	});
 
@@ -835,7 +842,10 @@ describe("InteractiveMode.showLoadedResources", () => {
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
 			"[Extensions]
-			  ● plan-mode"
+			  ● plan-mode
+
+			[LSPs]
+			  Disabled"
 		`);
 	});
 
@@ -864,7 +874,10 @@ describe("InteractiveMode.showLoadedResources", () => {
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
 			"[Extensions]
-			  ● plan-mode"
+			  ● plan-mode
+
+			[LSPs]
+			  Disabled"
 		`);
 	});
 
@@ -903,7 +916,10 @@ describe("InteractiveMode.showLoadedResources", () => {
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
 			"[Extensions]
 			  ● webfetch.ts
-			  ● plan-mode"
+			  ● plan-mode
+
+			[LSPs]
+			  Disabled"
 		`);
 	});
 
@@ -942,7 +958,10 @@ describe("InteractiveMode.showLoadedResources", () => {
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
 			"[Extensions]
 			  ● foo
-			  ● bar"
+			  ● bar
+
+			[LSPs]
+			  Disabled"
 		`);
 	});
 
@@ -981,7 +1000,10 @@ describe("InteractiveMode.showLoadedResources", () => {
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
 			"[Extensions]
 			  ● alpha/tools
-			  ● beta/tools"
+			  ● beta/tools
+
+			[LSPs]
+			  Disabled"
 		`);
 	});
 
@@ -1010,7 +1032,10 @@ describe("InteractiveMode.showLoadedResources", () => {
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
 			"[Extensions]
-			  ● main.ts"
+			  ● main.ts
+
+			[LSPs]
+			  Disabled"
 		`);
 	});
 
@@ -1039,7 +1064,10 @@ describe("InteractiveMode.showLoadedResources", () => {
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
 			"[Extensions]
-			  ● pi-markdown-preview"
+			  ● pi-markdown-preview
+
+			[LSPs]
+			  Disabled"
 		`);
 	});
 	test("captures mixed extension layouts in expanded output", () => {
@@ -1055,21 +1083,25 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  project
-    /tmp/project/.pi/extensions/answer.ts
-    /tmp/project/.pi/extensions/local-index
-    git:github.com/HazAT/pi-interactive-subagents
-      extensions
-      extensions/subagents
-    npm:@scope/pi-scoped
-      extensions
-    npm:pi-markdown-preview
-      extensions
-  user
-    /tmp/agent/extensions/user-index
-  path
-    /tmp/temp/cli-extension.ts"`);
+			"[Extensions]
+			  project
+			    /tmp/project/.pi/extensions/answer.ts
+			    /tmp/project/.pi/extensions/local-index
+			    git:github.com/HazAT/pi-interactive-subagents
+			      extensions
+			      extensions/subagents
+			    npm:@scope/pi-scoped
+			      extensions
+			    npm:pi-markdown-preview
+			      extensions
+			  user
+			    /tmp/agent/extensions/user-index
+			  path
+			    /tmp/temp/cli-extension.ts
+
+			[LSPs]
+			  Disabled"
+		`);
 	});
 
 	test("shows context paths relative to cwd while preserving full external paths", () => {
