@@ -8,6 +8,7 @@
 import { APP_NAME } from "./config.ts";
 import { configureHttpDispatcher } from "./core/http-dispatcher.ts";
 import { main } from "./main.ts";
+import { recodeMemory } from "./recode-memory.ts";
 import { recodeOpenProvider } from "./recode-open-provider.ts";
 
 process.title = APP_NAME;
@@ -19,5 +20,8 @@ process.emitWarning = (() => {}) as typeof process.emitWarning;
 configureHttpDispatcher();
 
 main(process.argv.slice(2), {
-	extensionFactories: [{ name: "recode-open-provider", factory: recodeOpenProvider }],
+	extensionFactories: [
+		{ name: "recode-open-provider", factory: recodeOpenProvider },
+		{ name: "recode-memory", factory: recodeMemory },
+	],
 });

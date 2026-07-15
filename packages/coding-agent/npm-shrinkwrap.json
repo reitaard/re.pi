@@ -1,17 +1,17 @@
 {
 	"name": "@reitaard/repi-coding-agent",
-	"version": "0.81.1",
+	"version": "0.81.2",
 	"lockfileVersion": 3,
 	"requires": true,
 	"packages": {
 		"": {
 			"name": "@reitaard/repi-coding-agent",
-			"version": "0.81.1",
+			"version": "0.81.2",
 			"license": "MIT",
 			"dependencies": {
-				"@reitaard/repi-agent-core": "^0.81.1",
-				"@reitaard/repi-ai": "^0.81.1",
-				"@reitaard/repi-tui": "^0.81.1",
+				"@reitaard/repi-agent-core": "^0.81.2",
+				"@reitaard/repi-ai": "^0.81.2",
+				"@reitaard/repi-tui": "^0.81.2",
 				"@silvia-odwyer/photon-node": "0.3.4",
 				"chalk": "5.6.2",
 				"cross-spawn": "7.0.6",
@@ -787,11 +787,11 @@
 			"license": "BSD-3-Clause"
 		},
 		"node_modules/@reitaard/repi-agent-core": {
-			"version": "0.81.1",
-			"resolved": "https://registry.npmjs.org/@reitaard/repi-agent-core/-/repi-agent-core-0.81.1.tgz",
+			"version": "0.81.2",
+			"resolved": "https://registry.npmjs.org/@reitaard/repi-agent-core/-/repi-agent-core-0.81.2.tgz",
 			"license": "MIT",
 			"dependencies": {
-				"@reitaard/repi-ai": "^0.81.1",
+				"@reitaard/repi-ai": "^0.81.2",
 				"ignore": "7.0.5",
 				"typebox": "1.1.38",
 				"yaml": "2.9.0"
@@ -801,8 +801,8 @@
 			}
 		},
 		"node_modules/@reitaard/repi-ai": {
-			"version": "0.81.1",
-			"resolved": "https://registry.npmjs.org/@reitaard/repi-ai/-/repi-ai-0.81.1.tgz",
+			"version": "0.81.2",
+			"resolved": "https://registry.npmjs.org/@reitaard/repi-ai/-/repi-ai-0.81.2.tgz",
 			"license": "MIT",
 			"dependencies": {
 				"@anthropic-ai/sdk": "0.91.1",
@@ -825,8 +825,8 @@
 			}
 		},
 		"node_modules/@reitaard/repi-tui": {
-			"version": "0.81.1",
-			"resolved": "https://registry.npmjs.org/@reitaard/repi-tui/-/repi-tui-0.81.1.tgz",
+			"version": "0.81.2",
+			"resolved": "https://registry.npmjs.org/@reitaard/repi-tui/-/repi-tui-0.81.2.tgz",
 			"license": "MIT",
 			"dependencies": {
 				"get-east-asian-width": "1.6.0",

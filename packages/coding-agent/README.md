@@ -286,7 +286,7 @@ Use `/settings` to modify common options, or edit JSON files directly:
 | `~/.pi/agent/settings.json` | Global (all projects) |
 | `.pi/settings.json` | Project (overrides global) |
 
-See [docs/settings.md](docs/settings.md) for all options.
+See [docs/settings.md](docs/settings.md) for all options. Durable global and project recall is documented in [docs/memory.md](docs/memory.md).
 
 ### Project Trust
 

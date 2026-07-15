@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.81.2] - 2026-07-16
+
+### Added
+
+- Added built-in core memory with Markdown sources, incremental SQLite FTS5 indexing, bounded automatic recall, global/project scopes, `/memory` controls, and safe search/read/write/status tools.
+
 ## [0.81.1] - 2026-07-16
 
 ### Added
