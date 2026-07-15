@@ -1,5 +1,5 @@
-import type { Component } from "@earendil-works/pi-tui";
-import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import type { Component } from "@reitaard/repi-tui";
+import { truncateToWidth, visibleWidth } from "@reitaard/repi-tui";
 import chalk from "chalk";
 import Yoga, { Direction, FlexDirection } from "yoga-layout";
 import { theme } from "../theme/theme.ts";

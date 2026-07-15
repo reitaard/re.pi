@@ -1,9 +1,9 @@
-import { Box, type Component, Container, getCapabilities, Image, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
+import { Box, type Component, Container, getCapabilities, Image, Spacer, Text, type TUI } from "@reitaard/repi-tui";
 import type { ToolDefinition, ToolRenderContext } from "../../../core/extensions/types.ts";
 import { createAllToolDefinitions, type ToolName } from "../../../core/tools/index.ts";
 import { getTextOutput as getRenderedTextOutput } from "../../../core/tools/render-utils.ts";
 import { convertToPng } from "../../../utils/image-convert.ts";
-import { theme } from "../theme/theme.ts";
+import { type ThemeBg, type ThemeColor, theme } from "../theme/theme.ts";
 
 export interface ToolExecutionOptions {
 	showImages?: boolean;
@@ -224,7 +224,7 @@ export class ToolExecutionComponent extends Container {
 		}
 
 		if (this.hasRendererDefinition() && this.getRenderShell() === "self") {
-			const contentLines = this.selfRenderContainer.render(width);
+			const contentLines = this.addStatusLine(this.selfRenderContainer.render(width));
 			if (contentLines.length === 0 && this.imageComponents.length === 0) {
 				return [];
 			}
@@ -247,15 +247,35 @@ export class ToolExecutionComponent extends Container {
 			return lines;
 		}
 
-		return super.render(width);
+		return this.addStatusLine(super.render(width));
+	}
+
+	private getSurfaceBg(): ThemeBg {
+		if (this.toolName !== "bash") return "toolPendingBg";
+		if (this.isPartial) return "toolPendingBg";
+		return this.result?.isError ? "toolErrorBg" : "toolSuccessBg";
+	}
+
+	private getStatusColor(): ThemeColor {
+		if (!this.isPartial) return this.result?.isError ? "toolErrorStatus" : "toolSuccessStatus";
+		return this.executionStarted ? "toolRunningStatus" : "toolPendingStatus";
+	}
+
+	private addStatusLine(lines: string[]): string[] {
+		const surfaceBg = this.getSurfaceBg();
+		const backgroundAnsi = theme.getBgAnsi(surfaceBg);
+		const marker = theme.fg(this.getStatusColor(), "▎");
+		return lines.map((line) => {
+			if (!line.includes(backgroundAnsi)) return line;
+			const markerIndex = line.indexOf(backgroundAnsi) + backgroundAnsi.length;
+			if (line[markerIndex] !== " ") return line;
+			return line.slice(0, markerIndex) + marker + line.slice(markerIndex + 1);
+		});
 	}
 
 	private updateDisplay(): void {
-		const bgFn = this.isPartial
-			? (text: string) => theme.bg("toolPendingBg", text)
-			: this.result?.isError
-				? (text: string) => theme.bg("toolErrorBg", text)
-				: (text: string) => theme.bg("toolSuccessBg", text);
+		const surfaceBg = this.getSurfaceBg();
+		const bgFn = (text: string) => theme.bg(surfaceBg, text);
 
 		let hasContent = false;
 		this.hideComponent = false;

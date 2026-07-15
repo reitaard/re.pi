@@ -1,45 +1,65 @@
-import type { LoaderIndicatorOptions } from "@earendil-works/pi-tui";
+import type { LoaderIndicatorOptions } from "@reitaard/repi-tui";
 import { theme } from "../theme/theme.ts";
 
-const FRAME_INTERVAL_MS = 50;
-const SCRAMBLE_CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-={}[];:,.<>/?";
-const WORKING_LABEL = "Working...";
-const GENERATING_LABEL = "Generating...";
+const ENCRYPTED_FRAME_INTERVAL_MS = 50;
+const WORKING_FRAME_INTERVAL_MS = 80;
+const SCRAMBLE_WIDTH = 10;
+const LOOP_FRAME_COUNT = 32;
+const ELLIPSIS_FRAME_DURATION = 8;
+const SCRAMBLE_CHARSET = "0123456789abcdefABCDEF~!@#$£€%^&*()+=_";
+const ELLIPSIS_FRAMES = [".", "..", "...", ""];
 const LOADER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
-export interface RecodeGeneratingTransition {
-	indicator: LoaderIndicatorOptions;
-	durationMs: number;
-}
+export const RECODE_LIME_PALETTE = [
+	{ hex: "#B7F7D1", ansi256: 194 },
+	{ hex: "#8AF0B1", ansi256: 157 },
+	{ hex: "#45ED7A", ansi256: 114 },
+	{ hex: "#34AD61", ansi256: 71 },
+	{ hex: "#257B4A", ansi256: 29 },
+] as const;
 
-/** Creates the default green loader shown beside working-state text. */
-export function createRecodeLoaderIndicator(): LoaderIndicatorOptions {
+/** Creates the green spinner with a Working label and animated ellipsis. */
+export function createRecodeWorkingIndicator(message: string): LoaderIndicatorOptions {
+	const ellipsisOffset = message.indexOf("...");
+	const label = ellipsisOffset === -1 ? message : message.slice(0, ellipsisOffset);
+	const suffix = ellipsisOffset === -1 ? "" : message.slice(ellipsisOffset + 3);
+	const frames = Array.from({ length: 20 }, (_, frameIndex) => {
+		const loader = LOADER_FRAMES[frameIndex % LOADER_FRAMES.length] ?? "⠋";
+		const ellipsis = ELLIPSIS_FRAMES[Math.floor(frameIndex / 5) % ELLIPSIS_FRAMES.length] ?? "";
+		return `${theme.fg("borderAccent", loader)} ${theme.fg("muted", `${label}${ellipsis}${suffix}`)}`;
+	});
 	return {
-		frames: LOADER_FRAMES.map((frame) => theme.fg("borderAccent", frame)),
-		intervalMs: 80,
+		frames,
+		intervalMs: WORKING_FRAME_INTERVAL_MS,
 	};
 }
 
-/** Creates the orange encrypted-text transition from Working to Generating. */
-export function createRecodeGeneratingTransition(random: () => number = Math.random): RecodeGeneratingTransition {
-	const frames = [`${theme.fg("borderAccent", LOADER_FRAMES[0] ?? "⠋")} ${theme.fg("muted", WORKING_LABEL)}`];
-
-	for (let revealed = 1; revealed <= GENERATING_LABEL.length; revealed++) {
-		let frame = "";
-		for (let column = 0; column < GENERATING_LABEL.length; column++) {
-			if (column < revealed) {
-				frame += GENERATING_LABEL[column] ?? "";
-				continue;
-			}
+/** Creates a Crush-style encrypted band with a green spinner and lime ellipsis. */
+export function createRecodeGeneratingLoop(random: () => number = Math.random): LoaderIndicatorOptions {
+	const frames = Array.from({ length: LOOP_FRAME_COUNT }, (_, frameIndex) => {
+		const loader = LOADER_FRAMES[frameIndex % LOADER_FRAMES.length] ?? "⠋";
+		let encryptedBand = "";
+		for (let column = 0; column < SCRAMBLE_WIDTH; column++) {
 			const characterIndex = Math.floor(random() * SCRAMBLE_CHARSET.length);
-			frame += SCRAMBLE_CHARSET[characterIndex] ?? ".";
+			const character = SCRAMBLE_CHARSET[characterIndex] ?? ".";
+			encryptedBand += limeFg(character, column + frameIndex);
 		}
-		const loader = LOADER_FRAMES[revealed % LOADER_FRAMES.length] ?? "⠋";
-		frames.push(`${theme.fg("borderAccent", loader)} ${theme.fg("muted", frame)}`);
-	}
+		const ellipsisIndex = Math.floor(frameIndex / ELLIPSIS_FRAME_DURATION) % ELLIPSIS_FRAMES.length;
+		const ellipsis = ELLIPSIS_FRAMES[ellipsisIndex] ?? "";
+		return `${theme.fg("borderAccent", loader)} ${encryptedBand} ${limeText(ellipsis, frameIndex)}`;
+	});
+	return { frames, intervalMs: ENCRYPTED_FRAME_INTERVAL_MS };
+}
 
-	return {
-		indicator: { frames, intervalMs: FRAME_INTERVAL_MS },
-		durationMs: frames.length * FRAME_INTERVAL_MS,
-	};
+function limeText(text: string, paletteOffset: number): string {
+	return [...text].map((character, index) => limeFg(character, paletteOffset + index)).join("");
+}
+
+function limeFg(text: string, paletteIndex: number): string {
+	const color = RECODE_LIME_PALETTE[paletteIndex % RECODE_LIME_PALETTE.length] ?? RECODE_LIME_PALETTE[0];
+	const ansi =
+		theme.getColorMode() === "truecolor"
+			? `\x1b[38;2;${Number.parseInt(color.hex.slice(1, 3), 16)};${Number.parseInt(color.hex.slice(3, 5), 16)};${Number.parseInt(color.hex.slice(5, 7), 16)}m`
+			: `\x1b[38;5;${color.ansi256}m`;
+	return `${ansi}${text}\x1b[39m`;
 }

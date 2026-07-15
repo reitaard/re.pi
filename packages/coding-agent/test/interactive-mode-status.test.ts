@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import * as path from "node:path";
-import { type AutocompleteProvider, CombinedAutocompleteProvider } from "@earendil-works/pi-tui";
+import { type AutocompleteProvider, CombinedAutocompleteProvider } from "@reitaard/repi-tui";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import { type Component, Container, type Focusable, TUI } from "../../tui/src/tui.ts";
 import { VirtualTerminal } from "../../tui/test/virtual-terminal.ts";
@@ -731,7 +731,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 
 		const output = renderAll(fakeThis.loadedResourcesContainer);
 		expect(output).toContain("[Extensions]");
-		expect(output).toContain("answer.ts, btw.ts");
+		expect(output).toContain("●");
+		expect(output).toContain("answer.ts");
+		expect(output).toContain("btw.ts");
 		expect(output).not.toContain("extensions/answer.ts");
 	});
 
@@ -747,8 +749,16 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  @scope/pi-scoped, answer.ts, cli-extension.ts, HazAT/pi-interactive-subagents, HazAT/pi-interactive-subagents:subagents, local-index, pi-markdown-preview, user-index"`);
+			"[Extensions]
+			  ● answer.ts
+			  ● local-index
+			  ● user-index
+			  ● pi-markdown-preview
+			  ● @scope/pi-scoped
+			  ● HazAT/pi-interactive-subagents
+			  ● HazAT/pi-interactive-subagents:subagents
+			  ● cli-extension.ts"
+		`);
 	});
 
 	test("adds more parent folders until local extension labels are unique", () => {
@@ -793,8 +803,11 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  alpha/one, beta/one, gamma/one"`);
+			"[Extensions]
+			  ● alpha/one
+			  ● beta/one
+			  ● gamma/one"
+		`);
 	});
 
 	test("strips index.ts from local extension label, showing parent dir", () => {
@@ -821,8 +834,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  plan-mode"`);
+			"[Extensions]
+			  ● plan-mode"
+		`);
 	});
 
 	test("strips index.js from local extension label, showing parent dir", () => {
@@ -849,8 +863,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  plan-mode"`);
+			"[Extensions]
+			  ● plan-mode"
+		`);
 	});
 
 	test("mixed single-file and subdirectory index.ts extensions strip index.ts", () => {
@@ -886,8 +901,10 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  plan-mode, webfetch.ts"`);
+			"[Extensions]
+			  ● webfetch.ts
+			  ● plan-mode"
+		`);
 	});
 
 	test("multiple index.ts with unique parent dirs need no disambiguation", () => {
@@ -923,8 +940,10 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  bar, foo"`);
+			"[Extensions]
+			  ● foo
+			  ● bar"
+		`);
 	});
 
 	test("multiple index.ts with same parent dir name disambiguated with grandparent", () => {
@@ -960,8 +979,10 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  alpha/tools, beta/tools"`);
+			"[Extensions]
+			  ● alpha/tools
+			  ● beta/tools"
+		`);
 	});
 
 	test("non-index file in subdirectory stays as filename", () => {
@@ -988,8 +1009,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  main.ts"`);
+			"[Extensions]
+			  ● main.ts"
+		`);
 	});
 
 	test("package extensions still strip index.ts correctly (regression guard)", () => {
@@ -1016,8 +1038,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  pi-markdown-preview"`);
+			"[Extensions]
+			  ● pi-markdown-preview"
+		`);
 	});
 	test("captures mixed extension layouts in expanded output", () => {
 		const fakeThis = createShowLoadedResourcesThis({

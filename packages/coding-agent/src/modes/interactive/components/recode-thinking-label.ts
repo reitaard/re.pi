@@ -1,4 +1,4 @@
-import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
+import type { ThinkingLevel } from "@reitaard/repi-agent-core";
 
 export function hasBinaryThinkingLevels(levels: readonly ThinkingLevel[]): boolean {
 	return levels.length === 2 && levels.includes("off") && levels.includes("medium");

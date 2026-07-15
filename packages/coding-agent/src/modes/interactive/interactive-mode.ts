@@ -7,7 +7,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AgentMessage } from "@reitaard/repi-agent-core";
 import {
 	type AssistantMessage,
 	getProviders,
@@ -16,7 +16,7 @@ import {
 	type Model,
 	type OAuthProviderId,
 	type OAuthSelectPrompt,
-} from "@earendil-works/pi-ai/compat";
+} from "@reitaard/repi-ai/compat";
 import type {
 	AutocompleteItem,
 	AutocompleteProvider,
@@ -27,7 +27,7 @@ import type {
 	OverlayHandle,
 	OverlayOptions,
 	SlashCommand,
-} from "@earendil-works/pi-tui";
+} from "@reitaard/repi-tui";
 import {
 	CombinedAutocompleteProvider,
 	type Component,
@@ -43,7 +43,7 @@ import {
 	TruncatedText,
 	TUI,
 	visibleWidth,
-} from "@earendil-works/pi-tui";
+} from "@reitaard/repi-tui";
 import chalk from "chalk";
 import { spawn, spawnSync } from "child_process";
 import {
@@ -145,6 +145,7 @@ import { TreeSelectorComponent } from "./components/tree-selector.ts";
 import { TrustSelectorComponent } from "./components/trust-selector.ts";
 import { UserMessageComponent } from "./components/user-message.ts";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.ts";
+import { getConfiguredMcpServerNames } from "./mcp-startup-summary.ts";
 import { getModelSearchText } from "./model-search.ts";
 import { RecodeProcessTerminal } from "./recode-process-terminal.ts";
 import {
@@ -343,6 +344,7 @@ export class InteractiveMode {
 	private runtimeHost: AgentSessionRuntime;
 	private ui: TUI;
 	private loadedResourcesContainer: Container;
+	private mcpStartupStatus: string | undefined;
 	private chatContainer: Container;
 	private pendingMessagesContainer: Container;
 	private statusContainer: Container;
@@ -1434,6 +1436,8 @@ export class InteractiveMode {
 			}
 			return theme.fg("dim", `  ${labels.join(", ")}`);
 		};
+		const formatDottedList = (items: string[], dotColor: ThemeColor = "accent"): string =>
+			items.map((item) => `${theme.fg(dotColor, "  ●")} ${theme.fg("dim", item)}`).join("\n");
 		const addLoadedSection = (
 			name: string,
 			collapsedBody: string,
@@ -1536,8 +1540,28 @@ export class InteractiveMode {
 					formatPackagePath: (item) =>
 						this.formatExtensionDisplayPath(this.getShortPath(item.path, item.sourceInfo)),
 				});
-				const extensionCompactList = formatCompactList(this.getCompactExtensionLabels(extensions));
+				const extensionCompactList = formatDottedList(this.getCompactExtensionLabels(extensions));
 				addLoadedSection("Extensions", extensionCompactList, extList, "mdHeading");
+
+				const hasMcpAdapter = extensions.some(
+					(extension) =>
+						extension.sourceInfo?.source.replace(/^npm:/, "").split("@")[0] === "pi-mcp-adapter" ||
+						extension.path.replace(/\\/g, "/").includes("/pi-mcp-adapter/"),
+				);
+				if (hasMcpAdapter) {
+					const serverNames = getConfiguredMcpServerNames(this.sessionManager.getCwd(), getAgentDir());
+					const status = this.mcpStartupStatus?.replace(/\u001b\[[0-9;]*m/g, "");
+					const counts = status?.match(/MCP:\s*(\d+)\/(\d+)\s+servers/i);
+					const mcpDotColor: ThemeColor = status?.toLowerCase().includes("failed")
+						? "error"
+						: counts && counts[1] === counts[2]
+							? "success"
+							: "accent";
+					const serverList =
+						serverNames.length === 0 ? theme.fg("muted", "  None") : formatDottedList(serverNames, mcpDotColor);
+					const statusLine = status ? `\n${theme.fg("muted", `  ${status}`)}` : "";
+					addLoadedSection("MCPs", `${serverList}${statusLine}`, `${serverList}${statusLine}`, "mdHeading");
+				}
 			}
 
 			// Show loaded themes (excluding built-in)
@@ -1825,6 +1849,10 @@ export class InteractiveMode {
 	 */
 	private setExtensionStatus(key: string, text: string | undefined): void {
 		this.footerDataProvider.setExtensionStatus(key, text);
+		if (key === "mcp") {
+			this.mcpStartupStatus = text;
+			this.showLoadedResources();
+		}
 		this.ui.requestRender();
 	}
 

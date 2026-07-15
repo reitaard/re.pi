@@ -1,6 +1,10 @@
-import type { TUI } from "@earendil-works/pi-tui";
+import type { TUI } from "@reitaard/repi-tui";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { IdleStatus, RetryStatusIndicator } from "../src/modes/interactive/components/status-indicator.ts";
+import {
+	IdleStatus,
+	RetryStatusIndicator,
+	WorkingStatusIndicator,
+} from "../src/modes/interactive/components/status-indicator.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 
 describe("status indicators", () => {
@@ -27,6 +31,24 @@ describe("status indicators", () => {
 		indicator.dispose();
 		vi.advanceTimersByTime(2000);
 
+		expect(requestRender).toHaveBeenCalledTimes(callsBeforeDispose);
+	});
+
+	it("starts and keeps the encrypted animation running", () => {
+		initTheme("dark");
+		vi.useFakeTimers();
+		const requestRender = vi.fn();
+		const tui = { requestRender } as unknown as TUI;
+		const indicator = new WorkingStatusIndicator(tui, "Working...");
+		indicator.setGenerating();
+		vi.advanceTimersByTime(3200);
+		const callsAfterTwoLoops = requestRender.mock.calls.length;
+		vi.advanceTimersByTime(1100);
+
+		expect(requestRender.mock.calls.length).toBeGreaterThan(callsAfterTwoLoops);
+		indicator.dispose();
+		const callsBeforeDispose = requestRender.mock.calls.length;
+		vi.advanceTimersByTime(1100);
 		expect(requestRender).toHaveBeenCalledTimes(callsBeforeDispose);
 	});
 });

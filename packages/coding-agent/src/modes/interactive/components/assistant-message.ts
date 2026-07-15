@@ -1,5 +1,5 @@
-import type { AssistantMessage } from "@earendil-works/pi-ai";
-import { Container, Markdown, type MarkdownTheme, Spacer, Text } from "@earendil-works/pi-tui";
+import type { AssistantMessage } from "@reitaard/repi-ai";
+import { Container, Markdown, type MarkdownTheme, Spacer, Text } from "@reitaard/repi-tui";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
 import { RecodeThinkingBlock } from "./recode-thinking-block.ts";
 

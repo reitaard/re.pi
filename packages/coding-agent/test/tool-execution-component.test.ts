@@ -1,5 +1,5 @@
 import { join, resolve } from "node:path";
-import { Text, type TUI } from "@earendil-works/pi-tui";
+import { Text, type TUI, visibleWidth } from "@reitaard/repi-tui";
 import { Type } from "typebox";
 import { beforeAll, describe, expect, test } from "vitest";
 import { getReadmePath } from "../src/config.ts";
@@ -8,7 +8,7 @@ import { type BashOperations, createBashToolDefinition } from "../src/core/tools
 import { createReadTool, createReadToolDefinition } from "../src/core/tools/read.ts";
 import { createWriteToolDefinition } from "../src/core/tools/write.ts";
 import { ToolExecutionComponent } from "../src/modes/interactive/components/tool-execution.ts";
-import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { initTheme, theme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 
 function createBaseToolDefinition(name = "custom_tool"): ToolDefinition {
@@ -67,6 +67,60 @@ describe("ToolExecutionComponent parity", () => {
 		expect(rendered).toContain("custom result");
 	});
 
+	test("renders every tool state with the shared dim-violet background", () => {
+		const component = new ToolExecutionComponent(
+			"custom_tool",
+			"tool-dark-surface",
+			{},
+			{},
+			createBaseToolDefinition(),
+			createFakeTui(),
+			process.cwd(),
+		);
+		const pendingLines = component.render(120);
+		expect(pendingLines.join("\n")).toContain("\x1b[48;5;60m");
+		expect(pendingLines.join("\n")).toContain(theme.getFgAnsi("toolPendingStatus"));
+		const surfaceLines = pendingLines.filter((line) => line.includes("\x1b[48;5;60m"));
+		expect(surfaceLines.length).toBeGreaterThan(1);
+		for (const line of surfaceLines) {
+			expect(stripAnsi(line).startsWith("▎")).toBe(true);
+			expect(visibleWidth(line)).toBe(120);
+		}
+
+		component.markExecutionStarted();
+		expect(component.render(120).join("\n")).toContain(theme.getFgAnsi("toolRunningStatus"));
+
+		component.updateResult({ content: [{ type: "text", text: "done" }], details: {}, isError: false }, false);
+
+		expect(component.render(120).join("\n")).toContain("\x1b[48;5;60m");
+		expect(component.render(120).join("\n")).toContain(theme.getFgAnsi("toolSuccessStatus"));
+
+		component.updateResult({ content: [{ type: "text", text: "failed" }], details: {}, isError: true }, false);
+
+		expect(component.render(120).join("\n")).toContain("\x1b[48;5;60m");
+		expect(component.render(120).join("\n")).toContain(theme.getFgAnsi("toolErrorStatus"));
+	});
+
+	test("transitions bash surfaces while normal tool views remain violet", () => {
+		const component = new ToolExecutionComponent(
+			"bash",
+			"tool-bash-status-surface",
+			{ command: "echo ok" },
+			{},
+			createBaseToolDefinition("bash"),
+			createFakeTui(),
+			process.cwd(),
+		);
+
+		expect(component.render(120).join("\n")).toContain("\x1b[48;5;60m");
+		component.markExecutionStarted();
+		expect(component.render(120).join("\n")).toContain("\x1b[48;5;60m");
+		component.updateResult({ content: [{ type: "text", text: "ok" }], details: {}, isError: false }, false);
+		expect(component.render(120).join("\n")).toContain("\x1b[48;5;65m");
+		component.updateResult({ content: [{ type: "text", text: "failed" }], details: {}, isError: true }, false);
+		expect(component.render(120).join("\n")).toContain("\x1b[48;5;131m");
+	});
+
 	test("self-rendered empty tool rows take no layout space", () => {
 		const toolDefinition: ToolDefinition = {
 			...createBaseToolDefinition(),
@@ -113,7 +167,9 @@ describe("ToolExecutionComponent parity", () => {
 			process.cwd(),
 		);
 		component.updateResult({ content: [], details: { diff: "+1 after", firstChangedLine: 1 }, isError: false });
-		const rendered = stripAnsi(component.render(120).join("\n"));
+		const renderedWithAnsi = component.render(120).join("\n");
+		expect(renderedWithAnsi).toContain("\x1b[48;5;60m");
+		const rendered = stripAnsi(renderedWithAnsi);
 		expect(rendered).toContain("edit");
 		expect(rendered).toContain("README.md");
 		expect(rendered).not.toContain(":1");
@@ -183,7 +239,7 @@ describe("ToolExecutionComponent parity", () => {
 		component.setExpanded(true);
 		component.updateResult({ ...result, isError: false }, false);
 
-		const rendered = stripAnsi(component.render(200).join("\n"));
+		const rendered = stripAnsi(component.render(200).join("\n")).replace(/^▎/gm, " ");
 		expect(rendered.match(/Full output:/g)?.length ?? 0).toBe(1);
 		expect(rendered).toMatch(/line-4000[^\n]*\n[^\S\n]*\n \[Full output:/);
 		expect(rendered).not.toMatch(/line-4000[^\n]*\n[^\S\n]*\n[^\S\n]*\n \[Full output:/);

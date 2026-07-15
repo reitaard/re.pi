@@ -1,4 +1,5 @@
-import { type RgbColor, resetCapabilitiesCache, setCapabilities } from "@earendil-works/pi-tui";
+import { readFileSync } from "node:fs";
+import { type RgbColor, resetCapabilitiesCache, setCapabilities } from "@reitaard/repi-tui";
 import { afterEach, describe, expect, it } from "vitest";
 import {
 	detectTerminalBackgroundFromEnv,
@@ -100,6 +101,35 @@ describe("detectTerminalBackgroundTheme", () => {
 });
 
 describe("theme color mode", () => {
+	it("keeps text teal while borders and successful tool surfaces use violet", () => {
+		const darkTheme = JSON.parse(
+			readFileSync(new URL("../src/modes/interactive/theme/dark.json", import.meta.url), "utf-8"),
+		) as {
+			vars: Record<string, string | number>;
+			colors: Record<string, string>;
+		};
+
+		expect(darkTheme.vars.teal).toBe("#00B6B9");
+		expect(darkTheme.vars.violetLine).toBe("#8297E8");
+		expect(darkTheme.vars.teal).not.toBe(darkTheme.vars.violetLine);
+		expect(darkTheme.vars.violetSurface).toBe("#4A3F74");
+		expect(darkTheme.vars.successSurface).toBe("#557A55");
+		expect(darkTheme.vars.errorSurface).toBe("#9C5555");
+		expect(darkTheme.vars.pendingStatus).toBe("#7AA2F7");
+		expect(darkTheme.vars.runningStatus).toBe("#E0AF68");
+		expect(darkTheme.vars.successStatus).toBe("#9ECE6A");
+		expect(darkTheme.vars.errorStatus).toBe("#F7768E");
+		expect(darkTheme.colors.dim).toBe("teal");
+		expect(darkTheme.colors.footer).toBe("teal");
+		expect(darkTheme.vars.toolPendingBg).toBe("violetSurface");
+		expect(darkTheme.vars.toolSuccessBg).toBe("successSurface");
+		expect(darkTheme.vars.toolErrorBg).toBe("errorSurface");
+		expect(darkTheme.colors.toolPendingStatus).toBe("pendingStatus");
+		expect(darkTheme.colors.toolRunningStatus).toBe("runningStatus");
+		expect(darkTheme.colors.toolSuccessStatus).toBe("successStatus");
+		expect(darkTheme.colors.toolErrorStatus).toBe("errorStatus");
+	});
+
 	it("uses terminal capabilities", () => {
 		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
 		const ansi256Theme = getThemeByName("dark");
@@ -112,6 +142,13 @@ describe("theme color mode", () => {
 		if (!truecolorTheme) throw new Error("dark theme not found");
 		expect(truecolorTheme.getColorMode()).toBe("truecolor");
 		expect(truecolorTheme.getFgAnsi("accent")).toMatch(/^\x1b\[38;2;\d+;\d+;\d+m$/);
+		expect(truecolorTheme.getBgAnsi("toolPendingBg")).toBe("\x1b[48;2;74;63;116m");
+		expect(truecolorTheme.getBgAnsi("toolSuccessBg")).toBe("\x1b[48;2;85;122;85m");
+		expect(truecolorTheme.getBgAnsi("toolErrorBg")).toBe("\x1b[48;2;156;85;85m");
+		expect(truecolorTheme.getFgAnsi("toolPendingStatus")).toBe("\x1b[38;2;122;162;247m");
+		expect(truecolorTheme.getFgAnsi("toolRunningStatus")).toBe("\x1b[38;2;224;175;104m");
+		expect(truecolorTheme.getFgAnsi("toolSuccessStatus")).toBe("\x1b[38;2;158;206;106m");
+		expect(truecolorTheme.getFgAnsi("toolErrorStatus")).toBe("\x1b[38;2;247;118;142m");
 	});
 });
 

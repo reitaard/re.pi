@@ -1,5 +1,5 @@
 {
-	"name": "@earendil-works/pi-orchestrator",
+	"name": "@reitaard/repi-orchestrator",
 	"version": "0.81.0",
 	"description": "experimental orchestrator package for pi",
 	"type": "module",
@@ -30,14 +30,14 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/earendil-works/pi.git",
+		"url": "git+https://github.com/reitaard/re.pi.git",
 		"directory": "packages/orchestrator"
 	},
 	"engines": {
 		"node": ">=22.19.0"
 	},
 	"dependencies": {
-		"@earendil-works/pi-coding-agent": "^0.81.0"
+		"@reitaard/repi-coding-agent": "^0.81.0"
 	},
 	"devDependencies": {
 		"shx": "0.4.0"

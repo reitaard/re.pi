@@ -1,9 +1,9 @@
-import { type Component, Loader, type TUI } from "@earendil-works/pi-tui";
+import { type Component, Loader, type TUI } from "@reitaard/repi-tui";
 import type { WorkingIndicatorOptions } from "../../../core/extensions/index.ts";
 import { theme } from "../theme/theme.ts";
 import { CountdownTimer } from "./countdown-timer.ts";
 import { keyText } from "./keybinding-hints.ts";
-import { createRecodeGeneratingTransition, createRecodeLoaderIndicator } from "./recode-magic-indicator.ts";
+import { createRecodeGeneratingLoop, createRecodeWorkingIndicator } from "./recode-magic-indicator.ts";
 
 export type StatusIndicatorKind = "working" | "retry" | "compaction" | "branchSummary";
 
@@ -29,7 +29,6 @@ export class StatusIndicator extends Loader {
 
 export class WorkingStatusIndicator extends StatusIndicator {
 	private generating = false;
-	private transitionTimer: NodeJS.Timeout | undefined;
 	private usesCustomIndicator: boolean;
 	private workingMessage: string;
 
@@ -39,8 +38,8 @@ export class WorkingStatusIndicator extends StatusIndicator {
 			ui,
 			(spinner) => theme.fg("borderAccent", spinner),
 			(text) => theme.fg("muted", text),
-			message,
-			indicator ?? createRecodeLoaderIndicator(),
+			indicator ? message : "",
+			indicator ?? createRecodeWorkingIndicator(message),
 		);
 		this.usesCustomIndicator = indicator !== undefined;
 		this.workingMessage = message;
@@ -49,40 +48,31 @@ export class WorkingStatusIndicator extends StatusIndicator {
 	setGenerating(): void {
 		if (this.generating || this.usesCustomIndicator) return;
 		this.generating = true;
-		const transition = createRecodeGeneratingTransition();
 		super.setMessage("");
-		super.setIndicator(transition.indicator);
-		this.transitionTimer = setTimeout(() => {
-			this.transitionTimer = undefined;
-			super.setIndicator(createRecodeLoaderIndicator());
-			super.setMessage("Generating...");
-		}, transition.durationMs);
+		super.setIndicator(createRecodeGeneratingLoop());
 	}
 
 	applyIndicator(indicator?: WorkingIndicatorOptions): void {
-		this.clearTransitionTimer();
 		this.generating = false;
 		this.usesCustomIndicator = indicator !== undefined;
-		super.setIndicator(indicator ?? createRecodeLoaderIndicator());
-		super.setMessage(this.workingMessage);
+		if (indicator) {
+			super.setIndicator(indicator);
+			super.setMessage(this.workingMessage);
+		} else {
+			super.setMessage("");
+			super.setIndicator(createRecodeWorkingIndicator(this.workingMessage));
+		}
 	}
 
 	override setMessage(message: string): void {
 		this.workingMessage = message;
 		if (!this.generating) {
-			super.setMessage(message);
-		}
-	}
-
-	override dispose(): void {
-		this.clearTransitionTimer();
-		super.dispose();
-	}
-
-	private clearTransitionTimer(): void {
-		if (this.transitionTimer) {
-			clearTimeout(this.transitionTimer);
-			this.transitionTimer = undefined;
+			if (this.usesCustomIndicator) {
+				super.setMessage(message);
+			} else {
+				super.setMessage("");
+				super.setIndicator(createRecodeWorkingIndicator(message));
+			}
 		}
 	}
 }
