@@ -2,13 +2,67 @@ import type { LoaderIndicatorOptions } from "@reitaard/repi-tui";
 import { theme } from "../theme/theme.ts";
 
 const ENCRYPTED_FRAME_INTERVAL_MS = 50;
-const WORKING_FRAME_INTERVAL_MS = 80;
 const SCRAMBLE_WIDTH = 10;
 const LOOP_FRAME_COUNT = 32;
 const ELLIPSIS_FRAME_DURATION = 8;
+const READABLE_HOLD_FRAMES = 40;
+const TRANSITION_FRAME_COUNT = 30;
 const SCRAMBLE_CHARSET = "0123456789abcdefABCDEF~!@#$£€%^&*()+=_";
 const ELLIPSIS_FRAMES = [".", "..", "...", ""];
 const LOADER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+export const RECODE_SPINNER_VERBS = [
+	"Nucleating",
+	"Cooking",
+	"Percolating",
+	"Recombobulating",
+	"Nebulizing",
+	"Hyperspacing",
+	"Quantumizing",
+	"Synthesizing",
+	"Transmuting",
+	"Crystallizing",
+	"Germinating",
+	"Incubating",
+	"Orchestrating",
+	"Computing",
+	"Calculating",
+	"Processing",
+	"Puzzling",
+	"Tinkering",
+	"Crafting",
+	"Forging",
+	"Brewing",
+	"Simmering",
+	"Concocting",
+	"Deciphering",
+	"Cerebrating",
+	"Channelling",
+	"Cogitating",
+	"Contemplating",
+	"Elucidating",
+	"Envisioning",
+	"Finagling",
+	"Flibbertigibbeting",
+	"Hatching",
+	"Herding",
+	"Honking",
+	"Ideating",
+	"Imagining",
+	"Manifesting",
+	"Marinating",
+	"Meandering",
+	"Moseying",
+	"Mulling",
+	"Mustering",
+	"Musing",
+	"Noodling",
+	"Philosophising",
+	"Pontificating",
+	"Ruminating",
+] as const;
+
+let previousSpinnerVerb = -1;
 
 export const RECODE_LIME_PALETTE = [
 	{ hex: "#B7F7D1", ansi256: 194 },
@@ -18,37 +72,75 @@ export const RECODE_LIME_PALETTE = [
 	{ hex: "#257B4A", ansi256: 29 },
 ] as const;
 
-/** Creates the green spinner with a Working label and animated ellipsis. */
-export function createRecodeWorkingIndicator(message: string): LoaderIndicatorOptions {
-	const ellipsisOffset = message.indexOf("...");
-	const label = ellipsisOffset === -1 ? message : message.slice(0, ellipsisOffset);
-	const suffix = ellipsisOffset === -1 ? "" : message.slice(ellipsisOffset + 3);
-	const frames = Array.from({ length: 20 }, (_, frameIndex) => {
+export function selectRecodeSpinnerVerb(random: () => number = Math.random): string {
+	let index = Math.min(RECODE_SPINNER_VERBS.length - 1, Math.floor(random() * RECODE_SPINNER_VERBS.length));
+	if (index === previousSpinnerVerb) index = (index + 1) % RECODE_SPINNER_VERBS.length;
+	previousSpinnerVerb = index;
+	return RECODE_SPINNER_VERBS[index] ?? RECODE_SPINNER_VERBS[0];
+}
+
+/** Creates one continuous verb-to-encrypted animation with a full-speed loop tail. */
+export function createRecodeMagicIndicator(verb: string, random: () => number = Math.random): LoaderIndicatorOptions {
+	const introFrames: string[] = [];
+	for (let frameIndex = 0; frameIndex < READABLE_HOLD_FRAMES; frameIndex++) {
 		const loader = LOADER_FRAMES[frameIndex % LOADER_FRAMES.length] ?? "⠋";
 		const ellipsis = ELLIPSIS_FRAMES[Math.floor(frameIndex / 5) % ELLIPSIS_FRAMES.length] ?? "";
-		return `${theme.fg("borderAccent", loader)} ${theme.fg("muted", `${label}${ellipsis}${suffix}`)}`;
-	});
+		introFrames.push(`${recodeSpinner(loader)} ${recodeSpinner(`${verb}${ellipsis}`)}`);
+	}
+
+	for (let transitionFrame = 0; transitionFrame < TRANSITION_FRAME_COUNT; transitionFrame++) {
+		const progress = transitionFrame / (TRANSITION_FRAME_COUNT - 1);
+		const visibleCharacters = Math.round(verb.length * (1 - progress));
+		const width = Math.round(verb.length + (SCRAMBLE_WIDTH - verb.length) * progress);
+		const plain = verb.slice(0, Math.min(visibleCharacters, width));
+		const encryptedWidth = Math.max(0, width - plain.length);
+		const encryptedCharacters = createEncryptedCharacters(encryptedWidth, random);
+		const encrypted = colorEncryptedCharacters(encryptedCharacters, transitionFrame);
+		const absoluteFrame = READABLE_HOLD_FRAMES + transitionFrame;
+		const loader = LOADER_FRAMES[absoluteFrame % LOADER_FRAMES.length] ?? "⠋";
+		introFrames.push(`${recodeSpinner(loader)} ${recodeSpinner(plain)}${encrypted}`);
+	}
+
+	const loopFrames = createEncryptedLoopFrames(random, introFrames.length);
 	return {
-		frames,
-		intervalMs: WORKING_FRAME_INTERVAL_MS,
+		frames: [...introFrames, ...loopFrames],
+		intervalMs: ENCRYPTED_FRAME_INTERVAL_MS,
+		loopFromFrame: introFrames.length,
 	};
 }
 
 /** Creates a Crush-style encrypted band with a green spinner and lime ellipsis. */
 export function createRecodeGeneratingLoop(random: () => number = Math.random): LoaderIndicatorOptions {
-	const frames = Array.from({ length: LOOP_FRAME_COUNT }, (_, frameIndex) => {
+	return { frames: createEncryptedLoopFrames(random), intervalMs: ENCRYPTED_FRAME_INTERVAL_MS };
+}
+
+function createEncryptedLoopFrames(random: () => number, frameOffset = 0): string[] {
+	return Array.from({ length: LOOP_FRAME_COUNT }, (_, frameIndex) => {
 		const loader = LOADER_FRAMES[frameIndex % LOADER_FRAMES.length] ?? "⠋";
-		let encryptedBand = "";
-		for (let column = 0; column < SCRAMBLE_WIDTH; column++) {
-			const characterIndex = Math.floor(random() * SCRAMBLE_CHARSET.length);
-			const character = SCRAMBLE_CHARSET[characterIndex] ?? ".";
-			encryptedBand += limeFg(character, column + frameIndex);
-		}
+		const encryptedBand = createEncryptedBand(SCRAMBLE_WIDTH, frameIndex + frameOffset, random);
 		const ellipsisIndex = Math.floor(frameIndex / ELLIPSIS_FRAME_DURATION) % ELLIPSIS_FRAMES.length;
 		const ellipsis = ELLIPSIS_FRAMES[ellipsisIndex] ?? "";
-		return `${theme.fg("borderAccent", loader)} ${encryptedBand} ${limeText(ellipsis, frameIndex)}`;
+		return `${recodeSpinner(loader)} ${encryptedBand}${limeText(ellipsis, frameIndex)}`;
 	});
-	return { frames, intervalMs: ENCRYPTED_FRAME_INTERVAL_MS };
+}
+
+function createEncryptedBand(width: number, paletteOffset: number, random: () => number): string {
+	return colorEncryptedCharacters(createEncryptedCharacters(width, random), paletteOffset);
+}
+
+function createEncryptedCharacters(width: number, random: () => number): string[] {
+	return Array.from({ length: width }, () => {
+		const characterIndex = Math.floor(random() * SCRAMBLE_CHARSET.length);
+		return SCRAMBLE_CHARSET[characterIndex] ?? ".";
+	});
+}
+
+function colorEncryptedCharacters(characters: string[], paletteOffset: number): string {
+	return characters.map((character, index) => limeFg(character, index + paletteOffset)).join("");
+}
+
+export function recodeSpinner(text: string): string {
+	return limeFg(text, 2);
 }
 
 function limeText(text: string, paletteOffset: number): string {

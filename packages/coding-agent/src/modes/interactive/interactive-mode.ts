@@ -609,6 +609,22 @@ export class InteractiveMode {
 			};
 		}
 
+		const lspCommand = slashCommands.find((command) => command.name === "lsp");
+		if (lspCommand) {
+			const options: AutocompleteItem[] = [
+				{ value: "status", label: "status", description: "Show active language servers and scope" },
+				{ value: "on", label: "on", description: "Enable language servers" },
+				{ value: "off", label: "off", description: "Disable language servers" },
+				{ value: "project-on", label: "project-on", description: "Restrict LSP to the current project" },
+				{ value: "project-off", label: "project-off", description: "Allow unrestricted LSP access" },
+			];
+			lspCommand.getArgumentCompletions = (prefix: string): AutocompleteItem[] | null => {
+				const normalized = prefix.trimStart();
+				const matches = options.filter((option) => option.value.startsWith(normalized));
+				return matches.length > 0 ? matches : null;
+			};
+		}
+
 		const loginCommand = slashCommands.find((command) => command.name === "login");
 		if (loginCommand) {
 			loginCommand.getArgumentCompletions = (prefix: string): AutocompleteItem[] | null => {
@@ -1453,7 +1469,7 @@ export class InteractiveMode {
 			}
 			return theme.fg("dim", `  ${labels.join(", ")}`);
 		};
-		const formatDottedList = (items: string[], dotColor: ThemeColor = "accent"): string =>
+		const formatDottedList = (items: string[], dotColor: ThemeColor = "toolSuccessStatus"): string =>
 			items.map((item) => `${theme.fg(dotColor, "  ●")} ${theme.fg("dim", item)}`).join("\n");
 		const addLoadedSection = (
 			name: string,
@@ -1557,7 +1573,7 @@ export class InteractiveMode {
 					formatPackagePath: (item) =>
 						this.formatExtensionDisplayPath(this.getShortPath(item.path, item.sourceInfo)),
 				});
-				const extensionCompactList = formatDottedList(this.getCompactExtensionLabels(extensions), "borderAccent");
+				const extensionCompactList = formatDottedList(this.getCompactExtensionLabels(extensions));
 				addLoadedSection("Extensions", extensionCompactList, extList, "mdHeading");
 
 				const hasMcpAdapter = extensions.some(
@@ -1570,10 +1586,10 @@ export class InteractiveMode {
 					const status = this.mcpStartupStatus?.replace(/\u001b\[[0-9;]*m/g, "");
 					const counts = status?.match(/MCP:\s*(\d+)\/(\d+)\s+servers/i);
 					const mcpDotColor: ThemeColor = status?.toLowerCase().includes("failed")
-						? "error"
+						? "toolErrorStatus"
 						: counts && counts[1] === counts[2]
-							? "success"
-							: "accent";
+							? "toolSuccessStatus"
+							: "muted";
 					const serverList =
 						serverNames.length === 0 ? theme.fg("muted", "  None") : formatDottedList(serverNames, mcpDotColor);
 					const statusLine = status ? `\n${theme.fg("muted", `  ${status}`)}` : "";
@@ -1601,20 +1617,19 @@ export class InteractiveMode {
 						const state = lifecycleStatuses.get(name)?.state ?? "unstarted";
 						const dotColor: ThemeColor =
 							state === "error"
-								? "error"
+								? "toolErrorStatus"
 								: state === "backoff"
-									? "warning"
+									? "toolErrorStatus"
 									: state === "ready"
-										? "success"
-										: state === "starting"
-											? "borderAccent"
-											: "muted";
+										? "toolSuccessStatus"
+										: "muted";
 						return `${theme.fg(dotColor, "  ●")} ${theme.fg("dim", name)} ${theme.fg("muted", state)}`;
 					}),
 					...disabledLspServers
 						.filter((name) => !lspConfig.servers[name])
 						.map(
-							(name) => `${theme.fg("muted", "  ●")} ${theme.fg("dim", name)} ${theme.fg("muted", "disabled")}`,
+							(name) =>
+								`${theme.fg("toolErrorStatus", "  ●")} ${theme.fg("dim", name)} ${theme.fg("muted", "disabled")}`,
 						),
 				].join("\n");
 				addLoadedSection("LSPs", lspList);
@@ -5406,7 +5421,7 @@ export class InteractiveMode {
 		if (command.action === "status") {
 			if (command.target === "lspmux") {
 				if (!controls.lspmux) {
-					this.showLspControlDetails("lspmux", "disabled", "muted", [
+					this.showLspControlDetails("lspmux", "disabled", "toolErrorStatus", [
 						theme.fg("muted", "  Rust language servers use direct processes."),
 					]);
 					return;
@@ -5414,17 +5429,17 @@ export class InteractiveMode {
 				clearLspmuxDetectionCache();
 				const mux = await detectLspmux();
 				if (mux.running) {
-					this.showLspControlDetails("lspmux", "active", "success", [
+					this.showLspControlDetails("lspmux", "active", "toolSuccessStatus", [
 						theme.fg("muted", `  ${mux.binaryPath ?? "lspmux"}`),
 						theme.fg("muted", "  Multiplexing: rust-analyzer"),
 					]);
 				} else if (mux.available) {
-					this.showLspControlDetails("lspmux", "installed, daemon not running", "warning", [
+					this.showLspControlDetails("lspmux", "installed, daemon not running", "toolErrorStatus", [
 						theme.fg("muted", "  Direct-process fallback is active."),
 						theme.fg("muted", "  Start lspmux, then run /lspmux status again."),
 					]);
 				} else {
-					this.showLspControlDetails("lspmux", "not installed", "muted", [
+					this.showLspControlDetails("lspmux", "not installed", "toolErrorStatus", [
 						theme.fg("muted", "  Direct-process fallback is active."),
 						theme.fg("muted", "  Install lspmux and add it to PATH to enable shared rust-analyzer processes."),
 					]);
@@ -5440,29 +5455,35 @@ export class InteractiveMode {
 				const state = status?.state ?? "unstarted";
 				const color: ThemeColor =
 					state === "error"
-						? "error"
+						? "toolErrorStatus"
 						: state === "backoff"
-							? "warning"
+							? "toolErrorStatus"
 							: state === "ready"
-								? "success"
-								: state === "starting"
-									? "borderAccent"
-									: "muted";
+								? "toolSuccessStatus"
+								: "muted";
 				const retry = status?.retryAt
 					? ` retry ${Math.max(0, Math.ceil((status.retryAt - Date.now()) / 1000))}s`
 					: "";
 				const error = status?.error ? ` · ${status.error.split("\n", 1)[0]}` : "";
 				return `${theme.fg(color, "  ●")} ${theme.fg("dim", name)} ${theme.fg("muted", `${state}${retry}${error}`)}`;
 			});
+			lines.unshift(
+				theme.fg(
+					controls.projectOnly ? "toolSuccessStatus" : "toolErrorStatus",
+					`  Scope: ${controls.projectOnly ? "project only" : "unrestricted"}`,
+				),
+			);
 			for (const [name, enabled] of Object.entries(controls.servers ?? {})) {
 				if (!enabled && !config.servers[name]) {
-					lines.push(`${theme.fg("muted", "  ●")} ${theme.fg("dim", name)} ${theme.fg("muted", "disabled")}`);
+					lines.push(
+						`${theme.fg("toolErrorStatus", "  ●")} ${theme.fg("dim", name)} ${theme.fg("muted", "disabled")}`,
+					);
 				}
 			}
 			this.showLspControlDetails(
 				"LSP",
 				controls.enabled ? "enabled" : "disabled",
-				controls.enabled ? "success" : "muted",
+				controls.enabled ? "toolSuccessStatus" : "toolErrorStatus",
 				lines.length > 0 ? lines : [theme.fg("muted", "  No matching language servers detected.")],
 			);
 			return;
@@ -5481,6 +5502,9 @@ export class InteractiveMode {
 		} else if (command.action === "server") {
 			this.settingsManager.setLspServerEnabled(command.server, command.enabled);
 			statusMessage = `${command.server} ${command.enabled ? "enabled" : "disabled"}`;
+		} else if (command.action === "project-only") {
+			this.settingsManager.setLspProjectOnly(command.enabled);
+			statusMessage = `LSP scope: ${command.enabled ? "project only" : "unrestricted"}`;
 		} else {
 			const enabled = command.action === "enable";
 			this.settingsManager.setLspEnabled(enabled);

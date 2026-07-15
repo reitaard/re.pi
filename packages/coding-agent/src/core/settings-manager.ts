@@ -62,6 +62,7 @@ export interface WarningSettings {
 export interface LspSettings {
 	enabled?: boolean; // default: true
 	lspmux?: boolean; // default: true
+	projectOnly?: boolean; // default: false (unrestricted)
 	servers?: Record<string, boolean>; // per-server override; false disables
 }
 
@@ -817,10 +818,11 @@ export class SettingsManager {
 		this.save();
 	}
 
-	getLspSettings(): Required<Pick<LspSettings, "enabled" | "lspmux">> & Pick<LspSettings, "servers"> {
+	getLspSettings(): Required<Pick<LspSettings, "enabled" | "lspmux" | "projectOnly">> & Pick<LspSettings, "servers"> {
 		return {
 			enabled: this.settings.lsp?.enabled ?? true,
 			lspmux: this.settings.lsp?.lspmux ?? true,
+			projectOnly: this.settings.lsp?.projectOnly ?? false,
 			servers: { ...(this.settings.lsp?.servers ?? {}) },
 		};
 	}
@@ -836,6 +838,13 @@ export class SettingsManager {
 		this.globalSettings.lsp ??= {};
 		this.globalSettings.lsp.lspmux = enabled;
 		this.markModified("lsp", "lspmux");
+		this.save();
+	}
+
+	setLspProjectOnly(enabled: boolean): void {
+		this.globalSettings.lsp ??= {};
+		this.globalSettings.lsp.projectOnly = enabled;
+		this.markModified("lsp", "projectOnly");
 		this.save();
 	}
 

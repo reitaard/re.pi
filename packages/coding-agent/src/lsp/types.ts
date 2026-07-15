@@ -22,6 +22,7 @@ export interface LspServerConfig {
 	useLspmux?: boolean;
 	isLinter?: boolean;
 	resolvedCommand?: string;
+	projectOnly?: boolean;
 	capabilities?: {
 		flycheck?: boolean;
 		ssr?: boolean;
@@ -199,7 +200,7 @@ export interface LspClient {
 	pendingRequests: Map<number, LspPendingRequest>;
 	diagnostics: Map<string, { diagnostics: LspDiagnostic[]; version: number | null }>;
 	diagnosticsVersion: number;
-	openFiles: Map<string, { version: number; languageId: string }>;
+	openFiles: Map<string, { version: number; languageId: string; content: string }>;
 	writeQueue: Promise<void>;
 	stderr: string;
 	lastActivity: number;

@@ -6,6 +6,8 @@ export interface LoaderIndicatorOptions {
 	frames?: string[];
 	/** Frame interval in milliseconds for animated indicators. */
 	intervalMs?: number;
+	/** Frame to return to after the one-shot introduction completes. */
+	loopFromFrame?: number;
 }
 
 const DEFAULT_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -18,6 +20,7 @@ export class Loader extends Text {
 	private frames = [...DEFAULT_FRAMES];
 	private intervalMs = DEFAULT_INTERVAL_MS;
 	private currentFrame = 0;
+	private loopFromFrame = 0;
 	private intervalId: NodeJS.Timeout | null = null;
 	private ui: TUI | null = null;
 	private renderIndicatorVerbatim = false;
@@ -65,6 +68,7 @@ export class Loader extends Text {
 		this.renderIndicatorVerbatim = indicator !== undefined;
 		this.frames = indicator?.frames !== undefined ? [...indicator.frames] : [...DEFAULT_FRAMES];
 		this.intervalMs = indicator?.intervalMs && indicator.intervalMs > 0 ? indicator.intervalMs : DEFAULT_INTERVAL_MS;
+		this.loopFromFrame = Math.min(Math.max(0, indicator?.loopFromFrame ?? 0), Math.max(0, this.frames.length - 1));
 		this.currentFrame = 0;
 		this.start();
 	}
@@ -75,7 +79,7 @@ export class Loader extends Text {
 			return;
 		}
 		this.intervalId = setInterval(() => {
-			this.currentFrame = (this.currentFrame + 1) % this.frames.length;
+			this.currentFrame = this.currentFrame + 1 < this.frames.length ? this.currentFrame + 1 : this.loopFromFrame;
 			this.updateDisplay();
 		}, this.intervalMs);
 	}

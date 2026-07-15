@@ -1,6 +1,7 @@
 export type LspControlCommand =
 	| { target: "lsp"; action: "status" | "enable" | "disable" }
 	| { target: "lsp"; action: "server"; server: string; enabled: boolean }
+	| { target: "lsp"; action: "project-only"; enabled: boolean }
 	| { target: "lspmux"; action: "status" | "enable" | "disable" };
 
 function parseToggle(value: string): boolean | null {
@@ -23,8 +24,16 @@ export function parseLspControlCommand(text: string): LspControlCommand | null {
 		const enabled = parseToggle(parts[3]);
 		if (enabled !== null && parts[2]) return { target, action: "server", server: parts[2], enabled };
 	}
+	if (target === "lsp" && parts[1] === "project-only" && parts.length === 3) {
+		const enabled = parseToggle(parts[2]);
+		if (enabled !== null) return { target: "lsp", action: "project-only", enabled };
+	}
+	if (target === "lsp" && parts.length === 2 && (parts[1] === "project-on" || parts[1] === "project-off")) {
+		return { target: "lsp", action: "project-only", enabled: parts[1] === "project-on" };
+	}
 	return null;
 }
 
-export const LSP_CONTROL_USAGE = "Usage: /lsp [status|on|off|server <name> on|off]";
+export const LSP_CONTROL_USAGE =
+	"Usage: /lsp [status|on|off|project-on|project-off|project-only on|off|server <name> on|off]";
 export const LSPMUX_CONTROL_USAGE = "Usage: /lspmux [status|on|off]";

@@ -2,6 +2,7 @@
 
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
+import { validateLspWorkspaceEditProjectBoundary } from "./recode-lsp-boundary.ts";
 import type {
 	LspCreateFile,
 	LspDeleteFile,
@@ -154,7 +155,12 @@ function validateDocumentChanges(changes: LspDocumentChange[]): void {
 	}
 }
 
-export async function applyWorkspaceEdit(edit: LspWorkspaceEdit, cwd: string): Promise<string[]> {
+export async function applyWorkspaceEdit(
+	edit: LspWorkspaceEdit,
+	cwd: string,
+	options: { projectOnly?: boolean } = {},
+): Promise<string[]> {
+	if (options.projectOnly) await validateLspWorkspaceEditProjectBoundary(edit, cwd);
 	const applied: string[] = [];
 	if (edit.documentChanges) {
 		validateDocumentChanges(edit.documentChanges);

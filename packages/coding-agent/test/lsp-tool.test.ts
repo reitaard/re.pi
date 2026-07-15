@@ -74,6 +74,36 @@ afterEach(async () => {
 });
 
 describe("LSP tool", () => {
+	test("read-only mode rejects mutation actions", async () => {
+		const root = mkdtempSync(join(tmpdir(), "repi-lsp-readonly-"));
+		const tool = createLspToolDefinition(root, { readOnly: true });
+		await expect(
+			tool.execute(
+				"rename",
+				{ action: "rename", file: "sample.ts", line: 1, character: 1, new_name: "next" },
+				undefined,
+				undefined,
+				{} as never,
+			),
+		).rejects.toThrow("unavailable in a read-only tool set");
+	});
+
+	test("project-only mode rejects file queries outside the workspace", async () => {
+		const parent = mkdtempSync(join(tmpdir(), "repi-lsp-project-only-"));
+		const root = join(parent, "project");
+		mkdirSync(root);
+		const tool = createLspToolDefinition(root, { controls: { projectOnly: true } });
+		await expect(
+			tool.execute(
+				"hover",
+				{ action: "hover", file: "../outside.ts", line: 1, character: 1 },
+				undefined,
+				undefined,
+				{} as never,
+			),
+		).rejects.toThrow("outside the project");
+	});
+
 	test("queries hover information and published diagnostics", async () => {
 		const root = mkdtempSync(join(tmpdir(), "repi-lsp-tool-"));
 		const serverPath = createFakeServer(root);

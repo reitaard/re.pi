@@ -160,7 +160,7 @@ export class RecodeHeader implements Component {
 		const details = this.getDetails();
 		const model = details.provider === "unknown" ? details.model : `${details.model} · ${details.provider}`;
 		const leftRows = [
-			theme.bold(theme.fg("text", " Welcome to re.pi")),
+			theme.bold(theme.fg("text", " Welcome to re™")),
 			"",
 			centerCell(renderWordmarkRow(0), leftWidth),
 			centerCell(renderWordmarkRow(1), leftWidth),

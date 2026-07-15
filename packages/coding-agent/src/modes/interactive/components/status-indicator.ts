@@ -3,7 +3,7 @@ import type { WorkingIndicatorOptions } from "../../../core/extensions/index.ts"
 import { theme } from "../theme/theme.ts";
 import { CountdownTimer } from "./countdown-timer.ts";
 import { keyText } from "./keybinding-hints.ts";
-import { createRecodeGeneratingLoop, createRecodeWorkingIndicator } from "./recode-magic-indicator.ts";
+import { createRecodeMagicIndicator, recodeSpinner, selectRecodeSpinnerVerb } from "./recode-magic-indicator.ts";
 
 export type StatusIndicatorKind = "working" | "retry" | "compaction" | "branchSummary";
 
@@ -28,7 +28,6 @@ export class StatusIndicator extends Loader {
 }
 
 export class WorkingStatusIndicator extends StatusIndicator {
-	private generating = false;
 	private usesCustomIndicator: boolean;
 	private workingMessage: string;
 
@@ -36,43 +35,34 @@ export class WorkingStatusIndicator extends StatusIndicator {
 		super(
 			"working",
 			ui,
-			(spinner) => theme.fg("borderAccent", spinner),
+			recodeSpinner,
 			(text) => theme.fg("muted", text),
 			indicator ? message : "",
-			indicator ?? createRecodeWorkingIndicator(message),
+			indicator ?? createRecodeMagicIndicator(selectRecodeSpinnerVerb()),
 		);
 		this.usesCustomIndicator = indicator !== undefined;
 		this.workingMessage = message;
 	}
 
 	setGenerating(): void {
-		if (this.generating || this.usesCustomIndicator) return;
-		this.generating = true;
-		super.setMessage("");
-		super.setIndicator(createRecodeGeneratingLoop());
+		// The default indicator already owns the seamless verb-to-encrypted sequence.
 	}
 
 	applyIndicator(indicator?: WorkingIndicatorOptions): void {
-		this.generating = false;
 		this.usesCustomIndicator = indicator !== undefined;
 		if (indicator) {
 			super.setIndicator(indicator);
 			super.setMessage(this.workingMessage);
 		} else {
 			super.setMessage("");
-			super.setIndicator(createRecodeWorkingIndicator(this.workingMessage));
+			super.setIndicator(createRecodeMagicIndicator(selectRecodeSpinnerVerb()));
 		}
 	}
 
 	override setMessage(message: string): void {
 		this.workingMessage = message;
-		if (!this.generating) {
-			if (this.usesCustomIndicator) {
-				super.setMessage(message);
-			} else {
-				super.setMessage("");
-				super.setIndicator(createRecodeWorkingIndicator(message));
-			}
+		if (this.usesCustomIndicator) {
+			super.setMessage(message);
 		}
 	}
 }
@@ -83,13 +73,7 @@ export class RetryStatusIndicator extends StatusIndicator {
 	constructor(ui: TUI, attempt: number, maxAttempts: number, delayMs: number) {
 		const retryMessage = (seconds: number) =>
 			`Retrying (${attempt}/${maxAttempts}) in ${seconds}s... (${keyText("app.interrupt")} to cancel)`;
-		super(
-			"retry",
-			ui,
-			(spinner) => theme.fg("warning", spinner),
-			(text) => theme.fg("muted", text),
-			retryMessage(Math.ceil(delayMs / 1000)),
-		);
+		super("retry", ui, recodeSpinner, (text) => theme.fg("muted", text), retryMessage(Math.ceil(delayMs / 1000)));
 		this.countdown = new CountdownTimer(
 			delayMs,
 			ui,
@@ -118,13 +102,7 @@ export class CompactionStatusIndicator extends StatusIndicator {
 			reason === "manual"
 				? `Compacting context... ${cancelHint}`
 				: `${reason === "overflow" ? "Context overflow detected, " : ""}Auto-compacting... ${cancelHint}`;
-		super(
-			"compaction",
-			ui,
-			(spinner) => theme.fg("accent", spinner),
-			(text) => theme.fg("muted", text),
-			label,
-		);
+		super("compaction", ui, recodeSpinner, (text) => theme.fg("muted", text), label);
 	}
 }
 
@@ -133,7 +111,7 @@ export class BranchSummaryStatusIndicator extends StatusIndicator {
 		super(
 			"branchSummary",
 			ui,
-			(spinner) => theme.fg("accent", spinner),
+			recodeSpinner,
 			(text) => theme.fg("muted", text),
 			`Summarizing branch... (${keyText("app.interrupt")} to cancel)`,
 		);

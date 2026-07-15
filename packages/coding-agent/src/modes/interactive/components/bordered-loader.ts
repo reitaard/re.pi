@@ -2,6 +2,7 @@ import { CancellableLoader, Container, Loader, Spacer, Text, type TUI } from "@r
 import type { Theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint } from "./keybinding-hints.ts";
+import { recodeSpinner } from "./recode-magic-indicator.ts";
 
 /** Loader wrapped with borders for extension UI */
 export class BorderedLoader extends Container {
@@ -15,20 +16,10 @@ export class BorderedLoader extends Container {
 		const borderColor = (s: string) => theme.fg("border", s);
 		this.addChild(new DynamicBorder(borderColor));
 		if (this.cancellable) {
-			this.loader = new CancellableLoader(
-				tui,
-				(s) => theme.fg("accent", s),
-				(s) => theme.fg("muted", s),
-				message,
-			);
+			this.loader = new CancellableLoader(tui, recodeSpinner, (s) => theme.fg("muted", s), message);
 		} else {
 			this.signalController = new AbortController();
-			this.loader = new Loader(
-				tui,
-				(s) => theme.fg("accent", s),
-				(s) => theme.fg("muted", s),
-				message,
-			);
+			this.loader = new Loader(tui, recodeSpinner, (s) => theme.fg("muted", s), message);
 		}
 		this.addChild(this.loader);
 		if (this.cancellable) {

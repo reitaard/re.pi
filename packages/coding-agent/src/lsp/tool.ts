@@ -7,11 +7,11 @@ import { generateUnifiedPatch } from "../core/tools/edit-diff.ts";
 import { resolveToCwd } from "../core/tools/path-utils.ts";
 import { wrapToolDefinition } from "../core/tools/tool-definition-wrapper.ts";
 import {
-	ensureFileOpen,
 	getActiveLspClients,
 	getOrCreateClient,
 	notifyFileRenamed,
 	notifySaved,
+	refreshFile,
 	sendRequest,
 	syncContent,
 	waitForDiagnostics,
@@ -33,6 +33,7 @@ import {
 	formatNavigationLocations,
 	formatOutgoingCalls,
 	formatWorkspaceSymbols,
+	normalizeLocations,
 	parseCallHierarchyItems,
 	parseIncomingCalls,
 	parseOutgoingCalls,
@@ -40,6 +41,7 @@ import {
 	parseWorkspaceSymbols,
 	selectCallHierarchyItem,
 } from "./navigation.ts";
+import { assertLspPathInProject, isLspUriInProject } from "./recode-lsp-boundary.ts";
 import type { LspClient, LspCodeAction, LspDocumentChange, LspTextEdit, LspWorkspaceEdit } from "./types.ts";
 import { fileToUri, uriToFile } from "./utils.ts";
 
@@ -94,7 +96,25 @@ export interface LspToolDetails {
 
 export interface LspToolOptions {
 	controls?: LspControlSettings;
+	readOnly?: boolean;
 }
+
+export const LSP_READONLY_ACTIONS: ReadonlySet<LspToolInput["action"]> = new Set([
+	"status",
+	"diagnostics",
+	"hover",
+	"definition",
+	"type_definition",
+	"implementation",
+	"references",
+	"symbols",
+	"workspace_symbols",
+	"call_hierarchy",
+	"incoming_calls",
+	"outgoing_calls",
+	"workspace_diagnostics",
+	"capabilities",
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -241,6 +261,10 @@ export function createLspToolDefinition(
 		],
 		parameters: lspSchema,
 		async execute(_toolCallId, input, signal) {
+			if (options.readOnly && !LSP_READONLY_ACTIONS.has(input.action)) {
+				throw new Error(`LSP action ${input.action} is unavailable in a read-only tool set`);
+			}
+			const projectOnly = options.controls?.projectOnly === true;
 			if (input.action === "status") {
 				const config = loadLspConfig(cwd, undefined, options.controls);
 				const active = getActiveLspClients();
@@ -274,7 +298,11 @@ export function createLspToolDefinition(
 					try {
 						const client = await getOrCreateClient(server, cwd);
 						const result = await sendRequest(client, "workspace/symbol", { query }, signal, 10_000);
-						symbols.push(...parseWorkspaceSymbols(result));
+						symbols.push(
+							...parseWorkspaceSymbols(result).filter(
+								(symbol) => !projectOnly || isLspUriInProject(symbol.location.uri, cwd),
+							),
+						);
 						respondingServers.push(name);
 					} catch (error) {
 						if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : error;
@@ -345,8 +373,11 @@ export function createLspToolDefinition(
 						failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`);
 					}
 				}
+				const visibleEntries = projectOnly
+					? entries.filter((entry) => isLspUriInProject(fileToUri(entry.filePath), cwd))
+					: entries;
 				const formatted = formatGroupedLspDiagnostics(
-					entries,
+					visibleEntries,
 					cwd,
 					{ severity: input.severity as LspDiagnosticSeverityName | undefined, query: input.query },
 					WORKSPACE_DIAGNOSTIC_LIMIT,
@@ -362,9 +393,10 @@ export function createLspToolDefinition(
 
 			if (!input.file) throw new Error(`${input.action} requires a file`);
 			const filePath = resolveToCwd(input.file, cwd);
+			if (projectOnly) await assertLspPathInProject(filePath, cwd);
 			const clients = await getClientsForFile(cwd, filePath, options.controls);
 			if (clients.length === 0) throw new Error(`No language server is available for ${input.file}`);
-			for (const [, client] of clients) await ensureFileOpen(client, filePath);
+			for (const [, client] of clients) await refreshFile(client, filePath);
 			const uri = fileToUri(filePath);
 
 			if (input.action === "diagnostics") {
@@ -415,6 +447,7 @@ export function createLspToolDefinition(
 			if (input.action === "rename_file") {
 				if (!input.new_name) throw new Error("rename_file requires new_name as the destination path");
 				const destinationPath = resolveToCwd(input.new_name, cwd);
+				if (projectOnly) await assertLspPathInProject(destinationPath, cwd);
 				if (destinationPath === filePath) throw new Error("Source and destination paths are identical");
 				const sourceStat = await stat(filePath);
 				if (!sourceStat.isFile()) throw new Error("rename_file currently supports files, not directories");
@@ -453,7 +486,7 @@ export function createLspToolDefinition(
 						details: { action: input.action, servers: [serverName] },
 					};
 				}
-				const applied = await applyWorkspaceEdit(edit, cwd);
+				const applied = await applyWorkspaceEdit(edit, cwd, { projectOnly });
 				for (const [, targetClient] of clients) await notifyFileRenamed(targetClient, filePath, destinationPath);
 				await syncAppliedWorkspaceEdit(edit, cwd, options.controls, signal);
 				return {
@@ -469,7 +502,7 @@ export function createLspToolDefinition(
 			) {
 				const prepared = parseCallHierarchyItems(
 					await sendRequest(client, "textDocument/prepareCallHierarchy", params, signal),
-				);
+				).filter((item) => !projectOnly || isLspUriInProject(item.uri, cwd));
 				if (input.action === "call_hierarchy") {
 					return {
 						content: [{ type: "text", text: formatCallHierarchyItems(prepared, cwd) }],
@@ -502,8 +535,18 @@ export function createLspToolDefinition(
 							type: "text",
 							text:
 								input.action === "incoming_calls"
-									? formatIncomingCalls(parseIncomingCalls(result), cwd)
-									: formatOutgoingCalls(parseOutgoingCalls(result), cwd),
+									? formatIncomingCalls(
+											parseIncomingCalls(result).filter(
+												(call) => !projectOnly || isLspUriInProject(call.from.uri, cwd),
+											),
+											cwd,
+										)
+									: formatOutgoingCalls(
+											parseOutgoingCalls(result).filter(
+												(call) => !projectOnly || isLspUriInProject(call.to.uri, cwd),
+											),
+											cwd,
+										),
 						},
 					],
 					details: { action: input.action, servers: [serverName] },
@@ -559,7 +602,7 @@ export function createLspToolDefinition(
 						details: { action: input.action, servers: [serverName] },
 					};
 				}
-				const applied = await applyWorkspaceEdit(edit, cwd);
+				const applied = await applyWorkspaceEdit(edit, cwd, { projectOnly });
 				await syncAppliedWorkspaceEdit(edit, cwd, options.controls, signal);
 				return {
 					content: [{ type: "text", text: applied.join("\n") || "Rename returned no changes" }],
@@ -607,9 +650,14 @@ export function createLspToolDefinition(
 					if (isRecord(resolved) && typeof resolved.title === "string")
 						action = resolved as unknown as LspCodeAction;
 				}
+				if (projectOnly && action.command) {
+					throw new Error(
+						"LSP project-only mode blocks command-based code actions because their filesystem scope is unknown",
+					);
+				}
 				const output: string[] = [];
 				if (action.edit) {
-					output.push(...(await applyWorkspaceEdit(action.edit, cwd)));
+					output.push(...(await applyWorkspaceEdit(action.edit, cwd, { projectOnly })));
 					await syncAppliedWorkspaceEdit(action.edit, cwd, options.controls, signal);
 				}
 				if (action.command) {
@@ -639,13 +687,17 @@ export function createLspToolDefinition(
 			const requestParams =
 				input.action === "references" ? { ...params, context: { includeDeclaration: true } } : params;
 			const result = await sendRequest(client, method, requestParams, signal);
+			const visibleResult =
+				projectOnly && input.action !== "hover" && input.action !== "symbols"
+					? normalizeLocations(result).filter((location) => isLspUriInProject(location.uri, cwd))
+					: result;
 			const text =
 				input.action === "hover"
-					? formatHover(result)
+					? formatHover(visibleResult)
 					: input.action === "symbols"
-						? formatSymbols(result)
+						? formatSymbols(visibleResult)
 						: formatNavigationLocations(
-								result,
+								visibleResult,
 								cwd,
 								input.action === "definition"
 									? "No definition found"

@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { AgentSession } from "../src/core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../src/core/footer-data-provider.ts";
 import { FooterComponent, formatCwdForFooter } from "../src/modes/interactive/components/footer.ts";
-import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { initTheme, theme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 
 type AssistantUsage = {
@@ -21,6 +21,7 @@ function createSession(options: {
 	reasoning?: boolean;
 	thinkingLevel?: string;
 	usage?: AssistantUsage;
+	contextPercent?: number;
 }): AgentSession {
 	const usage = options.usage;
 	const entries =
@@ -51,7 +52,7 @@ function createSession(options: {
 			getSessionName: () => options.sessionName,
 			getCwd: () => "/tmp/project",
 		},
-		getContextUsage: () => ({ contextWindow: 200_000, percent: 12.3 }),
+		getContextUsage: () => ({ contextWindow: 200_000, percent: options.contextPercent ?? 12.3 }),
 		modelRegistry: {
 			isUsingOAuth: () => false,
 		},
@@ -140,5 +141,43 @@ describe("FooterComponent width handling", () => {
 
 		const statsLine = stripAnsi(footer.render(120)[1]);
 		expect(statsLine).toContain("CH25.0%");
+	});
+
+	it("colors token traffic and current-context percentage with the accent", () => {
+		const footer = new FooterComponent(
+			createSession({
+				sessionName: "",
+				usage: {
+					input: 12_345,
+					output: 678,
+					cacheRead: 0,
+					cacheWrite: 0,
+					cost: { total: 0 },
+				},
+			}),
+			createFooterData(1),
+		);
+		const statsLine = footer.render(120)[1];
+
+		expect(statsLine).toContain(theme.fg("accent", "↑12k"));
+		expect(statsLine).toContain(theme.fg("accent", "↓678"));
+		expect(statsLine).toContain(theme.fg("accent", "12.3%"));
+		expect(stripAnsi(statsLine)).toContain("↑12k ↓678 12.3%");
+		expect(stripAnsi(statsLine)).not.toContain("200k");
+		expect(stripAnsi(statsLine)).not.toContain("compact?");
+	});
+
+	it("suggests compaction at forty percent context usage", () => {
+		const belowThreshold = new FooterComponent(
+			createSession({ sessionName: "", contextPercent: 39.9 }),
+			createFooterData(1),
+		);
+		const footer = new FooterComponent(createSession({ sessionName: "", contextPercent: 40 }), createFooterData(1));
+		const statsLine = footer.render(120)[1];
+
+		expect(stripAnsi(belowThreshold.render(120)[1])).not.toContain("compact?");
+		expect(statsLine).toContain(theme.fg("accent", "40.0%"));
+		expect(statsLine).toContain(theme.fg("accent", " (compact?)"));
+		expect(stripAnsi(statsLine)).toContain("40.0% (compact?)");
 	});
 });

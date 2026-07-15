@@ -21,7 +21,7 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{
 		name: "lsp",
 		description: "Show or control language servers",
-		argumentHint: "[status|on|off|server <name> on|off]",
+		argumentHint: "[status|on|off|project-on|project-off|server <name> on|off]",
 	},
 	{ name: "lspmux", description: "Show or control LSP multiplexing", argumentHint: "[status|on|off]" },
 	{ name: "model", description: "Select model (opens selector UI)", argumentHint: "<provider/model>" },

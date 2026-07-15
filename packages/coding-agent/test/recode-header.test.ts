@@ -22,6 +22,8 @@ describe("RecodeHeader", () => {
 
 		expect(lines).toHaveLength(9);
 		expect(lines[0]).toContain("re.pi v0.81.0");
+		expect(lines[1]).toContain("Welcome to re™");
+		expect(lines[1]).not.toContain("Welcome to re.pi");
 		expect(lines[1]).toContain("Tips for getting started");
 		expect(lines[3]).toContain("▄▀▀▀▀▀ █▀▀▀▀█ █▀▀▀▀▄ █▀▀▀▀▀");
 		expect(lines[6]).toContain("qwen3.5-9b · open-provider");

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -33,5 +33,60 @@ describe("LSP workspace edits", () => {
 			),
 		).rejects.toThrow("Overlapping LSP edits");
 		expect(readFileSync(filePath, "utf-8")).toBe("abcdef\n");
+	});
+
+	test("project-only rejects outside edits before any file is changed", async () => {
+		const parent = mkdtempSync(join(tmpdir(), "repi-lsp-boundary-"));
+		const root = join(parent, "project");
+		mkdirSync(root);
+		const insidePath = join(root, "inside.ts");
+		const outsidePath = join(parent, "outside.ts");
+		writeFileSync(insidePath, "inside\n");
+		writeFileSync(outsidePath, "outside\n");
+
+		await expect(
+			applyWorkspaceEdit(
+				{
+					changes: {
+						[fileToUri(insidePath)]: [
+							{
+								range: { start: { line: 0, character: 0 }, end: { line: 0, character: 6 } },
+								newText: "changed",
+							},
+						],
+						[fileToUri(outsidePath)]: [
+							{
+								range: { start: { line: 0, character: 0 }, end: { line: 0, character: 7 } },
+								newText: "escaped",
+							},
+						],
+					},
+				},
+				root,
+				{ projectOnly: true },
+			),
+		).rejects.toThrow("outside the project");
+		expect(readFileSync(insidePath, "utf-8")).toBe("inside\n");
+		expect(readFileSync(outsidePath, "utf-8")).toBe("outside\n");
+	});
+
+	test("unrestricted mode keeps upstream-compatible outside edits", async () => {
+		const parent = mkdtempSync(join(tmpdir(), "repi-lsp-unrestricted-"));
+		const root = join(parent, "project");
+		mkdirSync(root);
+		const outsidePath = join(parent, "outside.ts");
+		writeFileSync(outsidePath, "outside\n");
+
+		await applyWorkspaceEdit(
+			{
+				changes: {
+					[fileToUri(outsidePath)]: [
+						{ range: { start: { line: 0, character: 0 }, end: { line: 0, character: 7 } }, newText: "allowed" },
+					],
+				},
+			},
+			root,
+		);
+		expect(readFileSync(outsidePath, "utf-8")).toBe("allowed\n");
 	});
 });

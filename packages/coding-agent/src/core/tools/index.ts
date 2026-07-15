@@ -165,7 +165,7 @@ export function createReadOnlyToolDefinitions(cwd: string, options?: ToolsOption
 		createGrepToolDefinition(cwd, options?.grep),
 		createFindToolDefinition(cwd, options?.find),
 		createLsToolDefinition(cwd, options?.ls),
-		createLspToolDefinition(cwd, options?.lsp),
+		createLspToolDefinition(cwd, { ...options?.lsp, readOnly: true }),
 	];
 }
 
@@ -198,7 +198,7 @@ export function createReadOnlyTools(cwd: string, options?: ToolsOptions): Tool[]
 		createGrepTool(cwd, options?.grep),
 		createFindTool(cwd, options?.find),
 		createLsTool(cwd, options?.ls),
-		createLspTool(cwd, options?.lsp),
+		createLspTool(cwd, { ...options?.lsp, readOnly: true }),
 	];
 }
 

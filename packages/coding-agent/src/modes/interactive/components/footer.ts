@@ -6,6 +6,8 @@ import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provi
 import { theme } from "../theme/theme.ts";
 import { formatRecodeThinkingLevel } from "./recode-thinking-label.ts";
 
+const SMART_CONTEXT_COMPACT_THRESHOLD_PERCENT = 40;
+
 /**
  * Sanitize text for display in a single-line status.
  * Removes newlines, tabs, carriage returns, and other control characters.
@@ -48,7 +50,6 @@ export function formatCwdForFooter(cwd: string, home: string | undefined): strin
  * Computes token/context stats from session, gets git branch and extension statuses from provider.
  */
 export class FooterComponent implements Component {
-	private autoCompactEnabled = true;
 	private session: AgentSession;
 	private footerData: ReadonlyFooterDataProvider;
 
@@ -62,7 +63,7 @@ export class FooterComponent implements Component {
 	}
 
 	setAutoCompactEnabled(enabled: boolean): void {
-		this.autoCompactEnabled = enabled;
+		void enabled;
 	}
 
 	/**
@@ -110,7 +111,6 @@ export class FooterComponent implements Component {
 		// Calculate context usage from session (handles compaction correctly).
 		// After compaction, tokens are unknown until the next LLM response.
 		const contextUsage = this.session.getContextUsage();
-		const contextWindow = contextUsage?.contextWindow ?? state.model?.contextWindow ?? 0;
 		const contextPercentValue = contextUsage?.percent ?? 0;
 		const contextPercent = contextUsage?.percent !== null ? contextPercentValue.toFixed(1) : "?";
 
@@ -131,8 +131,8 @@ export class FooterComponent implements Component {
 
 		// Build stats line
 		const statsParts = [];
-		if (totalInput) statsParts.push(`↑${formatTokens(totalInput)}`);
-		if (totalOutput) statsParts.push(`↓${formatTokens(totalOutput)}`);
+		if (totalInput) statsParts.push(theme.fg("accent", `↑${formatTokens(totalInput)}`));
+		if (totalOutput) statsParts.push(theme.fg("accent", `↓${formatTokens(totalOutput)}`));
 		if (totalCacheRead) statsParts.push(`R${formatTokens(totalCacheRead)}`);
 		if (totalCacheWrite) statsParts.push(`W${formatTokens(totalCacheWrite)}`);
 		if ((totalCacheRead > 0 || totalCacheWrite > 0) && latestCacheHitRate !== undefined) {
@@ -145,20 +145,11 @@ export class FooterComponent implements Component {
 			statsParts.push(costStr);
 		}
 
-		// Colorize context percentage based on usage
-		let contextPercentStr: string;
-		const autoIndicator = this.autoCompactEnabled ? " (auto)" : "";
-		const contextPercentDisplay =
-			contextPercent === "?"
-				? `?/${formatTokens(contextWindow)}${autoIndicator}`
-				: `${contextPercent}%/${formatTokens(contextWindow)}${autoIndicator}`;
-		if (contextPercentValue > 90) {
-			contextPercentStr = theme.fg("error", contextPercentDisplay);
-		} else if (contextPercentValue > 70) {
-			contextPercentStr = theme.fg("warning", contextPercentDisplay);
-		} else {
-			contextPercentStr = contextPercentDisplay;
-		}
+		// Suggest compaction before a small local model reaches its less reliable long-context range.
+		const compactHint =
+			contextPercentValue >= SMART_CONTEXT_COMPACT_THRESHOLD_PERCENT ? theme.fg("accent", " (compact?)") : "";
+		const contextPercentStr =
+			contextPercent === "?" ? theme.fg("footer", "?") : `${theme.fg("accent", `${contextPercent}%`)}${compactHint}`;
 		statsParts.push(contextPercentStr);
 		if (areExperimentalFeaturesEnabled()) {
 			statsParts.push(`${theme.fg("dim", "•")} ${theme.bold(theme.fg("warning", "xp"))}`);

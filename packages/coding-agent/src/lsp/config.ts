@@ -21,6 +21,7 @@ export interface LspConfig {
 export interface LspControlSettings {
 	enabled?: boolean;
 	lspmux?: boolean;
+	projectOnly?: boolean;
 	servers?: Record<string, boolean>;
 }
 
@@ -241,6 +242,7 @@ export function loadLspConfig(
 		available[name] = {
 			...config,
 			resolvedCommand,
+			...(controls.projectOnly === true ? { projectOnly: true } : {}),
 			...(controls.lspmux === false ? { useLspmux: false } : {}),
 		};
 	}

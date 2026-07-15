@@ -13,6 +13,7 @@ import { stripAnsi } from "../../../utils/ansi.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint, keyText } from "./keybinding-hints.ts";
+import { recodeSpinner } from "./recode-magic-indicator.ts";
 import { truncateToVisualLines } from "./visual-truncate.ts";
 
 // Preview line limit when not expanded (matches tool execution behavior)
@@ -54,7 +55,7 @@ export class BashExecutionComponent extends Container {
 		// Loader
 		this.loader = new Loader(
 			ui,
-			(spinner) => theme.fg(colorKey, spinner),
+			recodeSpinner,
 			(text) => theme.fg("muted", text),
 			`Running... (${keyText("tui.select.cancel")} to cancel)`, // Plain text for loader
 		);

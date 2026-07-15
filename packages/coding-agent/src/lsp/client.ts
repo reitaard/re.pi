@@ -190,7 +190,7 @@ async function handleServerRequest(client: LspClient, request: LspJsonRpcRequest
 			try {
 				const params = request.params as { edit?: LspWorkspaceEdit } | undefined;
 				if (!params?.edit) throw new Error("workspace/applyEdit did not include an edit");
-				await applyWorkspaceEdit(params.edit, client.cwd);
+				await applyWorkspaceEdit(params.edit, client.cwd, { projectOnly: client.config.projectOnly });
 				await sendResponse(client, request.id, { applied: true });
 			} catch (error) {
 				await sendResponse(client, request.id, {
@@ -435,7 +435,7 @@ export async function ensureFileOpen(client: LspClient, filePath: string, conten
 	await sendNotification(client, "textDocument/didOpen", {
 		textDocument: { uri, languageId, version: 1, text },
 	});
-	client.openFiles.set(uri, { version: 1, languageId });
+	client.openFiles.set(uri, { version: 1, languageId, content: text });
 }
 
 export async function syncContent(client: LspClient, filePath: string, content: string): Promise<number> {
@@ -444,12 +444,26 @@ export async function syncContent(client: LspClient, filePath: string, content: 
 	const openFile = client.openFiles.get(uri);
 	if (!openFile) return 1;
 	const version = ++openFile.version;
+	openFile.content = content;
 	client.diagnostics.delete(uri);
 	await sendNotification(client, "textDocument/didChange", {
 		textDocument: { uri, version },
 		contentChanges: [{ text: content }],
 	});
 	return version;
+}
+
+/** Refresh an already-open document from disk after bash or another process changed it. */
+export async function refreshFile(client: LspClient, filePath: string): Promise<void> {
+	const uri = fileToUri(filePath);
+	if (!client.openFiles.has(uri)) {
+		await ensureFileOpen(client, filePath);
+		return;
+	}
+	const content = await readFile(filePath, "utf-8");
+	if (client.openFiles.get(uri)?.content === content) return;
+	await syncContent(client, filePath, content);
+	await notifySaved(client, filePath, content);
 }
 
 export async function waitForDiagnostics(

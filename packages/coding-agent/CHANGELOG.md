@@ -2,9 +2,19 @@
 
 ## [Unreleased]
 
+## [0.81.1] - 2026-07-16
+
 ### Added
 
 - Added RePi language-server support with proactive warmup, bounded crash recovery, idle shutdown, configuration reloads, automatic server discovery, persistent `/lsp` and `/lspmux` controls, per-server toggles, `lspmux` fallback, definitions, implementations, workspace symbols, call hierarchy, project diagnostics, previewable symbol/file rename, post-edit diagnostics, formatting, code actions, lifecycle cleanup, queued protocol writes, and surfaced startup errors.
+- Added project-only LSP boundaries, safe workspace-edit handling, LSP command completion, and consistent runtime status reporting.
+- Added a continuous random-verb-to-encrypted activity indicator with a reusable one-shot loader introduction.
+- Added footer context guidance that suggests manual compaction at 40% usage.
+
+### Changed
+
+- Refined the re.pi terminal palette, semantic status colors, Markdown syntax colors, welcome branding, and responsive startup presentation.
+- Updated the footer to emphasize cumulative token traffic and current context percentage while keeping model and thinking details unchanged.
 
 ## [0.81.0] - 2026-07-15
 

@@ -6,6 +6,7 @@ import {
 	ensureFileOpen,
 	getOrCreateClient,
 	notifySaved,
+	refreshFile,
 	sendNotification,
 	sendRequest,
 	shutdownAllLspClients,
@@ -121,6 +122,34 @@ describe("LSP client", () => {
 		expect(
 			messages.filter((message) => message.method === "test/sequence").map((message) => message.params?.sequence),
 		).toEqual(Array.from({ length: 50 }, (_, sequence) => sequence));
+	});
+
+	test("refreshes an open document after an external file change", async () => {
+		const root = mkdtempSync(join(tmpdir(), "repi-lsp-refresh-"));
+		const sourcePath = join(root, "sample.ts");
+		writeFileSync(sourcePath, "const value = 1;\n");
+		const client = await getOrCreateClient(
+			{ command: process.execPath, args: [createFakeServer(root)], fileTypes: [".ts"], useLspmux: false },
+			root,
+		);
+		await ensureFileOpen(client, sourcePath);
+		writeFileSync(sourcePath, "const value = 2;\n");
+
+		await refreshFile(client, sourcePath);
+
+		const opened = client.openFiles.get(fileToUri(sourcePath));
+		expect(opened?.version).toBe(2);
+		expect(opened?.content).toBe("const value = 2;\n");
+		const messages = (await sendRequest(client, "test/getMessages", {})) as Array<{
+			method: string;
+			params?: { contentChanges?: Array<{ text?: string }> };
+		}>;
+		expect(messages).toContainEqual(
+			expect.objectContaining({
+				method: "textDocument/didChange",
+				params: expect.objectContaining({ contentChanges: [{ text: "const value = 2;\n" }] }),
+			}),
+		);
 	});
 
 	test("cancels an in-flight language-server request", async () => {
