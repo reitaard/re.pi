@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Dirent } from "node:fs";
+import { type Dirent, type FSWatcher, watch } from "node:fs";
 import { appendFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { chunkRecodeMemory, recodeMemoryDocumentId } from "./recode-memory-chunker.ts";
@@ -46,6 +46,11 @@ export class RecodeMemoryManager {
 	readonly projectRoot: string;
 	readonly store: RecodeMemoryStore;
 	private config: RecodeMemoryConfig;
+	private watchers: FSWatcher[] = [];
+	private reconciliationTimer?: NodeJS.Timeout;
+	private reconciliationDebounce?: NodeJS.Timeout;
+	private syncQueue: Promise<void> = Promise.resolve();
+	private includeProject = true;
 
 	constructor(options: {
 		globalRoot: string;
@@ -60,11 +65,21 @@ export class RecodeMemoryManager {
 	}
 
 	async initialize(includeProject = true): Promise<void> {
-		await Promise.all([mkdir(this.globalRoot, { recursive: true }), this.store.open()]);
+		this.includeProject = includeProject;
+		await Promise.all([
+			mkdir(this.globalRoot, { recursive: true }),
+			...(includeProject ? [mkdir(this.projectRoot, { recursive: true })] : []),
+			this.store.open(),
+		]);
 		await this.sync(includeProject);
+		this.startWatching();
 	}
 
 	close(): void {
+		for (const watcher of this.watchers) watcher.close();
+		this.watchers = [];
+		if (this.reconciliationDebounce) clearTimeout(this.reconciliationDebounce);
+		if (this.reconciliationTimer) clearInterval(this.reconciliationTimer);
 		this.store.close();
 	}
 
@@ -76,7 +91,17 @@ export class RecodeMemoryManager {
 		this.config = config;
 	}
 
-	async sync(includeProject = true): Promise<{ indexed: number; unchanged: number }> {
+	async sync(includeProject = this.includeProject): Promise<{ indexed: number; unchanged: number }> {
+		let result = { indexed: 0, unchanged: 0 };
+		const operation = this.syncQueue.then(async () => {
+			result = await this.performSync(includeProject);
+		});
+		this.syncQueue = operation.catch(() => {});
+		await operation;
+		return result;
+	}
+
+	private async performSync(includeProject: boolean): Promise<{ indexed: number; unchanged: number }> {
 		const files = [
 			...(await markdownFiles(this.globalRoot, "global")),
 			...(includeProject ? await markdownFiles(this.projectRoot, "project") : []),
@@ -105,21 +130,71 @@ export class RecodeMemoryManager {
 		return { indexed, unchanged };
 	}
 
+	private startWatching(): void {
+		for (const watcher of this.watchers) watcher.close();
+		this.watchers = [];
+		if (this.reconciliationTimer) clearInterval(this.reconciliationTimer);
+		const roots = [this.globalRoot, ...(this.includeProject ? [this.projectRoot] : [])];
+		for (const root of roots) {
+			try {
+				const watcher = watch(root, { recursive: true }, (_eventType, filename) => {
+					if (filename && !filename.toLowerCase().endsWith(".md")) return;
+					this.scheduleReconciliation();
+				});
+				watcher.on("error", () => this.scheduleReconciliation());
+				this.watchers.push(watcher);
+			} catch {
+				// Periodic reconciliation remains available on platforms without recursive watching.
+			}
+		}
+		this.reconciliationTimer = setInterval(() => this.scheduleReconciliation(), 60_000);
+		this.reconciliationTimer.unref();
+	}
+
+	private scheduleReconciliation(): void {
+		if (this.reconciliationDebounce) clearTimeout(this.reconciliationDebounce);
+		this.reconciliationDebounce = setTimeout(() => {
+			this.reconciliationDebounce = undefined;
+			void this.sync().catch(() => {});
+		}, 250);
+		this.reconciliationDebounce.unref();
+	}
+
 	async search(
 		query: string,
 		limit = this.config.maxResults,
 		scope = this.config.scope,
 	): Promise<RecodeMemorySearchResult[]> {
 		if (!this.config.enabled) return [];
-		await this.sync(scope !== "global");
 		return this.store.search(query, scope, Math.floor(Math.max(1, Math.min(limit, 20))), this.projectRoot);
 	}
 
-	async write(scope: RecodeMemoryScope, text: string, daily = false, includeProject = true): Promise<string> {
+	async write(
+		scope: RecodeMemoryScope,
+		text: string,
+		daily = false,
+		includeProject = this.includeProject,
+		tags: string[] = [],
+	): Promise<string> {
 		const cleaned = text.trim();
 		if (!cleaned) throw new Error("Memory text cannot be empty");
 		if (SENSITIVE_PATTERNS.some((pattern) => pattern.test(cleaned))) {
 			throw new Error("Memory looks like it contains a secret; remove credentials before saving it");
+		}
+		const normalizedTags = [
+			...new Set(
+				tags
+					.map((tag) =>
+						tag
+							.trim()
+							.toLowerCase()
+							.replace(/[^a-z0-9_-]+/g, "-"),
+					)
+					.filter(Boolean),
+			),
+		];
+		if (scope === "global" && normalizedTags.length === 0) {
+			throw new Error("Global memory requires at least one searchable tag");
 		}
 		const root = scope === "project" ? this.projectRoot : this.globalRoot;
 		const day = new Date().toISOString().slice(0, 10);
@@ -130,7 +205,8 @@ export class RecodeMemoryManager {
 		} catch {
 			await writeFile(path, daily ? `# ${day}\n` : "# Memory\n", "utf8");
 		}
-		await appendFile(path, `\n- ${cleaned.replace(/\s+/g, " ")}\n`, "utf8");
+		const tagPrefix = normalizedTags.map((tag, index) => (index === 0 ? `#${tag}` : `[[${tag}]]`)).join(" ");
+		await appendFile(path, `\n- ${tagPrefix ? `${tagPrefix} ` : ""}${cleaned.replace(/\s+/g, " ")}\n`, "utf8");
 		await this.sync(includeProject);
 		return path;
 	}

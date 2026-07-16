@@ -29,6 +29,25 @@ export type LspWritethrough = (
 	signal?: AbortSignal,
 ) => Promise<LspFileDiagnosticsResult | undefined>;
 
+export async function runLspWritethroughAfterMutation(
+	writethrough: LspWritethrough | undefined,
+	absolutePath: string,
+	content: string,
+	signal?: AbortSignal,
+): Promise<LspFileDiagnosticsResult | undefined> {
+	if (!writethrough) return undefined;
+	try {
+		return await writethrough(absolutePath, content, signal);
+	} catch (error) {
+		return {
+			summary: "LSP: diagnostics unavailable after successful write",
+			messages: [`LSP unavailable: ${error instanceof Error ? error.message : String(error)}`],
+			errored: false,
+			servers: [],
+		};
+	}
+}
+
 interface CollectedDiagnostics {
 	entries: LspDiagnosticEntry[];
 	failures: string[];

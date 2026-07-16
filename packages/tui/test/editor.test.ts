@@ -2796,6 +2796,31 @@ describe("Editor component", () => {
 			assert.strictEqual(editor.isShowingAutocomplete(), false);
 		});
 
+		it("shows slash command argument choices immediately after a trailing space", async () => {
+			const editor = new Editor(createTestTUI(), defaultEditorTheme);
+			const provider = new CombinedAutocompleteProvider(
+				[
+					{
+						name: "memory",
+						description: "Configure memory",
+						getArgumentCompletions: () => [
+							{ value: "status", label: "status" },
+							{ value: "global on", label: "global on" },
+						],
+					},
+				],
+				process.cwd(),
+			);
+			editor.setAutocompleteProvider(provider);
+			editor.setText("/memory");
+
+			editor.handleInput(" ");
+			await flushAutocomplete();
+
+			assert.strictEqual(editor.getText(), "/memory ");
+			assert.strictEqual(editor.isShowingAutocomplete(), true);
+		});
+
 		it("ignores invalid slash command argument completion results", async () => {
 			const editor = new Editor(createTestTUI(), defaultEditorTheme);
 			const provider = new CombinedAutocompleteProvider(

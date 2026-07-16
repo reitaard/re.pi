@@ -5,6 +5,7 @@ export interface RecodeMemoryConfig {
 	enabled: boolean;
 	scope: RecodeMemoryScopeSelection;
 	autoRecall: boolean;
+	globalRecall: boolean;
 	maxResults: number;
 	maxInjectedCharacters: number;
 }

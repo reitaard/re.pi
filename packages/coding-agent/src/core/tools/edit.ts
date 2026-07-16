@@ -3,7 +3,11 @@ import { Box, Container, Spacer, Text } from "@reitaard/repi-tui";
 import { constants } from "fs";
 import { access as fsAccess, readFile as fsReadFile, writeFile as fsWriteFile } from "fs/promises";
 import { type Static, Type } from "typebox";
-import type { LspFileDiagnosticsResult, LspWritethrough } from "../../lsp/writethrough.ts";
+import {
+	type LspFileDiagnosticsResult,
+	type LspWritethrough,
+	runLspWritethroughAfterMutation,
+} from "../../lsp/writethrough.ts";
 import { renderDiff } from "../../modes/interactive/components/diff.ts";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import type { ToolDefinition } from "../extensions/types.ts";
@@ -340,9 +344,12 @@ export function createEditToolDefinition(
 
 				const finalContent = bom + restoreLineEndings(newContent, originalEnding);
 				await ops.writeFile(absolutePath, finalContent);
-				throwIfAborted();
-				const diagnostics = await lspWritethrough?.(absolutePath, finalContent, signal);
-				throwIfAborted();
+				const diagnostics = await runLspWritethroughAfterMutation(
+					lspWritethrough,
+					absolutePath,
+					finalContent,
+					signal,
+				);
 
 				const diffResult = generateDiffString(baseContent, newContent);
 				const patch = generateUnifiedPatch(path, baseContent, newContent);

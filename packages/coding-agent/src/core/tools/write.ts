@@ -3,7 +3,11 @@ import { Container, Text } from "@reitaard/repi-tui";
 import { mkdir as fsMkdir, writeFile as fsWriteFile } from "fs/promises";
 import { dirname } from "path";
 import { type Static, Type } from "typebox";
-import type { LspFileDiagnosticsResult, LspWritethrough } from "../../lsp/writethrough.ts";
+import {
+	type LspFileDiagnosticsResult,
+	type LspWritethrough,
+	runLspWritethroughAfterMutation,
+} from "../../lsp/writethrough.ts";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
 import { getLanguageFromPath, highlightCode, type Theme } from "../../modes/interactive/theme/theme.ts";
 import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
@@ -230,9 +234,7 @@ export function createWriteToolDefinition(
 
 				// Write the file contents.
 				await ops.writeFile(absolutePath, content);
-				throwIfAborted();
-				const diagnostics = await lspWritethrough?.(absolutePath, content, signal);
-				throwIfAborted();
+				const diagnostics = await runLspWritethroughAfterMutation(lspWritethrough, absolutePath, content, signal);
 
 				return {
 					content: [

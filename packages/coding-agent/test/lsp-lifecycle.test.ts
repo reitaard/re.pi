@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
+import { getOrCreateClient } from "../src/lsp/client.ts";
 import type { LspConfig } from "../src/lsp/config.ts";
 import { getLspLifecycleStatuses, shutdownAllLspLifecycles, startLspLifecycle } from "../src/lsp/lifecycle.ts";
 
@@ -84,10 +85,16 @@ afterEach(async () => {
 });
 
 describe("LSP lifecycle", () => {
-	test("starts configured servers proactively", async () => {
-		const root = mkdtempSync(join(tmpdir(), "repi-lsp-warmup-"));
+	test("starts only the server requested by a matching file operation", async () => {
+		const root = mkdtempSync(join(tmpdir(), "repi-lsp-lazy-"));
 		const config = createConfig("typescript", createManagedServer(root), root);
 		await startLspLifecycle({ cwd: root, config, configPollIntervalMs: 10 });
+		expect(getLspLifecycleStatuses(root)).toContainEqual(
+			expect.objectContaining({ name: "typescript", state: "unstarted" }),
+		);
+		expect(existsSync(join(root, "typescript-starts.txt"))).toBe(false);
+
+		await getOrCreateClient(config.servers.typescript!, root);
 		expect(getLspLifecycleStatuses(root)).toContainEqual(
 			expect.objectContaining({ name: "typescript", state: "ready" }),
 		);
@@ -97,6 +104,7 @@ describe("LSP lifecycle", () => {
 		const root = mkdtempSync(join(tmpdir(), "repi-lsp-restart-"));
 		const config = createConfig("typescript", createManagedServer(root), root, "crash-once");
 		await startLspLifecycle({ cwd: root, config, restartBaseDelayMs: 10, configPollIntervalMs: 10 });
+		await getOrCreateClient(config.servers.typescript!, root);
 		const countPath = join(root, "typescript-starts.txt");
 		await waitUntil(
 			() =>
@@ -116,6 +124,7 @@ describe("LSP lifecycle", () => {
 			restartStabilityMs: 1_000,
 			configPollIntervalMs: 10,
 		});
+		await getOrCreateClient(config.servers.typescript!, root);
 		await waitUntil(() => getLspLifecycleStatuses(root)[0]?.state === "error");
 		expect(getLspLifecycleStatuses(root)[0]).toEqual(expect.objectContaining({ state: "error", restartAttempt: 3 }));
 	});
@@ -124,6 +133,7 @@ describe("LSP lifecycle", () => {
 		const root = mkdtempSync(join(tmpdir(), "repi-lsp-idle-"));
 		const config = createConfig("typescript", createManagedServer(root), root, "stable", 30);
 		await startLspLifecycle({ cwd: root, config, configPollIntervalMs: 10 });
+		await getOrCreateClient(config.servers.typescript!, root);
 		await waitUntil(() => getLspLifecycleStatuses(root)[0]?.state === "unstarted");
 	});
 
@@ -133,13 +143,14 @@ describe("LSP lifecycle", () => {
 		let config = createConfig("first", serverPath, root);
 		await startLspLifecycle({ cwd: root, config, loadConfig: () => config, configPollIntervalMs: 10 });
 		config = createConfig("second", serverPath, root);
-		await waitUntil(() =>
-			getLspLifecycleStatuses(root).some((status) => status.name === "second" && status.state === "ready"),
-		);
+		await waitUntil(() => getLspLifecycleStatuses(root).some((status) => status.name === "second"));
 		expect(getLspLifecycleStatuses(root).some((status) => status.name === "first")).toBe(false);
+		expect(getLspLifecycleStatuses(root)[0]?.state).toBe("unstarted");
+		await getOrCreateClient(config.servers.second!, root);
+		await waitUntil(() => getLspLifecycleStatuses(root)[0]?.state === "ready");
 	});
 
-	test("surfaces warmup timeout backoff without blocking startup indefinitely", async () => {
+	test("surfaces initialization timeout backoff after lazy activation", async () => {
 		const root = mkdtempSync(join(tmpdir(), "repi-lsp-timeout-"));
 		const config: LspConfig = {
 			servers: {
@@ -153,6 +164,14 @@ describe("LSP lifecycle", () => {
 			},
 		};
 		await startLspLifecycle({ cwd: root, config, restartBaseDelayMs: 1_000 });
+		expect(getLspLifecycleStatuses(root)[0]?.state).toBe("unstarted");
+		await expect(
+			getOrCreateClient(config.servers.slow!, root, {
+				initializeTimeoutMs: 20,
+				bypassFailureBackoff: true,
+				cacheFailure: false,
+			}),
+		).rejects.toThrow();
 		expect(getLspLifecycleStatuses(root)[0]).toEqual(
 			expect.objectContaining({ state: "backoff", restartAttempt: 1 }),
 		);

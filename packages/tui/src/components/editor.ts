@@ -1115,6 +1115,12 @@ export class Editor implements Component, Focusable {
 			if (char === "/" && this.isAtStartOfMessage()) {
 				this.tryTriggerAutocomplete();
 			}
+			// Show argument choices immediately after an exact slash command plus space.
+			else if (char === " ") {
+				const currentLine = this.state.lines[this.state.cursorLine] || "";
+				const textBeforeCursor = currentLine.slice(0, this.state.cursorCol);
+				if (this.isInSlashCommandContext(textBeforeCursor)) this.tryTriggerAutocomplete();
+			}
 			// Auto-trigger for symbol-based completion like @, #, or provider triggers at token boundaries
 			else if (this.autocompleteTriggerCharacters.includes(char)) {
 				const currentLine = this.state.lines[this.state.cursorLine] || "";

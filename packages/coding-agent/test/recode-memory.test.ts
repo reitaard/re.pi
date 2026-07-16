@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { chunkRecodeMemory } from "../src/core/recode-memory/recode-memory-chunker.ts";
 import { RecodeMemoryManager } from "../src/core/recode-memory/recode-memory-manager.ts";
 
@@ -22,6 +22,7 @@ function createManager(root: string): RecodeMemoryManager {
 			enabled: true,
 			scope: "both",
 			autoRecall: true,
+			globalRecall: false,
 			maxResults: 6,
 			maxInjectedCharacters: 6000,
 		},
@@ -93,5 +94,40 @@ describe("re.code core memory", () => {
 		expect(await readFile(path, "utf8")).toContain("Prefer focused tests");
 		await expect(manager.write("global", "api_key=super-secret-value-1234")).rejects.toThrow("secret");
 		await expect(manager.read("project", "../../outside.md")).rejects.toThrow("inside its memory root");
+	});
+
+	it("keeps recall database-only and reconciles external Markdown changes in the background", async () => {
+		const root = await mkdtemp(join(tmpdir(), "repi-memory-"));
+		roots.push(root);
+		const manager = createManager(root);
+		await manager.initialize();
+
+		const syncSpy = vi.spyOn(manager, "sync");
+		expect(await manager.search("not indexed yet")).toEqual([]);
+		expect(syncSpy).not.toHaveBeenCalled();
+
+		await writeFile(
+			join(manager.projectRoot, "external.md"),
+			"# Decision\n\nUse a dirty queue for indexing.\n",
+			"utf8",
+		);
+		await vi.waitFor(async () => {
+			expect((await manager.search("dirty queue"))[0]?.text).toContain("dirty queue");
+		});
+	});
+
+	it("requires and indexes searchable tags for global memory", async () => {
+		const root = await mkdtemp(join(tmpdir(), "repi-memory-"));
+		roots.push(root);
+		const manager = createManager(root);
+		await manager.initialize();
+
+		await expect(manager.write("global", "Prefer pnpm for packages.")).rejects.toThrow("searchable tag");
+		const path = await manager.write("global", "Prefer pnpm for packages.", false, true, [
+			"preference",
+			"package-manager",
+		]);
+		expect(await readFile(path, "utf8")).toContain("#preference [[package-manager]] Prefer pnpm");
+		expect((await manager.search("package-manager", 6, "global"))[0]?.scope).toBe("global");
 	});
 });

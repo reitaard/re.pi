@@ -1,8 +1,8 @@
 /**
  * Workspace-scoped LSP lifecycle management.
  *
- * Warmup, idle shutdown, configuration reconciliation, and bounded crash
- * recovery live here so protocol clients remain focused on one server process.
+ * Lazy activation, idle shutdown, configuration reconciliation, and bounded
+ * crash recovery live here so protocol clients remain focused on one process.
  */
 
 import * as path from "node:path";
@@ -20,7 +20,6 @@ import type { LspConfig } from "./config.ts";
 import { clearAllLspDiagnosticSnapshots, clearLspDiagnosticSnapshotsForCwd } from "./diagnostics.ts";
 import type { LspServerConfig, LspServerStatus } from "./types.ts";
 
-const DEFAULT_WARMUP_TIMEOUT_MS = 5_000;
 const DEFAULT_CONFIG_POLL_INTERVAL_MS = 2_000;
 const DEFAULT_RESTART_BASE_DELAY_MS = 750;
 const DEFAULT_RESTART_STABILITY_MS = 30_000;
@@ -196,34 +195,6 @@ function handleClientState(event: LspClientStateEvent): void {
 
 subscribeLspClientState(handleClientState);
 
-async function warmMissingServers(workspace: WorkspaceLifecycle): Promise<void> {
-	const activeKeys = new Set(
-		getActiveLspClients()
-			.filter((client) => workspaceKey(client.cwd) === workspaceKey(workspace.cwd))
-			.map((client) => client.key),
-	);
-	await Promise.allSettled(
-		Object.entries(workspace.config.servers).map(async ([name, config]) => {
-			if (activeKeys.has(getLspClientKey(config, workspace.cwd))) {
-				emitStatus(workspace, { name, state: "ready", fileTypes: [...config.fileTypes] });
-				return;
-			}
-			if (workspace.restartTimers.has(name)) return;
-			emitStatus(workspace, { name, state: "starting", fileTypes: [...config.fileTypes] });
-			try {
-				await getOrCreateClient(config, workspace.cwd, {
-					initializeTimeoutMs: config.warmupTimeoutMs ?? DEFAULT_WARMUP_TIMEOUT_MS,
-					bypassFailureBackoff: true,
-					cacheFailure: false,
-				});
-			} catch (error) {
-				if (workspace.restartTimers.has(name)) return;
-				scheduleRestart(workspace, name, error instanceof Error ? error.message : String(error));
-			}
-		}),
-	);
-}
-
 async function shutdownIdleClients(workspace: WorkspaceLifecycle): Promise<void> {
 	const idleTimeoutMs = workspace.config.idleTimeoutMs;
 	if (!idleTimeoutMs || idleTimeoutMs <= 0) return;
@@ -242,10 +213,7 @@ async function reconcileWorkspace(
 ): Promise<void> {
 	const nextFingerprint = configFingerprint(config);
 	const changed = nextFingerprint !== workspace.fingerprint;
-	if (!changed && !forceRestart) {
-		await warmMissingServers(workspace);
-		return;
-	}
+	if (!changed && !forceRestart) return;
 
 	workspace.generation += 1;
 	clearRestartTimers(workspace);
@@ -258,7 +226,6 @@ async function reconcileWorkspace(
 		Object.entries(config.servers).map(([name, serverConfig]) => [name, createStatus(name, serverConfig)]),
 	);
 	await shutdownLspClientsForCwd(workspace.cwd);
-	await warmMissingServers(workspace);
 }
 
 function queueWorkspaceOperation(workspace: WorkspaceLifecycle, operation: () => Promise<void>): Promise<void> {
