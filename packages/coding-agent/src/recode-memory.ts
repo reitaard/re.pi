@@ -14,7 +14,8 @@ const DEFAULT_CONFIG: RecodeMemoryConfig = {
 	enabled: true,
 	scope: "project",
 	autoRecall: true,
-	globalRecall: false,
+	globalAccess: false,
+	globalAutoRecall: false,
 	maxResults: 6,
 	maxInjectedCharacters: 6000,
 };
@@ -27,25 +28,38 @@ function configPath(): string {
 	return join(getAgentDir(), "recode-memory.json");
 }
 
+export function normalizeRecodeMemoryConfig(parsed: unknown): RecodeMemoryConfig {
+	if (!isRecord(parsed)) return { ...DEFAULT_CONFIG };
+	const scope =
+		parsed.scope === "global" || parsed.scope === "project" || parsed.scope === "both"
+			? parsed.scope
+			: DEFAULT_CONFIG.scope;
+	const legacyGlobalRecall = typeof parsed.globalRecall === "boolean" ? parsed.globalRecall : undefined;
+	const globalAccess =
+		typeof parsed.globalAccess === "boolean"
+			? parsed.globalAccess
+			: (legacyGlobalRecall ?? DEFAULT_CONFIG.globalAccess);
+	const requestedGlobalAutoRecall =
+		typeof parsed.globalAutoRecall === "boolean"
+			? parsed.globalAutoRecall
+			: (legacyGlobalRecall ?? DEFAULT_CONFIG.globalAutoRecall);
+	return {
+		enabled: typeof parsed.enabled === "boolean" ? parsed.enabled : DEFAULT_CONFIG.enabled,
+		scope,
+		autoRecall: typeof parsed.autoRecall === "boolean" ? parsed.autoRecall : DEFAULT_CONFIG.autoRecall,
+		globalAccess,
+		globalAutoRecall: globalAccess && requestedGlobalAutoRecall,
+		maxResults: typeof parsed.maxResults === "number" ? parsed.maxResults : DEFAULT_CONFIG.maxResults,
+		maxInjectedCharacters:
+			typeof parsed.maxInjectedCharacters === "number"
+				? parsed.maxInjectedCharacters
+				: DEFAULT_CONFIG.maxInjectedCharacters,
+	};
+}
+
 async function readConfig(): Promise<RecodeMemoryConfig> {
 	try {
-		const parsed: unknown = JSON.parse(await readFile(configPath(), "utf8"));
-		if (!isRecord(parsed)) return { ...DEFAULT_CONFIG };
-		const scope =
-			parsed.scope === "global" || parsed.scope === "project" || parsed.scope === "both"
-				? parsed.scope
-				: DEFAULT_CONFIG.scope;
-		return {
-			enabled: typeof parsed.enabled === "boolean" ? parsed.enabled : DEFAULT_CONFIG.enabled,
-			scope,
-			autoRecall: typeof parsed.autoRecall === "boolean" ? parsed.autoRecall : DEFAULT_CONFIG.autoRecall,
-			globalRecall: typeof parsed.globalRecall === "boolean" ? parsed.globalRecall : DEFAULT_CONFIG.globalRecall,
-			maxResults: typeof parsed.maxResults === "number" ? parsed.maxResults : DEFAULT_CONFIG.maxResults,
-			maxInjectedCharacters:
-				typeof parsed.maxInjectedCharacters === "number"
-					? parsed.maxInjectedCharacters
-					: DEFAULT_CONFIG.maxInjectedCharacters,
-		};
+		return normalizeRecodeMemoryConfig(JSON.parse(await readFile(configPath(), "utf8")));
 	} catch {
 		return { ...DEFAULT_CONFIG };
 	}
@@ -72,7 +86,8 @@ function statusText(manager: RecodeMemoryManager): string {
 		`Memory: ${status.enabled ? "enabled" : "disabled"}`,
 		`Default scope: ${status.scope}`,
 		`Project auto-recall: ${manager.getConfig().autoRecall ? "enabled" : "disabled"}`,
-		`Global memory access: ${manager.getConfig().globalRecall ? "enabled" : "disabled"}`,
+		`Global memory access: ${manager.getConfig().globalAccess ? "enabled" : "disabled"}`,
+		`Global auto-recall: ${manager.getConfig().globalAutoRecall ? "enabled" : "disabled"}`,
 		`Indexed: ${status.documents} documents, ${status.chunks} chunks`,
 		`Global: ${status.globalRoot}`,
 		`Project: ${status.projectRoot}`,
@@ -80,12 +95,17 @@ function statusText(manager: RecodeMemoryManager): string {
 	].join("\n");
 }
 
-function automaticRecallScope(
+export function resolveAutomaticMemoryScope(
 	config: RecodeMemoryConfig,
 	projectTrusted: boolean,
 ): RecodeMemoryScopeSelection | undefined {
 	if (!projectTrusted) return undefined;
-	return config.globalRecall ? "both" : "project";
+	const recallProject = config.autoRecall;
+	const recallGlobal = config.globalAccess && config.globalAutoRecall;
+	if (recallProject && recallGlobal) return "both";
+	if (recallGlobal) return "global";
+	if (recallProject) return "project";
+	return undefined;
 }
 
 const Scope = Type.Union([Type.Literal("global"), Type.Literal("project")]);
@@ -137,8 +157,8 @@ export async function recodeMemory(pi: ExtensionAPI): Promise<void> {
 	});
 
 	pi.on("before_agent_start", async (event, ctx) => {
-		if (!config.enabled || !config.autoRecall || event.prompt.trim().length < 8) return;
-		const scope = automaticRecallScope(config, ctx.isProjectTrusted());
+		if (!config.enabled || event.prompt.trim().length < 8) return;
+		const scope = resolveAutomaticMemoryScope(config, ctx.isProjectTrusted());
 		if (!scope) return;
 		const results = await (await getManager(ctx.cwd, ctx.isProjectTrusted())).search(
 			event.prompt,
@@ -174,8 +194,8 @@ export async function recodeMemory(pi: ExtensionAPI): Promise<void> {
 					isError: true,
 				};
 			}
-			const scope = params.scope ?? (config.globalRecall ? config.scope : "project");
-			if ((scope === "global" || scope === "both") && !config.globalRecall) {
+			const scope = params.scope ?? (config.globalAccess ? config.scope : "project");
+			if ((scope === "global" || scope === "both") && !config.globalAccess) {
 				return {
 					content: [{ type: "text", text: "Global memory access is disabled. Enable it from /memory." }],
 					details: { results: [] },
@@ -211,7 +231,7 @@ export async function recodeMemory(pi: ExtensionAPI): Promise<void> {
 				if (!ctx.isProjectTrusted()) {
 					throw new Error("Memory tools are unavailable until this project is trusted");
 				}
-				if (params.scope === "global" && !config.globalRecall) {
+				if (params.scope === "global" && !config.globalAccess) {
 					throw new Error("Global memory access is disabled. Enable it from /memory");
 				}
 				const path = await (await getManager(ctx.cwd, true)).write(
@@ -246,7 +266,7 @@ export async function recodeMemory(pi: ExtensionAPI): Promise<void> {
 				if (!ctx.isProjectTrusted()) {
 					throw new Error("Memory tools are unavailable until this project is trusted");
 				}
-				if (params.scope === "global" && !config.globalRecall) {
+				if (params.scope === "global" && !config.globalAccess) {
 					throw new Error("Global memory access is disabled. Enable it from /memory");
 				}
 				const result = await (await getManager(ctx.cwd, true)).read(params.scope, params.path);
@@ -284,8 +304,10 @@ export async function recodeMemory(pi: ExtensionAPI): Promise<void> {
 				{ value: "off", description: "Disable memory" },
 				{ value: "auto on", description: "Enable project auto-recall" },
 				{ value: "auto off", description: "Disable project auto-recall" },
-				{ value: "global on", description: "Allow global memory recall and tools" },
+				{ value: "global on", description: "Allow explicit global memory search, read, and write" },
 				{ value: "global off", description: "Keep memory project-only" },
+				{ value: "global-auto on", description: "Inject relevant global memory before agent turns" },
+				{ value: "global-auto off", description: "Keep global memory available only on demand" },
 				{ value: "scope global", description: "Use global memory for explicit searches" },
 				{ value: "scope project", description: "Use project memory for explicit searches" },
 				{ value: "scope both", description: "Search project and global memory" },
@@ -302,7 +324,8 @@ export async function recodeMemory(pi: ExtensionAPI): Promise<void> {
 					const choice = await ctx.ui.select("Memory settings", [
 						`Memory: ${config.enabled ? "enabled" : "disabled"}`,
 						`Project auto-recall: ${config.autoRecall ? "enabled" : "disabled"}`,
-						`Global memory access: ${config.globalRecall ? "enabled" : "disabled"}`,
+						`Global memory access: ${config.globalAccess ? "enabled" : "disabled"}`,
+						`Global auto-recall: ${config.globalAutoRecall ? "enabled" : "disabled"}`,
 						`Default search scope: ${config.scope}`,
 						"Reindex memory",
 						"Show status",
@@ -313,7 +336,19 @@ export async function recodeMemory(pi: ExtensionAPI): Promise<void> {
 					else if (choice.startsWith("Project auto-recall:")) {
 						await updateConfig({ ...config, autoRecall: !config.autoRecall });
 					} else if (choice.startsWith("Global memory access:")) {
-						await updateConfig({ ...config, globalRecall: !config.globalRecall });
+						const enabled = !config.globalAccess;
+						await updateConfig({
+							...config,
+							globalAccess: enabled,
+							globalAutoRecall: enabled ? config.globalAutoRecall : false,
+						});
+					} else if (choice.startsWith("Global auto-recall:")) {
+						const enabled = !config.globalAutoRecall;
+						await updateConfig({
+							...config,
+							globalAccess: enabled ? true : config.globalAccess,
+							globalAutoRecall: enabled,
+						});
 					} else if (choice.startsWith("Default search scope:")) {
 						const selected = await ctx.ui.select("Default memory search scope", ["project", "global", "both"]);
 						if (selected === "project" || selected === "global" || selected === "both") {
@@ -352,8 +387,23 @@ export async function recodeMemory(pi: ExtensionAPI): Promise<void> {
 				return;
 			}
 			if (trimmed === "global on" || trimmed === "global off") {
-				await updateConfig({ ...config, globalRecall: trimmed === "global on" });
-				ctx.ui.notify(`Global memory access ${config.globalRecall ? "enabled" : "disabled"}`, "info");
+				const enabled = trimmed === "global on";
+				await updateConfig({
+					...config,
+					globalAccess: enabled,
+					globalAutoRecall: enabled ? config.globalAutoRecall : false,
+				});
+				ctx.ui.notify(`Global memory access ${config.globalAccess ? "enabled" : "disabled"}`, "info");
+				return;
+			}
+			if (trimmed === "global-auto on" || trimmed === "global-auto off") {
+				const enabled = trimmed === "global-auto on";
+				await updateConfig({
+					...config,
+					globalAccess: enabled ? true : config.globalAccess,
+					globalAutoRecall: enabled,
+				});
+				ctx.ui.notify(`Global auto-recall ${config.globalAutoRecall ? "enabled" : "disabled"}`, "info");
 				return;
 			}
 			if (trimmed.startsWith("scope ")) {
@@ -368,13 +418,13 @@ export async function recodeMemory(pi: ExtensionAPI): Promise<void> {
 				return;
 			}
 			if (trimmed.startsWith("search ")) {
-				const scope = ctx.isProjectTrusted() ? (config.globalRecall ? config.scope : "project") : undefined;
+				const scope = ctx.isProjectTrusted() ? (config.globalAccess ? config.scope : "project") : undefined;
 				const results = scope ? await active.search(trimmed.slice(7), config.maxResults, scope) : [];
 				ctx.ui.notify(formatResults(results) || "No matching memory.", "info");
 				return;
 			}
 			ctx.ui.notify(
-				"Usage: /memory status|search <query>|reindex|on|off|auto on|off|global on|off|scope global|project|both",
+				"Usage: /memory status|search <query>|reindex|on|off|auto on|off|global on|off|global-auto on|off|scope global|project|both",
 				"error",
 			);
 		},

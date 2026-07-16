@@ -110,8 +110,15 @@ environment, and existing Pi coding tools. The main missing layers are:
 1. Migration of the coding-agent application onto `AgentHarness`.
 2. Durable harness recovery and automatic compaction/retry semantics.
 3. An authenticated always-on assistant gateway and job state store.
-4. Cross-session memory, lazy sources, and LSP services.
+4. Promotion of the working coding-agent memory and LSP implementations into
+   reusable services during harness migration; lazy sources are still missing.
 5. Scheduling, goal continuation, channels, and later multi-agent isolation.
 
 The Windows harness failures found during the first audit are a small foundation
 compatibility task, not an architectural blocker.
+
+Memory and LSP are working implementations, not missing features. Their final
+assistant-owned service boundary is migration debt rather than architectural
+damage. Keep their current modules stable and follow
+[AgentHarness Migration](./AGENTHARNESS.md) before extracting interfaces or
+creating `packages/assistant`.

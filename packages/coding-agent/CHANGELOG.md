@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Split explicit global-memory access from automatic global prompt recall, while preserving legacy `globalRecall` configurations.
+- Made memory project-first by default, added independent project/global auto-recall controls, and documented trust, global tags, and watcher-based reconciliation.
+- Changed configured language servers to start lazily when a matching capability is used instead of warming every server during session startup.
+
+### Fixed
+
+- Kept successful edit/write mutations successful when post-write LSP diagnostics are cancelled or unavailable.
+- Added slash-command argument completion immediately after an exact command and trailing space.
+
 ## [0.81.2] - 2026-07-16
 
 ### Added

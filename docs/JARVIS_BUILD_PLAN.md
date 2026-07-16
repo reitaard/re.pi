@@ -3,6 +3,10 @@
 This is the living build order for turning the Pi fork into an always-available
 personal assistant. Update checkpoints here as implementation progresses.
 
+For the migration handoff, current ownership map, and strict stop/go gates, read
+[AgentHarness Migration](./AGENTHARNESS.md) before changing the coding loop or
+extracting new service interfaces.
+
 ## Current decisions
 
 - RePi is a personal, single-user, local-first assistant.
@@ -104,7 +108,18 @@ Exit criteria:
 
 ## Phase 3: Add memory, sources, and LSP
 
-Status: planned
+Status: coding-agent memory and LSP prototypes implemented; assistant-service extraction planned
+
+The working implementations intentionally precede the final service boundary:
+
+- Memory is a built-in coding-agent extension backed by dedicated Markdown,
+  chunking, and SQLite FTS modules.
+- LSP is implemented in dedicated modules and composed into coding-agent tools
+  by `AgentSession`.
+- Neither implementation should move yet. Define `MemoryService` and
+  `CodeIntelligenceService` only while migrating the first real execution path
+  to `AgentHarness`, so their interfaces follow proven harness requirements.
+- Lazy sources remain unimplemented.
 
 ### Memory v1
 
@@ -201,6 +216,8 @@ Keep the upstream license, changelog history, issue links, and attribution.
 - [ ] Fix the Windows harness compatibility tests.
 - [ ] Write the AgentSession-to-AgentHarness responsibility map.
 - [ ] Prove a one-shot AgentHarness coding run with existing tools.
+- [x] Stabilize working coding-agent memory and LSP implementations without premature service extraction.
+- [x] Record the AgentHarness migration hold, parity gates, and ownership map in `docs/AGENTHARNESS.md`.
 - [ ] Design SQLite schemas only after the service and event boundaries are set.
 - [ ] Select the first local client/channel.
 - [x] Move publishable workspaces to the `@reitaard/repi-*` namespace.

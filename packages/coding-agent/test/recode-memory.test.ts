@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { chunkRecodeMemory } from "../src/core/recode-memory/recode-memory-chunker.ts";
 import { RecodeMemoryManager } from "../src/core/recode-memory/recode-memory-manager.ts";
+import { normalizeRecodeMemoryConfig, resolveAutomaticMemoryScope } from "../src/recode-memory.ts";
 
 const roots: string[] = [];
 const managers: RecodeMemoryManager[] = [];
@@ -22,7 +23,8 @@ function createManager(root: string): RecodeMemoryManager {
 			enabled: true,
 			scope: "both",
 			autoRecall: true,
-			globalRecall: false,
+			globalAccess: false,
+			globalAutoRecall: false,
 			maxResults: 6,
 			maxInjectedCharacters: 6000,
 		},
@@ -32,6 +34,38 @@ function createManager(root: string): RecodeMemoryManager {
 }
 
 describe("re.code core memory", () => {
+	it("migrates the legacy global recall switch into separate safe controls", () => {
+		expect(normalizeRecodeMemoryConfig({ globalRecall: true })).toMatchObject({
+			globalAccess: true,
+			globalAutoRecall: true,
+		});
+		expect(normalizeRecodeMemoryConfig({ globalAccess: false, globalAutoRecall: true })).toMatchObject({
+			globalAccess: false,
+			globalAutoRecall: false,
+		});
+		expect(normalizeRecodeMemoryConfig({ globalAccess: true, globalAutoRecall: false })).toMatchObject({
+			globalAccess: true,
+			globalAutoRecall: false,
+		});
+	});
+
+	it("keeps explicit global access independent from automatic prompt recall", () => {
+		const explicitOnly = normalizeRecodeMemoryConfig({
+			autoRecall: true,
+			globalAccess: true,
+			globalAutoRecall: false,
+		});
+		expect(resolveAutomaticMemoryScope(explicitOnly, true)).toBe("project");
+
+		const globalOnly = normalizeRecodeMemoryConfig({
+			autoRecall: false,
+			globalAccess: true,
+			globalAutoRecall: true,
+		});
+		expect(resolveAutomaticMemoryScope(globalOnly, true)).toBe("global");
+		expect(resolveAutomaticMemoryScope(globalOnly, false)).toBeUndefined();
+	});
+
 	it("chunks long Markdown with line citations and bounded overlap", () => {
 		const content = Array.from(
 			{ length: 120 },
