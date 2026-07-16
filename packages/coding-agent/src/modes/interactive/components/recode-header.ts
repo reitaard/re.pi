@@ -27,6 +27,7 @@ const WORDMARK_LETTERS = [
 const MIN_STACKED_WIDTH = 48;
 const MIN_WIDE_WIDTH = 72;
 const WELCOME_BOX_HEIGHT = 9;
+// The wordmark is a fixed brand asset; interface themes must not recolor it.
 const BRAND_TEXT_PALETTE = ["#FF3478", "#FF8E71", "#EFFFBD"] as const;
 const BRAND_LINE_PALETTE = ["#025D7A", "#00B6B9", "#55DC99", "#B2FF7B"] as const;
 

@@ -1,15 +1,23 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { resetCapabilitiesCache, setCapabilities } from "@reitaard/repi-tui";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
 	createRecodeGeneratingLoop,
 	createRecodeMagicIndicator,
+	RECODE_LIGHT_LIME_PALETTE,
 	RECODE_LIME_PALETTE,
 	RECODE_SPINNER_VERBS,
+	recodeSpinner,
 } from "../src/modes/interactive/components/recode-magic-indicator.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 
 describe("re.code generating animation", () => {
 	beforeAll(() => {
+		initTheme(undefined, false);
+	});
+
+	afterEach(() => {
+		resetCapabilitiesCache();
 		initTheme(undefined, false);
 	});
 
@@ -53,5 +61,19 @@ describe("re.code generating animation", () => {
 			expect(frame).not.toContain("Generating");
 		}
 		expect(frames.some((frame) => frame.endsWith("..."))).toBe(true);
+	});
+
+	it("uses darker animation colors in light mode", () => {
+		setCapabilities({ images: null, trueColor: true, hyperlinks: false });
+		initTheme("light", false);
+
+		expect(RECODE_LIGHT_LIME_PALETTE.map((color) => color.hex)).toEqual([
+			"#0F5F55",
+			"#146B55",
+			"#1B754E",
+			"#247A45",
+			"#2F6B3D",
+		]);
+		expect(recodeSpinner("x")).toContain("\x1b[38;2;27;117;78m");
 	});
 });

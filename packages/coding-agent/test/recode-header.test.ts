@@ -1,10 +1,10 @@
 import { stripVTControlCharacters } from "node:util";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { RecodeHeader } from "../src/modes/interactive/components/recode-header.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 
 describe("RecodeHeader", () => {
-	beforeAll(() => initTheme("dark"));
+	beforeEach(() => initTheme("dark"));
 
 	const createHeader = () =>
 		new RecodeHeader(
@@ -45,6 +45,14 @@ describe("RecodeHeader", () => {
 
 		expect(lines).toEqual([expect.stringContaining("re™ CODE v0.81.0 · / commands")]);
 		expect(lines[0]!.length).toBeLessThanOrEqual(40);
+	});
+
+	it("keeps one brand palette across light and dark themes", () => {
+		const darkBrand = createHeader().render(40);
+		initTheme("light");
+		const lightBrand = createHeader().render(40);
+
+		expect(lightBrand).toEqual(darkBrand);
 	});
 
 	it("recalculates its Yoga layout when a running terminal changes width", () => {

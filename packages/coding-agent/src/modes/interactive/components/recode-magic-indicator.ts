@@ -72,6 +72,14 @@ export const RECODE_LIME_PALETTE = [
 	{ hex: "#257B4A", ansi256: 29 },
 ] as const;
 
+export const RECODE_LIGHT_LIME_PALETTE = [
+	{ hex: "#0F5F55", ansi256: 23 },
+	{ hex: "#146B55", ansi256: 23 },
+	{ hex: "#1B754E", ansi256: 29 },
+	{ hex: "#247A45", ansi256: 29 },
+	{ hex: "#2F6B3D", ansi256: 22 },
+] as const;
+
 export function selectRecodeSpinnerVerb(random: () => number = Math.random): string {
 	let index = Math.min(RECODE_SPINNER_VERBS.length - 1, Math.floor(random() * RECODE_SPINNER_VERBS.length));
 	if (index === previousSpinnerVerb) index = (index + 1) % RECODE_SPINNER_VERBS.length;
@@ -148,7 +156,8 @@ function limeText(text: string, paletteOffset: number): string {
 }
 
 function limeFg(text: string, paletteIndex: number): string {
-	const color = RECODE_LIME_PALETTE[paletteIndex % RECODE_LIME_PALETTE.length] ?? RECODE_LIME_PALETTE[0];
+	const palette = theme.name === "light" ? RECODE_LIGHT_LIME_PALETTE : RECODE_LIME_PALETTE;
+	const color = palette[paletteIndex % palette.length] ?? palette[0];
 	const ansi =
 		theme.getColorMode() === "truecolor"
 			? `\x1b[38;2;${Number.parseInt(color.hex.slice(1, 3), 16)};${Number.parseInt(color.hex.slice(3, 5), 16)};${Number.parseInt(color.hex.slice(5, 7), 16)}m`

@@ -112,13 +112,13 @@ describe("theme color mode", () => {
 		expect(darkTheme.vars.teal).toBe("#00B6B9");
 		expect(darkTheme.vars.violetLine).toBe("#8297E8");
 		expect(darkTheme.vars.teal).not.toBe(darkTheme.vars.violetLine);
-		expect(darkTheme.vars.violetSurface).toBe("#4A3F74");
-		expect(darkTheme.vars.successSurface).toBe("#557A55");
-		expect(darkTheme.vars.errorSurface).toBe("#9C5555");
+		expect(darkTheme.vars.violetSurface).toBe("#332E4A");
+		expect(darkTheme.vars.successSurface).toBe("#344C38");
+		expect(darkTheme.vars.errorSurface).toBe("#54363C");
 		expect(darkTheme.vars.pendingStatus).toBe("#7AA2F7");
 		expect(darkTheme.vars.runningStatus).toBe("#E0AF68");
-		expect(darkTheme.vars.successStatus).toBe("#9ECE6A");
-		expect(darkTheme.vars.errorStatus).toBe("#F7768E");
+		expect(darkTheme.vars.successStatus).toBe("#22C55E");
+		expect(darkTheme.vars.errorStatus).toBe("#EF4444");
 		expect(darkTheme.colors.dim).toBe("teal");
 		expect(darkTheme.colors.footer).toBe("teal");
 		expect(darkTheme.vars.toolPendingBg).toBe("violetSurface");
@@ -142,13 +142,27 @@ describe("theme color mode", () => {
 		if (!truecolorTheme) throw new Error("dark theme not found");
 		expect(truecolorTheme.getColorMode()).toBe("truecolor");
 		expect(truecolorTheme.getFgAnsi("accent")).toMatch(/^\x1b\[38;2;\d+;\d+;\d+m$/);
-		expect(truecolorTheme.getBgAnsi("toolPendingBg")).toBe("\x1b[48;2;74;63;116m");
-		expect(truecolorTheme.getBgAnsi("toolSuccessBg")).toBe("\x1b[48;2;85;122;85m");
-		expect(truecolorTheme.getBgAnsi("toolErrorBg")).toBe("\x1b[48;2;156;85;85m");
+		expect(truecolorTheme.getBgAnsi("toolPendingBg")).toBe("\x1b[48;2;51;46;74m");
+		expect(truecolorTheme.getBgAnsi("toolSuccessBg")).toBe("\x1b[48;2;52;76;56m");
+		expect(truecolorTheme.getBgAnsi("toolErrorBg")).toBe("\x1b[48;2;84;54;60m");
 		expect(truecolorTheme.getFgAnsi("toolPendingStatus")).toBe("\x1b[38;2;122;162;247m");
 		expect(truecolorTheme.getFgAnsi("toolRunningStatus")).toBe("\x1b[38;2;224;175;104m");
-		expect(truecolorTheme.getFgAnsi("toolSuccessStatus")).toBe("\x1b[38;2;158;206;106m");
-		expect(truecolorTheme.getFgAnsi("toolErrorStatus")).toBe("\x1b[38;2;247;118;142m");
+		expect(truecolorTheme.getFgAnsi("toolSuccessStatus")).toBe("\x1b[38;2;34;197;94m");
+		expect(truecolorTheme.getFgAnsi("toolErrorStatus")).toBe("\x1b[38;2;239;68;68m");
+	});
+
+	it("uses dedicated readable surfaces and statuses in light mode", () => {
+		setCapabilities({ images: null, trueColor: true, hyperlinks: false });
+		const lightTheme = getThemeByName("light");
+		if (!lightTheme) throw new Error("light theme not found");
+
+		expect(lightTheme.getBgAnsi("toolPendingBg")).toBe("\x1b[48;2;238;242;255m");
+		expect(lightTheme.getBgAnsi("toolSuccessBg")).toBe("\x1b[48;2;234;245;236m");
+		expect(lightTheme.getBgAnsi("toolErrorBg")).toBe("\x1b[48;2;251;234;236m");
+		expect(lightTheme.getFgAnsi("toolPendingStatus")).toBe("\x1b[38;2;49;94;186m");
+		expect(lightTheme.getFgAnsi("toolRunningStatus")).toBe("\x1b[38;2;138;100;0m");
+		expect(lightTheme.getFgAnsi("toolSuccessStatus")).toBe("\x1b[38;2;33;122;60m");
+		expect(lightTheme.getFgAnsi("toolErrorStatus")).toBe("\x1b[38;2;180;35;63m");
 	});
 });
 
