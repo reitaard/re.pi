@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentMessage } from "@reitaard/repi-agent-core";
-import { afterEach } from "vitest";
+import { afterEach, type TestContext } from "vitest";
 
 export function createUserMessage(text: string): AgentMessage {
 	return {
@@ -43,6 +44,25 @@ export function createTempDir(): string {
 
 export function getLatestTempDir(): string {
 	return tempDirs[tempDirs.length - 1]!;
+}
+
+export async function createSymlinkOrSkip(
+	context: TestContext,
+	target: string,
+	path: string,
+	type?: "dir" | "file" | "junction",
+): Promise<boolean> {
+	try {
+		await symlink(target, path, type);
+		return true;
+	} catch (error) {
+		const code = error instanceof Error && "code" in error ? error.code : undefined;
+		if (code === "EPERM" || code === "EACCES" || code === "ENOSYS") {
+			context.skip(`Symlink creation is unavailable (${String(code)})`);
+			return false;
+		}
+		throw error;
+	}
 }
 
 afterEach(() => {

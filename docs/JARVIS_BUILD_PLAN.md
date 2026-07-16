@@ -20,20 +20,21 @@ extracting new service interfaces.
 - Build one dependable path end to end before adding multiple channels, voice,
   or a swarm.
 
-## Phase 0: Stabilize the Windows foundation
+## Phase 0: Stabilize the portable development foundation
 
-Status: next
+Status: complete
 
-- Fix path-separator assumptions in the harness tests.
-- Make symlink-dependent tests skip or use a Windows-safe substitute when the
-  process lacks symlink privileges.
-- Normalize Git Bash and Windows working-directory paths at the execution
-  environment boundary.
-- Keep the Windows binary build and `repi` launcher reproducible.
+- Fix path-separator assumptions at the execution-environment boundary and in
+  harness tests.
+- Make symlink-dependent tests capability-aware when the process cannot create
+  symbolic links.
+- Normalize shell working-directory paths without depending on one shell's
+  display format.
+- Keep local binary builds and the `repi` launcher reproducible.
 
 Exit criteria:
 
-- The focused harness suite passes on this Windows checkout, except for clearly
+- The focused harness suite passes on development checkouts, except for clearly
   documented platform capability skips.
 - `repi --version`, `repi --help`, one-shot mode, and interactive startup work
   outside the repository.
@@ -213,7 +214,7 @@ Keep the upstream license, changelog history, issue links, and attribution.
 
 ## Near-term checkpoint
 
-- [ ] Fix the Windows harness compatibility tests.
+- [x] Fix portable harness compatibility tests and capability-gate symlinks.
 - [ ] Write the AgentSession-to-AgentHarness responsibility map.
 - [ ] Prove a one-shot AgentHarness coding run with existing tools.
 - [x] Stabilize working coding-agent memory and LSP implementations without premature service extraction.

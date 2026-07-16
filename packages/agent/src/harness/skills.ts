@@ -350,26 +350,31 @@ async function resolveKind(
 }
 
 function joinEnvPath(base: string, child: string): string {
-	return `${base.replace(/\/+$/, "")}/${child.replace(/^\/+/, "")}`;
+	return `${base.replace(/[\\/]+$/, "")}/${child.replace(/^[\\/]+/, "")}`;
 }
 
 function dirnameEnvPath(path: string): string {
-	const normalized = path.replace(/\/+$/, "");
+	const normalized = path.replaceAll("\\", "/").replace(/\/+$/, "");
 	const slashIndex = normalized.lastIndexOf("/");
-	return slashIndex <= 0 ? "/" : normalized.slice(0, slashIndex);
+	if (slashIndex <= 0) return "/";
+	const dirname = normalized.slice(0, slashIndex);
+	return /^[A-Za-z]:$/.test(dirname) ? `${dirname}/` : dirname;
 }
 
 function basenameEnvPath(path: string): string {
-	const normalized = path.replace(/\/+$/, "");
+	const normalized = path.replaceAll("\\", "/").replace(/\/+$/, "");
 	const slashIndex = normalized.lastIndexOf("/");
 	return slashIndex === -1 ? normalized : normalized.slice(slashIndex + 1);
 }
 
 function relativeEnvPath(root: string, path: string): string {
-	const normalizedRoot = root.replace(/\/+$/, "");
-	const normalizedPath = path.replace(/\/+$/, "");
-	if (normalizedPath === normalizedRoot) return "";
-	return normalizedPath.startsWith(`${normalizedRoot}/`)
+	const normalizedRoot = root.replaceAll("\\", "/").replace(/\/+$/, "");
+	const normalizedPath = path.replaceAll("\\", "/").replace(/\/+$/, "");
+	const caseInsensitive = /^[A-Za-z]:\//.test(normalizedRoot);
+	const comparableRoot = caseInsensitive ? normalizedRoot.toLowerCase() : normalizedRoot;
+	const comparablePath = caseInsensitive ? normalizedPath.toLowerCase() : normalizedPath;
+	if (comparablePath === comparableRoot) return "";
+	return comparablePath.startsWith(`${comparableRoot}/`)
 		? normalizedPath.slice(normalizedRoot.length + 1)
 		: normalizedPath.replace(/^\/+/, "");
 }
