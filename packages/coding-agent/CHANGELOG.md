@@ -7,6 +7,7 @@
 - Split explicit global-memory access from automatic global prompt recall, while preserving legacy `globalRecall` configurations.
 - Made memory project-first by default, added independent project/global auto-recall controls, and documented trust, global tags, and watcher-based reconciliation.
 - Changed configured language servers to start lazily when a matching capability is used instead of warming every server during session startup.
+- Added symbol-aware LSP targeting, structured navigation results with bounded source context and cold-project readiness polling, semantic-server routing, continuously animated request status, and cached tree-style LSP tool cards.
 
 ### Fixed
 

@@ -1,11 +1,14 @@
 /** RePi LSP query tool, adapted from can1357/oh-my-pi (MIT). */
 
 import { access, readFile, stat } from "node:fs/promises";
+import * as path from "node:path";
+import { Text } from "@reitaard/repi-tui";
 import { type Static, Type } from "typebox";
 import type { ToolDefinition } from "../core/extensions/types.ts";
 import { generateUnifiedPatch } from "../core/tools/edit-diff.ts";
 import { resolveToCwd } from "../core/tools/path-utils.ts";
 import { wrapToolDefinition } from "../core/tools/tool-definition-wrapper.ts";
+import { sleep } from "../utils/sleep.ts";
 import {
 	getActiveLspClients,
 	getOrCreateClient,
@@ -15,6 +18,7 @@ import {
 	sendRequest,
 	syncContent,
 	waitForDiagnostics,
+	waitForProjectReady,
 } from "./client.ts";
 import { getServersForFile, type LspControlSettings, loadLspConfig } from "./config.ts";
 import {
@@ -33,19 +37,25 @@ import {
 	formatNavigationLocations,
 	formatOutgoingCalls,
 	formatWorkspaceSymbols,
+	type LspNavigationLocation,
 	normalizeLocations,
 	parseCallHierarchyItems,
 	parseIncomingCalls,
+	parseNavigationLocations,
 	parseOutgoingCalls,
 	parseWorkspaceDiagnosticReport,
 	parseWorkspaceSymbols,
 	selectCallHierarchyItem,
 } from "./navigation.ts";
 import { assertLspPathInProject, isLspUriInProject } from "./recode-lsp-boundary.ts";
+import { formatLspCall, renderLspResult } from "./render.ts";
 import type { LspClient, LspCodeAction, LspDocumentChange, LspTextEdit, LspWorkspaceEdit } from "./types.ts";
 import { fileToUri, uriToFile } from "./utils.ts";
 
 const WORKSPACE_DIAGNOSTIC_LIMIT = 200;
+const NAVIGATION_CONTEXT_LIMIT = 20;
+const NAVIGATION_CONTEXT_CHARACTER_LIMIT = 240;
+const REFERENCE_RETRY_DELAYS_MS = [250, 750, 1500, 2500] as const;
 
 const lspSchema = Type.Object({
 	action: Type.Union(
@@ -74,6 +84,9 @@ const lspSchema = Type.Object({
 	file: Type.Optional(Type.String({ description: "Project-relative file path" })),
 	line: Type.Optional(Type.Number({ description: "1-based line number" })),
 	character: Type.Optional(Type.Number({ description: "0-based character offset" })),
+	symbol: Type.Optional(
+		Type.String({ description: "Symbol substring on line; use #N to select a repeated occurrence" }),
+	),
 	new_name: Type.Optional(Type.String({ description: "New symbol name or rename_file destination path" })),
 	query: Type.Optional(Type.String({ description: "Case-insensitive symbol, call-item, or code-action filter" })),
 	severity: Type.Optional(
@@ -92,6 +105,8 @@ export type LspToolInput = Static<typeof lspSchema>;
 export interface LspToolDetails {
 	action: LspToolInput["action"];
 	servers: string[];
+	request?: LspToolInput;
+	locations?: LspNavigationLocation[];
 }
 
 export interface LspToolOptions {
@@ -114,6 +129,19 @@ export const LSP_READONLY_ACTIONS: ReadonlySet<LspToolInput["action"]> = new Set
 	"outgoing_calls",
 	"workspace_diagnostics",
 	"capabilities",
+]);
+
+const POSITION_REQUIRED_ACTIONS: ReadonlySet<LspToolInput["action"]> = new Set([
+	"hover",
+	"definition",
+	"type_definition",
+	"implementation",
+	"references",
+	"call_hierarchy",
+	"incoming_calls",
+	"outgoing_calls",
+	"rename",
+	"code_actions",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -143,6 +171,29 @@ function asWorkspaceEdit(value: unknown): LspWorkspaceEdit | null {
 function asCodeActions(value: unknown): LspCodeAction[] {
 	if (!Array.isArray(value)) return [];
 	return value.filter((action): action is LspCodeAction => isRecord(action) && typeof action.title === "string");
+}
+
+function parseSymbolSpec(symbolSpec: string): { symbol: string; occurrence: number } {
+	const match = /^(.*?)(?:#([1-9]\d*))?$/.exec(symbolSpec);
+	const symbol = match?.[1] ?? symbolSpec;
+	if (!symbol) throw new Error("symbol must not be empty");
+	return { symbol, occurrence: match?.[2] ? Number.parseInt(match[2], 10) : 1 };
+}
+
+async function resolveSymbolCharacter(filePath: string, line: number, symbolSpec: string): Promise<number> {
+	const sourceLine = (await readFile(filePath, "utf-8")).split(/\r?\n/)[Math.max(1, line) - 1] ?? "";
+	const { symbol, occurrence } = parseSymbolSpec(symbolSpec);
+	const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const identifier = /^[\p{L}\p{N}_$]+$/u.test(symbol);
+	const matcher = new RegExp(identifier ? `(?<![\\p{L}\\p{N}_$])${escaped}(?![\\p{L}\\p{N}_$])` : escaped, "gu");
+	const matches = [...sourceLine.matchAll(matcher)];
+	if (matches.length === 0) throw new Error(`Symbol "${symbol}" not found on line ${line}`);
+	if (occurrence > matches.length) {
+		throw new Error(
+			`Symbol "${symbol}" occurrence ${occurrence} is out of bounds on line ${line} (found ${matches.length})`,
+		);
+	}
+	return matches[occurrence - 1].index;
 }
 
 function describeWorkspaceEdit(edit: LspWorkspaceEdit): string {
@@ -192,7 +243,7 @@ async function syncAppliedWorkspaceEdit(
 			} catch {
 				return;
 			}
-			for (const [, client] of await getClientsForFile(cwd, filePath, controls)) {
+			for (const [, client] of await getClientsForFile(cwd, filePath, true, controls)) {
 				await syncContent(client, filePath, content);
 				await notifySaved(client, filePath, content);
 			}
@@ -236,11 +287,77 @@ function formatSymbols(value: unknown): string {
 async function getClientsForFile(
 	cwd: string,
 	filePath: string,
+	includeLinters: boolean,
 	controls?: LspControlSettings,
 ): Promise<Array<[string, LspClient]>> {
-	const servers = getServersForFile(loadLspConfig(cwd, undefined, controls), filePath);
+	const servers = getServersForFile(loadLspConfig(cwd, undefined, controls), filePath, { includeLinters });
 	return Promise.all(
 		servers.map(async ([name, config]) => [name, await getOrCreateClient(config, cwd)] as [string, LspClient]),
+	);
+}
+
+function isIncompleteReferenceResult(
+	value: unknown,
+	uri: string,
+	position: { line: number; character: number },
+): boolean {
+	const locations = normalizeLocations(value);
+	const targetPath = path.resolve(uriToFile(uri));
+	const normalizedTargetPath = process.platform === "win32" ? targetPath.toLowerCase() : targetPath;
+	return (
+		locations.length === 0 ||
+		locations.every((location) => {
+			const locationPath = path.resolve(uriToFile(location.uri));
+			const normalizedLocationPath = process.platform === "win32" ? locationPath.toLowerCase() : locationPath;
+			return (
+				normalizedLocationPath === normalizedTargetPath &&
+				location.range.start.line === position.line &&
+				location.range.start.character === position.character
+			);
+		})
+	);
+}
+
+async function requestReferencesWithRetry(
+	client: LspClient,
+	params: {
+		textDocument: { uri: string };
+		position: { line: number; character: number };
+		context: { includeDeclaration: true };
+	},
+	signal?: AbortSignal,
+): Promise<unknown> {
+	await waitForProjectReady(client, signal);
+	let result: unknown;
+	for (let attempt = 0; attempt <= REFERENCE_RETRY_DELAYS_MS.length; attempt++) {
+		result = await sendRequest(client, "textDocument/references", params, signal);
+		if (!isIncompleteReferenceResult(result, params.textDocument.uri, params.position)) return result;
+		const retryDelay = REFERENCE_RETRY_DELAYS_MS[attempt];
+		if (retryDelay !== undefined) await sleep(retryDelay, signal);
+	}
+	return result;
+}
+
+async function addNavigationContext(locations: LspNavigationLocation[], cwd: string): Promise<LspNavigationLocation[]> {
+	const sourceFiles = new Map<string, Promise<string[] | null>>();
+	const getSourceLines = (file: string): Promise<string[] | null> => {
+		const filePath = path.resolve(cwd, file);
+		let source = sourceFiles.get(filePath);
+		if (!source) {
+			source = readFile(filePath, "utf-8")
+				.then((content) => content.split(/\r?\n/))
+				.catch(() => null);
+			sourceFiles.set(filePath, source);
+		}
+		return source;
+	};
+	return Promise.all(
+		locations.map(async (location, index) => {
+			if (index >= NAVIGATION_CONTEXT_LIMIT) return location;
+			const lines = await getSourceLines(location.file);
+			const context = lines?.[location.line - 1]?.trim();
+			return context ? { ...location, context: context.slice(0, NAVIGATION_CONTEXT_CHARACTER_LIMIT) } : location;
+		}),
 	);
 }
 
@@ -256,10 +373,12 @@ export function createLspToolDefinition(
 		promptSnippet: "Query language-server diagnostics and code intelligence",
 		promptGuidelines: [
 			"Use lsp for code intelligence when a language server is available.",
+			"For position-based queries, prefer file + line + symbol over manually counting character offsets.",
 			"If edit or write reports that diagnostics are checking in the background, call lsp diagnostics for that file with wait_ms before claiming the change is clean.",
 			"Use severity and query to retrieve only the diagnostic details relevant to the current task.",
 		],
 		parameters: lspSchema,
+		renderShell: "self",
 		async execute(_toolCallId, input, signal) {
 			if (options.readOnly && !LSP_READONLY_ACTIONS.has(input.action)) {
 				throw new Error(`LSP action ${input.action} is unavailable in a read-only tool set`);
@@ -392,9 +511,15 @@ export function createLspToolDefinition(
 			}
 
 			if (!input.file) throw new Error(`${input.action} requires a file`);
+			if (
+				POSITION_REQUIRED_ACTIONS.has(input.action) &&
+				(input.line === undefined || (input.symbol === undefined && input.character === undefined))
+			) {
+				throw new Error(`${input.action} requires line and either symbol or character`);
+			}
 			const filePath = resolveToCwd(input.file, cwd);
 			if (projectOnly) await assertLspPathInProject(filePath, cwd);
-			const clients = await getClientsForFile(cwd, filePath, options.controls);
+			const clients = await getClientsForFile(cwd, filePath, input.action === "diagnostics", options.controls);
 			if (clients.length === 0) throw new Error(`No language server is available for ${input.file}`);
 			for (const [, client] of clients) await refreshFile(client, filePath);
 			const uri = fileToUri(filePath);
@@ -439,9 +564,13 @@ export function createLspToolDefinition(
 				};
 			}
 
+			const positionLine = Math.max(1, input.line ?? 1);
+			const positionCharacter = input.symbol
+				? await resolveSymbolCharacter(filePath, positionLine, input.symbol)
+				: Math.max(0, input.character ?? 0);
 			const params = {
 				textDocument: { uri },
-				position: { line: Math.max(0, (input.line ?? 1) - 1), character: Math.max(0, input.character ?? 0) },
+				position: { line: positionLine - 1, character: positionCharacter },
 			};
 
 			if (input.action === "rename_file") {
@@ -684,33 +813,36 @@ export function createLspToolDefinition(
 				references: "textDocument/references",
 				symbols: "textDocument/documentSymbol",
 			}[input.action];
-			const requestParams =
-				input.action === "references" ? { ...params, context: { includeDeclaration: true } } : params;
-			const result = await sendRequest(client, method, requestParams, signal);
+			const result =
+				input.action === "references"
+					? await requestReferencesWithRetry(client, { ...params, context: { includeDeclaration: true } }, signal)
+					: await sendRequest(client, method, params, signal);
 			const visibleResult =
 				projectOnly && input.action !== "hover" && input.action !== "symbols"
 					? normalizeLocations(result).filter((location) => isLspUriInProject(location.uri, cwd))
 					: result;
+			const locations =
+				input.action === "hover" || input.action === "symbols"
+					? undefined
+					: await addNavigationContext(parseNavigationLocations(visibleResult, cwd), cwd);
 			const text =
 				input.action === "hover"
 					? formatHover(visibleResult)
 					: input.action === "symbols"
 						? formatSymbols(visibleResult)
-						: formatNavigationLocations(
-								visibleResult,
-								cwd,
-								input.action === "definition"
-									? "No definition found"
-									: input.action === "type_definition"
-										? "No type definition found"
-										: input.action === "implementation"
-											? "No implementation found"
-											: "No references found",
-							);
+						: formatNavigationLocations(locations ?? [], input.action, input.symbol);
 			return {
 				content: [{ type: "text", text }],
-				details: { action: input.action, servers: [serverName] },
+				details: { action: input.action, servers: [serverName], request: input, locations },
 			};
+		},
+		renderCall(args, theme, context) {
+			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+			text.setText(formatLspCall(args, theme, context));
+			return text;
+		},
+		renderResult(result, renderOptions, theme, context) {
+			return renderLspResult(result, renderOptions, theme, context);
 		},
 	};
 }

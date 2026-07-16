@@ -14,6 +14,13 @@ import { uriToFile } from "./utils.ts";
 
 const WORKSPACE_SYMBOL_LIMIT = 100;
 
+export interface LspNavigationLocation {
+	file: string;
+	line: number;
+	character: number;
+	context?: string;
+}
+
 export function isLspRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -50,12 +57,30 @@ function displayLocation(uri: string, line: number, character: number, cwd: stri
 	return `${file}:${line + 1}:${character + 1}`;
 }
 
-export function formatNavigationLocations(value: unknown, cwd: string, emptyMessage: string): string {
-	const locations = normalizeLocations(value);
-	if (locations.length === 0) return emptyMessage;
-	return locations
-		.map((location) => displayLocation(location.uri, location.range.start.line, location.range.start.character, cwd))
-		.join("\n");
+export function parseNavigationLocations(value: unknown, cwd: string): LspNavigationLocation[] {
+	return normalizeLocations(value).map((location) => ({
+		file: path.relative(cwd, uriToFile(location.uri)) || path.basename(uriToFile(location.uri)),
+		line: location.range.start.line + 1,
+		character: location.range.start.character + 1,
+	}));
+}
+
+export function formatNavigationLocations(
+	locations: LspNavigationLocation[],
+	action: "definition" | "type_definition" | "implementation" | "references",
+	symbol?: string,
+): string {
+	const label = action.replace("_", " ");
+	const pluralLabel = action === "references" ? "references" : `${label}${locations.length === 1 ? "" : "s"}`;
+	const target = symbol ? ` for "${symbol.replace(/#\d+$/, "")}"` : "";
+	if (locations.length === 0) return `0 ${pluralLabel} found${target}`;
+	const fileCount = new Set(locations.map((location) => location.file)).size;
+	return `${locations.length} ${pluralLabel} found${target} in ${fileCount} file${fileCount === 1 ? "" : "s"}:\n${locations
+		.map(
+			(location) =>
+				`${location.file}:${location.line}:${location.character}${location.context ? `\n  ${location.context}` : ""}`,
+		)
+		.join("\n")}`;
 }
 
 function asWorkspaceSymbol(value: unknown): LspSymbolInformation | null {

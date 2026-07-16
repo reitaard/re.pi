@@ -11,6 +11,7 @@ import {
 	sendRequest,
 	shutdownAllLspClients,
 	syncContent,
+	waitForProjectReady,
 } from "../src/lsp/client.ts";
 import { fileToUri } from "../src/lsp/utils.ts";
 
@@ -44,6 +45,11 @@ process.stdin.on("data", chunk => {
     if (message.method === "test/publishDiagnostics") {
       send({ jsonrpc: "2.0", method: "textDocument/publishDiagnostics", params: message.params });
       send({ jsonrpc: "2.0", id: message.id, result: null });
+    }
+    if (message.method === "test/startProgress") {
+      send({ jsonrpc: "2.0", method: "$/progress", params: { token: "index", value: { kind: "begin", title: "Indexing" } } });
+      send({ jsonrpc: "2.0", id: message.id, result: null });
+      setTimeout(() => send({ jsonrpc: "2.0", method: "$/progress", params: { token: "index", value: { kind: "end" } } }), 60);
     }
     if (message.method === "shutdown") send({ jsonrpc: "2.0", id: message.id, result: null });
     if (message.method === "exit") process.exit(0);
@@ -122,6 +128,20 @@ describe("LSP client", () => {
 		expect(
 			messages.filter((message) => message.method === "test/sequence").map((message) => message.params?.sequence),
 		).toEqual(Array.from({ length: 50 }, (_, sequence) => sequence));
+	});
+
+	test("waits for announced project indexing progress to finish", async () => {
+		const root = mkdtempSync(join(tmpdir(), "repi-lsp-progress-"));
+		const client = await getOrCreateClient(
+			{ command: process.execPath, args: [createFakeServer(root)], fileTypes: [".ts"], useLspmux: false },
+			root,
+		);
+		await sendRequest(client, "test/startProgress", {});
+		expect(client.activeProgressTokens.has("index")).toBe(true);
+
+		await waitForProjectReady(client);
+
+		expect(client.activeProgressTokens.size).toBe(0);
 	});
 
 	test("refreshes an open document after an external file change", async () => {

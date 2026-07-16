@@ -5,13 +5,15 @@ import { afterEach, describe, expect, test } from "vitest";
 import { shutdownAllLspClients } from "../src/lsp/client.ts";
 import { createLspToolDefinition } from "../src/lsp/tool.ts";
 
-function createFakeServer(root: string): string {
+function createFakeServer(root: string, options: { referencesRequireRetry?: boolean } = {}): string {
 	const serverPath = join(root, "fake-tool-lsp.mjs");
 	writeFileSync(
 		serverPath,
 		String.raw`
 let pending = Buffer.alloc(0);
 let rootUri = "";
+let referenceRequests = 0;
+const referencesRequireRetry = ${String(options.referencesRequireRetry ?? false)};
 function send(message) {
   const body = JSON.stringify(message);
   process.stdout.write("Content-Length: " + Buffer.byteLength(body) + "\r\n\r\n" + body);
@@ -49,6 +51,12 @@ process.stdin.on("data", chunk => {
     if (message.method === "textDocument/didChange") send({ jsonrpc: "2.0", method: "textDocument/publishDiagnostics", params: { uri: message.params.textDocument.uri, version: message.params.textDocument.version, diagnostics: [] } });
     if (message.method === "textDocument/hover") send({ jsonrpc: "2.0", id: message.id, result: { contents: { kind: "markdown", value: "fake hover" } } });
     if (message.method === "textDocument/definition") send({ jsonrpc: "2.0", id: message.id, result: { uri: fileUri("sample.ts"), range: { start: { line: 0, character: 6 }, end: { line: 0, character: 11 } } } });
+    if (message.method === "textDocument/references") {
+      referenceRequests++;
+      const declaration = { uri: fileUri("sample.ts"), range: { start: { line: 0, character: 6 }, end: { line: 0, character: 11 } } };
+      const result = message.params.position.character !== 6 ? [] : referencesRequireRetry && referenceRequests <= 2 ? [declaration] : [declaration, { uri: fileUri("consumer.ts"), range: { start: { line: 1, character: 3 }, end: { line: 1, character: 8 } } }];
+      send({ jsonrpc: "2.0", id: message.id, result });
+    }
     if (message.method === "textDocument/typeDefinition") send({ jsonrpc: "2.0", id: message.id, result: { uri: fileUri("types.ts"), range: { start: { line: 2, character: 0 }, end: { line: 2, character: 5 } } } });
     if (message.method === "textDocument/implementation") send({ jsonrpc: "2.0", id: message.id, result: [{ targetUri: fileUri("implementation.ts"), targetSelectionRange: { start: { line: 4, character: 2 }, end: { line: 4, character: 7 } } }] });
     if (message.method === "workspace/symbol") send({ jsonrpc: "2.0", id: message.id, result: [{ name: "value", kind: 13, containerName: "sample", location: { uri: fileUri("sample.ts"), range: { start: { line: 0, character: 6 }, end: { line: 0, character: 11 } } } }] });
@@ -86,6 +94,14 @@ describe("LSP tool", () => {
 				{} as never,
 			),
 		).rejects.toThrow("unavailable in a read-only tool set");
+	});
+
+	test("position-based actions reject silent line-one fallbacks", async () => {
+		const root = mkdtempSync(join(tmpdir(), "repi-lsp-position-"));
+		const tool = createLspToolDefinition(root);
+		await expect(
+			tool.execute("references", { action: "references", file: "sample.ts" }, undefined, undefined, {} as never),
+		).rejects.toThrow("requires line and either symbol or character");
 	});
 
 	test("project-only mode rejects file queries outside the workspace", async () => {
@@ -173,13 +189,32 @@ describe("LSP tool", () => {
 			tool.execute("navigation", input, undefined, undefined, {} as never);
 
 		const definition = await execute({ action: "definition", file: "sample.ts", line: 1, character: 7 });
-		expect(definition.content[0]).toEqual({ type: "text", text: "sample.ts:1:7" });
+		expect(definition.content[0]).toEqual({
+			type: "text",
+			text: "1 definition found in 1 file:\nsample.ts:1:7\n  const value = 1;",
+		});
 
 		const typeDefinition = await execute({ action: "type_definition", file: "sample.ts", line: 1, character: 7 });
-		expect(typeDefinition.content[0]).toEqual({ type: "text", text: "types.ts:3:1" });
+		expect(typeDefinition.content[0]).toEqual({
+			type: "text",
+			text: "1 type definition found in 1 file:\ntypes.ts:3:1",
+		});
 
 		const implementation = await execute({ action: "implementation", file: "sample.ts", line: 1, character: 7 });
-		expect(implementation.content[0]).toEqual({ type: "text", text: "implementation.ts:5:3" });
+		expect(implementation.content[0]).toEqual({
+			type: "text",
+			text: "1 implementation found in 1 file:\nimplementation.ts:5:3",
+		});
+
+		const references = await execute({ action: "references", file: "sample.ts", line: 1, symbol: "value" });
+		expect(references.content[0]).toEqual({
+			type: "text",
+			text: '2 references found for "value" in 2 files:\nsample.ts:1:7\n  const value = 1;\nconsumer.ts:2:4',
+		});
+		expect(references.details?.locations).toEqual([
+			{ file: "sample.ts", line: 1, character: 7, context: "const value = 1;" },
+			{ file: "consumer.ts", line: 2, character: 4 },
+		]);
 
 		const workspaceSymbols = await execute({ action: "workspace_symbols", query: "value" });
 		expect(workspaceSymbols.content[0]?.type === "text" ? workspaceSymbols.content[0].text : "").toContain(
@@ -203,6 +238,40 @@ describe("LSP tool", () => {
 		expect(workspaceDiagnosticText).toContain("LSP: 1 error");
 		expect(workspaceDiagnosticText).toContain("sample.ts");
 		expect(workspaceDiagnosticText).toContain("1:1 workspace error");
+	});
+
+	test("retries references while the project index only returns the declaration", async () => {
+		const root = mkdtempSync(join(tmpdir(), "repi-lsp-reference-retry-"));
+		const serverPath = createFakeServer(root, { referencesRequireRetry: true });
+		writeFileSync(join(root, "package.json"), "{}\n");
+		writeFileSync(join(root, "sample.ts"), "const value = 1;\n");
+		mkdirSync(join(root, ".pi"));
+		writeFileSync(
+			join(root, ".pi", "lsp.json"),
+			JSON.stringify({
+				servers: {
+					"typescript-language-server": { disabled: true },
+					fake: {
+						command: process.execPath,
+						args: [serverPath],
+						fileTypes: [".ts"],
+						rootMarkers: ["package.json"],
+						useLspmux: false,
+					},
+				},
+			}),
+		);
+		const tool = createLspToolDefinition(root);
+
+		const references = await tool.execute(
+			"references",
+			{ action: "references", file: "sample.ts", line: 1, symbol: "value" },
+			undefined,
+			undefined,
+			{} as never,
+		);
+
+		expect(references.details?.locations).toHaveLength(2);
 	});
 
 	test("previews and applies formatting, rename, and code actions", async () => {
@@ -238,12 +307,25 @@ describe("LSP tool", () => {
 		await execute({ action: "format", file: "sample.ts", apply: true });
 		expect(readFileSync(sourcePath, "utf-8")).toBe("const value = 2;\n");
 
-		const renamePreview = await execute({ action: "rename", file: "sample.ts", new_name: "total" });
+		const renamePreview = await execute({
+			action: "rename",
+			file: "sample.ts",
+			line: 1,
+			symbol: "value",
+			new_name: "total",
+		});
 		expect(renamePreview.content[0]).toEqual({ type: "text", text: "Rename preview: 1 text edit" });
-		await execute({ action: "rename", file: "sample.ts", new_name: "total", apply: true });
+		await execute({ action: "rename", file: "sample.ts", line: 1, symbol: "value", new_name: "total", apply: true });
 		expect(readFileSync(sourcePath, "utf-8")).toBe("const total = 2;\n");
 
-		await execute({ action: "code_actions", file: "sample.ts", query: "use let", apply: true });
+		await execute({
+			action: "code_actions",
+			file: "sample.ts",
+			line: 1,
+			character: 0,
+			query: "use let",
+			apply: true,
+		});
 		expect(readFileSync(sourcePath, "utf-8")).toBe("let   total = 2;\n");
 	});
 

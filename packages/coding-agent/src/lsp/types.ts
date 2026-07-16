@@ -200,6 +200,8 @@ export interface LspClient {
 	pendingRequests: Map<number, LspPendingRequest>;
 	diagnostics: Map<string, { diagnostics: LspDiagnostic[]; version: number | null }>;
 	diagnosticsVersion: number;
+	activeProgressTokens: Set<string | number>;
+	progressVersion: number;
 	openFiles: Map<string, { version: number; languageId: string; content: string }>;
 	writeQueue: Promise<void>;
 	stderr: string;

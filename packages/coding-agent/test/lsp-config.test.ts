@@ -56,4 +56,23 @@ describe("LSP configuration", () => {
 			false,
 		);
 	});
+
+	test("excludes linter servers from semantic file routing", () => {
+		const config = {
+			servers: {
+				semantic: { command: "semantic", fileTypes: [".ts"], rootMarkers: ["package.json"] },
+				biome: {
+					command: "biome",
+					fileTypes: [".ts"],
+					rootMarkers: ["biome.json"],
+					isLinter: true,
+				},
+			},
+		};
+
+		expect(getServersForFile(config, "src/index.ts").map(([name]) => name)).toEqual(["semantic", "biome"]);
+		expect(getServersForFile(config, "src/index.ts", { includeLinters: false }).map(([name]) => name)).toEqual([
+			"semantic",
+		]);
+	});
 });

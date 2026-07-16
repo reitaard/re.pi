@@ -8,6 +8,7 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import * as path from "node:path";
 import { spawnProcess } from "../utils/child-process.ts";
+import { sleep } from "../utils/sleep.ts";
 import { applyWorkspaceEdit } from "./edits.ts";
 import { getLspmuxCommand } from "./lspmux.ts";
 import { LspMessageFramer } from "./message-framer.ts";
@@ -29,6 +30,9 @@ const INITIALIZE_TIMEOUT_MS = 30_000;
 const SHUTDOWN_TIMEOUT_MS = 5_000;
 const INIT_FAILURE_BACKOFF_MS = 3 * 60 * 1000;
 const MAX_STDERR_CHARS = 16_384;
+const PROJECT_PROGRESS_SETTLE_MS = 150;
+const PROJECT_PROGRESS_TIMEOUT_MS = 3000;
+const PROJECT_PROGRESS_POLL_MS = 25;
 
 const clients = new Map<string, LspClient>();
 const initializingClients = new Map<string, LspClient>();
@@ -94,6 +98,7 @@ const CLIENT_CAPABILITIES = {
 		publishDiagnostics: { relatedInformation: true, versionSupport: true },
 		diagnostic: { dynamicRegistration: false, relatedDocumentSupport: true },
 	},
+	window: { workDoneProgress: true },
 	workspace: {
 		applyEdit: true,
 		workspaceEdit: {
@@ -236,6 +241,18 @@ function handleMessage(client: LspClient, rawMessage: string): void {
 			version: params.version ?? null,
 		});
 		client.diagnosticsVersion += 1;
+	} else if (message.method === "$/progress") {
+		const params = message.params as { token?: unknown; value?: { kind?: unknown } } | undefined;
+		if ((typeof params?.token === "string" || typeof params?.token === "number") && params.value?.kind === "begin") {
+			client.activeProgressTokens.add(params.token);
+			client.progressVersion += 1;
+		} else if (
+			(typeof params?.token === "string" || typeof params?.token === "number") &&
+			params.value?.kind === "end"
+		) {
+			client.activeProgressTokens.delete(params.token);
+			client.progressVersion += 1;
+		}
 	}
 }
 
@@ -347,6 +364,8 @@ async function createClient(config: LspServerConfig, cwd: string, initializeTime
 		pendingRequests: new Map(),
 		diagnostics: new Map(),
 		diagnosticsVersion: 0,
+		activeProgressTokens: new Set(),
+		progressVersion: 0,
 		openFiles: new Map(),
 		writeQueue: Promise.resolve(),
 		stderr: "",
@@ -464,6 +483,24 @@ export async function refreshFile(client: LspClient, filePath: string): Promise<
 	if (client.openFiles.get(uri)?.content === content) return;
 	await syncContent(client, filePath, content);
 	await notifySaved(client, filePath, content);
+}
+
+/** Wait briefly for an announced initial project-indexing pass without penalizing servers that emit no progress. */
+export async function waitForProjectReady(client: LspClient, signal?: AbortSignal): Promise<void> {
+	const startedAt = Date.now();
+	const initialProgressVersion = client.progressVersion;
+	let observedProgress = client.activeProgressTokens.size > 0;
+	while (Date.now() - startedAt < PROJECT_PROGRESS_TIMEOUT_MS) {
+		if (signal?.aborted) {
+			throw signal.reason instanceof Error ? signal.reason : new Error("Operation aborted");
+		}
+		if (client.activeProgressTokens.size > 0 || client.progressVersion !== initialProgressVersion) {
+			observedProgress = true;
+		}
+		if (observedProgress && client.activeProgressTokens.size === 0) return;
+		if (!observedProgress && Date.now() - startedAt >= PROJECT_PROGRESS_SETTLE_MS) return;
+		await sleep(PROJECT_PROGRESS_POLL_MS, signal);
+	}
 }
 
 export async function waitForDiagnostics(

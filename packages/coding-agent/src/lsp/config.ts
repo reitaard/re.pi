@@ -250,16 +250,22 @@ export function loadLspConfig(
 	return { servers: available, idleTimeoutMs };
 }
 
-export function getServersForFile(config: LspConfig, filePath: string): Array<[string, LspServerConfig]> {
+export function getServersForFile(
+	config: LspConfig,
+	filePath: string,
+	options: { includeLinters?: boolean } = {},
+): Array<[string, LspServerConfig]> {
 	const extension = path.extname(filePath).toLowerCase();
 	const extensionWithoutDot = extension.startsWith(".") ? extension.slice(1) : extension;
 	const fileName = path.basename(filePath).toLowerCase();
-	const matches = Object.entries(config.servers).filter(([, server]) =>
-		server.fileTypes.some((fileType) => {
-			const normalized = fileType.toLowerCase();
-			const withoutDot = normalized.startsWith(".") ? normalized.slice(1) : normalized;
-			return normalized === extension || normalized === fileName || withoutDot === extensionWithoutDot;
-		}),
+	const matches = Object.entries(config.servers).filter(
+		([, server]) =>
+			(options.includeLinters !== false || !server.isLinter) &&
+			server.fileTypes.some((fileType) => {
+				const normalized = fileType.toLowerCase();
+				const withoutDot = normalized.startsWith(".") ? normalized.slice(1) : normalized;
+				return normalized === extension || normalized === fileName || withoutDot === extensionWithoutDot;
+			}),
 	);
 	return matches.sort((left, right) => Number(Boolean(left[1].isLinter)) - Number(Boolean(right[1].isLinter)));
 }
