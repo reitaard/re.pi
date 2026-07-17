@@ -1,9 +1,11 @@
 import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { chunkRecodeMemory } from "../src/core/recode-memory/recode-memory-chunker.ts";
 import { RecodeMemoryManager } from "../src/core/recode-memory/recode-memory-manager.ts";
+import { resolveRecodeMemoryLocation } from "../src/core/recode-memory/recode-memory-runtime.ts";
+import { archiveRecodeShioriDeskItem, placeOnRecodeShioriDesk } from "../src/core/recode-memory/recode-shiori-desk.ts";
 import { normalizeRecodeMemoryConfig, resolveAutomaticMemoryScope } from "../src/recode-memory.ts";
 
 const roots: string[] = [];
@@ -36,6 +38,23 @@ function createManager(root: string): RecodeMemoryManager {
 }
 
 describe("re.code core memory", () => {
+	it("reuses an existing project memory root when launched from inside it", () => {
+		const project = resolve(join(tmpdir(), "repi-project"));
+		const memoryRoot = join(project, ".pi", "memory");
+		expect(resolveRecodeMemoryLocation(project)).toEqual({
+			managerKey: project,
+			projectMemoryRoot: memoryRoot,
+		});
+		expect(resolveRecodeMemoryLocation(memoryRoot)).toEqual({
+			managerKey: project,
+			projectMemoryRoot: memoryRoot,
+		});
+		expect(resolveRecodeMemoryLocation(join(memoryRoot, "daily"))).toEqual({
+			managerKey: project,
+			projectMemoryRoot: memoryRoot,
+		});
+	});
+
 	it("migrates the legacy global recall switch into separate safe controls", () => {
 		expect(normalizeRecodeMemoryConfig({ globalRecall: true })).toMatchObject({
 			globalAccess: true,
@@ -126,10 +145,30 @@ describe("re.code core memory", () => {
 		const manager = createManager(root);
 		await manager.initialize();
 
+		await expect(manager.read("project")).rejects.toThrow("This project has no Kioku MEMORY.md yet");
 		const path = await manager.write("project", "Prefer focused tests for adapted memory code.");
 		expect(await readFile(path, "utf8")).toContain("Prefer focused tests");
 		await expect(manager.write("global", "api_key=super-secret-value-1234")).rejects.toThrow("secret");
 		await expect(manager.read("project", "../../outside.md")).rejects.toThrow("inside its memory root");
+	});
+
+	it("keeps files on Shiori's Desk outside Kioku recall until reviewed", async () => {
+		const root = await mkdtemp(join(tmpdir(), "repi-memory-"));
+		roots.push(root);
+		const manager = createManager(root);
+		await manager.initialize();
+		const workspaceFile = join(root, "MEMORY.md");
+		await writeFile(workspaceFile, "# Imported notes\n\nThe cobalt workflow belongs on Shiori's Desk.\n", "utf8");
+
+		const item = await placeOnRecodeShioriDesk(manager, workspaceFile, root);
+		expect(item.deskPath).toContain(join(".pi", "memory", "desk"));
+		expect(await readFile(workspaceFile, "utf8")).toContain("cobalt workflow");
+		await manager.sync();
+		expect(await manager.search("cobalt workflow")).toEqual([]);
+
+		const archivePath = await archiveRecodeShioriDeskItem(item);
+		expect(archivePath).toContain(join(".pi", "memory", "archive"));
+		expect(await readFile(archivePath, "utf8")).toContain("cobalt workflow");
 	});
 
 	it("keeps recall database-only and reconciles external Markdown changes in the background", async () => {

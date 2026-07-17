@@ -53,15 +53,17 @@ describe("status indicators", () => {
 		expect(requestRender).toHaveBeenCalledTimes(callsBeforeDispose);
 	});
 
-	it("shows the live run time beside the default encrypted animation", () => {
+	it("right-aligns the live run time opposite the default encrypted animation", () => {
 		initTheme("dark");
 		vi.useFakeTimers();
 		const tui = { requestRender: vi.fn() } as unknown as TUI;
 		const indicator = new WorkingStatusIndicator(tui, "Working...");
 
-		expect(stripAnsi(indicator.render(80).join("\n"))).toContain("· 0s");
+		const initialLine = stripAnsi(indicator.render(80).at(-1) ?? "");
+		expect(initialLine.endsWith("· 0s")).toBe(true);
 		vi.advanceTimersByTime(61_000);
-		expect(stripAnsi(indicator.render(80).join("\n"))).toContain("· 1m 01s");
+		const elapsedLine = stripAnsi(indicator.render(80).at(-1) ?? "");
+		expect(elapsedLine.endsWith("· 1m 01s")).toBe(true);
 
 		indicator.dispose();
 	});

@@ -1,4 +1,4 @@
-import { type Component, Loader, type TUI } from "@reitaard/repi-tui";
+import { type Component, Loader, type TUI, truncateToWidth, visibleWidth } from "@reitaard/repi-tui";
 import type { WorkingIndicatorOptions } from "../../../core/extensions/index.ts";
 import { theme } from "../theme/theme.ts";
 import { CountdownTimer } from "./countdown-timer.ts";
@@ -30,6 +30,8 @@ export class StatusIndicator extends Loader {
 export class WorkingStatusIndicator extends StatusIndicator {
 	private elapsedIntervalId: ReturnType<typeof setInterval> | undefined;
 	private readonly startedAt: number;
+	private readonly tui: TUI;
+	private elapsedRuntime = formatElapsedRuntime(0);
 	private usesCustomIndicator: boolean;
 	private workingMessage: string;
 
@@ -39,9 +41,10 @@ export class WorkingStatusIndicator extends StatusIndicator {
 			ui,
 			recodeSpinner,
 			(text) => text,
-			indicator ? theme.fg("muted", message) : recodeSpinner(formatElapsedRuntime(0)),
+			indicator ? theme.fg("muted", message) : "",
 			indicator ?? createRecodeMagicIndicator(selectRecodeSpinnerVerb()),
 		);
+		this.tui = ui;
 		this.startedAt = Date.now();
 		this.usesCustomIndicator = indicator !== undefined;
 		this.workingMessage = message;
@@ -73,6 +76,19 @@ export class WorkingStatusIndicator extends StatusIndicator {
 		}
 	}
 
+	override render(width: number): string[] {
+		const lines = super.render(width);
+		if (this.usesCustomIndicator || lines.length < 2) return lines;
+
+		const elapsed = recodeSpinner(this.elapsedRuntime);
+		const elapsedWidth = visibleWidth(elapsed);
+		const availableLeftWidth = Math.max(0, width - elapsedWidth - 1);
+		const left = truncateToWidth(lines[lines.length - 1] ?? "", availableLeftWidth, "");
+		const gap = Math.max(1, width - visibleWidth(left) - elapsedWidth);
+		lines[lines.length - 1] = `${left}${" ".repeat(gap)}${elapsed}`;
+		return lines;
+	}
+
 	override dispose(): void {
 		this.stopElapsedTimer();
 		super.dispose();
@@ -81,7 +97,8 @@ export class WorkingStatusIndicator extends StatusIndicator {
 	private startElapsedTimer(): void {
 		this.stopElapsedTimer();
 		const updateElapsed = () => {
-			super.setMessage(recodeSpinner(formatElapsedRuntime(Date.now() - this.startedAt)));
+			this.elapsedRuntime = formatElapsedRuntime(Date.now() - this.startedAt);
+			this.tui.requestRender();
 		};
 		updateElapsed();
 		this.elapsedIntervalId = setInterval(updateElapsed, 1000);

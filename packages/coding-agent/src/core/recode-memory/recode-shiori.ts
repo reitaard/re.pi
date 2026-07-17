@@ -13,6 +13,12 @@ export interface RecodeShioriMessageEntry {
 	message: string;
 }
 
+export function appendRecodeShioriMessage(sessionManager: SessionManager, message: string): void {
+	sessionManager.appendCustomEntry(RECODE_SHIORI_MESSAGE_ENTRY, {
+		message,
+	} satisfies RecodeShioriMessageEntry);
+}
+
 export interface RecodeShioriProgressEvent {
 	type: "start" | "complete";
 	message: string;
@@ -84,9 +90,19 @@ interface RecodeShioriReviewChunk {
 export interface RecodeShioriRunResult {
 	reviewedEntries: number;
 	saved: number;
+	savedGlobal: number;
+	savedProject: number;
 	skippedDuplicates: number;
 	hasMore: boolean;
 	lastReviewedEntryId: string;
+}
+
+export interface RecodeShioriFileReviewResult {
+	reviewedCharacters: number;
+	saved: number;
+	savedGlobal: number;
+	savedProject: number;
+	skippedDuplicates: number;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -290,6 +306,19 @@ TRANSCRIPT
 ${transcript}`;
 }
 
+function fileReviewPrompt(sourcePath: string, content: string): string {
+	return `Review this user-selected memory file from ${sourcePath}.
+
+Output exactly:
+{"memories":[{"text":"concise durable statement","tags":["searchable-tag"],"scope":"project|global","kind":"preference|decision|workflow|correction|fact|lesson","confidence":0.0,"evidenceEntryIds":[]}]}
+
+Use project scope for codebase-specific knowledge. Use global only for stable user preferences or cross-project working habits. Return {"memories":[]} when nothing deserves durable memory.
+Return at most 5 memories. Keep each text under 240 characters and use at most 4 tags.
+
+FILE
+${content}`;
+}
+
 async function chooseRouting(
 	routing: RecodeShioriRouting,
 	candidate: RecodeShioriMemoryCandidate,
@@ -317,6 +346,82 @@ async function isDuplicate(manager: RecodeMemoryManager, candidate: RecodeShiori
 	return results.some((result) => normalizeText(result.text).includes(normalized));
 }
 
+export async function executeRecodeShioriFileReview(options: {
+	cwd: string;
+	sourcePath: string;
+	content: string;
+	modelRegistry: ModelRegistry;
+	projectTrusted: boolean;
+	config: RecodeMemoryConfig;
+	manager: RecodeMemoryManager;
+	model: Model<any>;
+	chooseScope?: (
+		candidate: RecodeShioriMemoryCandidate,
+		globalAccess: boolean,
+	) => Promise<RecodeMemoryScope | undefined>;
+}): Promise<RecodeShioriFileReviewResult> {
+	const { config, manager, model } = options;
+	if (!config.enabled) throw new Error("Kioku memory is disabled. Enable it from /memory");
+	if (!options.projectTrusted) throw new Error("Shiori is unavailable until this project is trusted");
+	const content = options.content.trim();
+	if (!content) throw new Error("The selected file is empty");
+
+	const chunks: string[] = [];
+	for (
+		let offset = 0;
+		offset < content.length && chunks.length < SHIORI_MAX_CHUNKS_PER_RUN;
+		offset += SHIORI_CHUNK_CHARACTERS
+	) {
+		chunks.push(content.slice(offset, offset + SHIORI_CHUNK_CHARACTERS));
+	}
+	const startedAt = new Date();
+	const seenCandidates = new Set<string>();
+	const pendingWrites: RecodeShioriMemoryCandidate[] = [];
+	let skippedDuplicates = 0;
+	for (const chunk of chunks) {
+		const output = await runRecodeShioriHarness({
+			cwd: options.cwd,
+			model,
+			modelRegistry: options.modelRegistry,
+			thinking: config.shioriThinking,
+			systemPrompt: buildRecodeShioriSystemPrompt(startedAt),
+			prompt: fileReviewPrompt(options.sourcePath, chunk),
+		});
+		for (const candidate of parseRecodeShioriCandidates(output)) {
+			const candidateKey = normalizeText(candidate.text);
+			if (seenCandidates.has(candidateKey)) {
+				skippedDuplicates += 1;
+				continue;
+			}
+			seenCandidates.add(candidateKey);
+			const route = await chooseRouting(config.cardinalRouting, candidate, config.globalAccess, options.chooseScope);
+			if (!route.scope) continue;
+			const routed = { ...candidate, scope: route.scope };
+			if (await isDuplicate(manager, routed)) {
+				skippedDuplicates += 1;
+				continue;
+			}
+			pendingWrites.push(routed);
+		}
+	}
+
+	let savedGlobal = 0;
+	let savedProject = 0;
+	for (const candidate of pendingWrites) {
+		await manager.write(candidate.scope, candidate.text, false, true, candidate.tags, false);
+		if (candidate.scope === "global") savedGlobal += 1;
+		else savedProject += 1;
+	}
+	if (pendingWrites.length > 0) await manager.sync(true);
+	return {
+		reviewedCharacters: chunks.reduce((total, chunk) => total + chunk.length, 0),
+		saved: pendingWrites.length,
+		savedGlobal,
+		savedProject,
+		skippedDuplicates,
+	};
+}
+
 export async function executeRecodeShiori(options: {
 	cwd: string;
 	sessionManager: SessionManager;
@@ -330,6 +435,7 @@ export async function executeRecodeShiori(options: {
 		globalAccess: boolean,
 	) => Promise<RecodeMemoryScope | undefined>;
 	onProgress?: (event: RecodeShioriProgressEvent) => void;
+	appendMessage?: (message: string) => void;
 }): Promise<RecodeShioriRunResult | undefined> {
 	const { config, manager, model, onProgress, sessionManager } = options;
 	if (!config.enabled) throw new Error("Kioku memory is disabled. Enable it from /memory");
@@ -343,6 +449,8 @@ export async function executeRecodeShiori(options: {
 	const greeting = `${getRecodeShioriGreeting(startedAt)} (${review.pendingEntries} entries)`;
 	onProgress?.({ type: "start", message: greeting });
 	let saved = 0;
+	let savedGlobal = 0;
+	let savedProject = 0;
 	let skippedDuplicates = 0;
 	let reviewedEntries = 0;
 	let lastReviewedEntryId = review.chunks[0]!.entries.at(-1)!.id;
@@ -381,6 +489,8 @@ export async function executeRecodeShiori(options: {
 	for (const candidate of pendingWrites) {
 		await manager.write(candidate.scope, candidate.text, false, true, candidate.tags, false);
 		saved += 1;
+		if (candidate.scope === "global") savedGlobal += 1;
+		else savedProject += 1;
 	}
 	if (saved > 0) await manager.sync(true);
 	sessionManager.appendCustomEntry(RECODE_SHIORI_CHECKPOINT, {
@@ -391,6 +501,8 @@ export async function executeRecodeShiori(options: {
 	const savedSummary = saved === 0 ? "No new memories" : `Saved ${saved} ${saved === 1 ? "memory" : "memories"}`;
 	const completion = [
 		savedSummary,
+		savedProject > 0 ? `${savedProject} project` : undefined,
+		savedGlobal > 0 ? `${savedGlobal} global` : undefined,
 		`${reviewedEntries} reviewed`,
 		skippedDuplicates > 0
 			? `${skippedDuplicates} ${skippedDuplicates === 1 ? "duplicate" : "duplicates"} skipped`
@@ -399,12 +511,18 @@ export async function executeRecodeShiori(options: {
 	]
 		.filter((part): part is string => part !== undefined)
 		.join(" · ");
-	sessionManager.appendCustomEntry(RECODE_SHIORI_MESSAGE_ENTRY, {
-		message: greeting,
-	} satisfies RecodeShioriMessageEntry);
-	sessionManager.appendCustomEntry(RECODE_SHIORI_MESSAGE_ENTRY, {
-		message: completion,
-	} satisfies RecodeShioriMessageEntry);
+	const appendMessage =
+		options.appendMessage ?? ((message: string) => appendRecodeShioriMessage(sessionManager, message));
+	appendMessage(greeting);
+	appendMessage(completion);
 	onProgress?.({ type: "complete", message: completion });
-	return { reviewedEntries, saved, skippedDuplicates, hasMore: review.hasMore, lastReviewedEntryId };
+	return {
+		reviewedEntries,
+		saved,
+		savedGlobal,
+		savedProject,
+		skippedDuplicates,
+		hasMore: review.hasMore,
+		lastReviewedEntryId,
+	};
 }

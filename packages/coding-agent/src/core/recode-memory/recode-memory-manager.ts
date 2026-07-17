@@ -33,7 +33,7 @@ async function markdownFiles(root: string, scope: RecodeMemoryScope): Promise<Me
 		}
 		for (const entry of entries) {
 			const path = join(directory, entry.name);
-			if (entry.isDirectory()) await walk(path);
+			if (entry.isDirectory() && entry.name !== "desk" && entry.name !== "archive") await walk(path);
 			else if (entry.isFile() && entry.name.toLowerCase().endsWith(".md")) found.push({ scope, path });
 		}
 	}
@@ -219,7 +219,20 @@ export class RecodeMemoryManager {
 		if (relativePath.startsWith("..") || relativePath.includes(":") || basename(path) === "") {
 			throw new Error("Memory path must stay inside its memory root");
 		}
-		return { path, content: await readFile(path, "utf8") };
+		try {
+			return { path, content: await readFile(path, "utf8") };
+		} catch (error) {
+			if (
+				(error as NodeJS.ErrnoException).code === "ENOENT" &&
+				scope === "project" &&
+				requestedPath === "MEMORY.md"
+			) {
+				throw new Error(
+					"This project has no Kioku MEMORY.md yet. Ask the user whether to create one; do not fall back to another project or global memory.",
+				);
+			}
+			throw error;
+		}
 	}
 
 	status(): RecodeMemoryStatus {

@@ -229,6 +229,7 @@ describe("Shiori (栞) memory review", () => {
 			}),
 		);
 		const chooseScope = vi.fn().mockResolvedValue("global");
+		const appendMessage = vi.fn();
 		try {
 			const review = runtime.runShiori({
 				cwd,
@@ -238,6 +239,7 @@ describe("Shiori (栞) memory review", () => {
 				} as never,
 				projectTrusted: true,
 				chooseScope,
+				appendMessage,
 				model: {
 					id: "qwen3.5-9b",
 					name: "Qwen3.5 9B",
@@ -258,6 +260,8 @@ describe("Shiori (栞) memory review", () => {
 			expect(runtime.isShioriReviewing()).toBe(false);
 			expect(reviewingStates).toEqual([true, false]);
 			expect(chooseScope).not.toHaveBeenCalled();
+			expect(appendMessage).toHaveBeenCalledTimes(2);
+			expect(appendMessage).toHaveBeenLastCalledWith(expect.stringContaining("Saved 1 memory"));
 			expect(getRecodeShioriCheckpoint(original.getBranch())).toMatchObject({ saved: 1 });
 			expect(await readFile(join(cwd, ".pi", "memory", "MEMORY.md"), "utf8")).toContain(
 				"Run focused tests before broad checks.",
