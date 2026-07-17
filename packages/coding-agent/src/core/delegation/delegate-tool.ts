@@ -88,7 +88,7 @@ export function createDelegateTool(options: CreateDelegateToolOptions): AgentToo
 	return {
 		name: "delegate",
 		label: "delegate",
-		description: `Delegate one focused, read-only task to a named worker. Delegation depth is limited to one. Do not call this tool when the user says to work directly or not to delegate. Multiple independent delegate calls may run in parallel.\n\nAvailable workers:\n${availableWorkers}`,
+		description: `Delegate one focused, read-only task to a named worker. Delegation depth is limited to one. Do not call this tool when the user says to work directly or not to delegate. Do not delegate merely to perform a single read, grep, find, or ls operation; use the parent agent's own tools for simple deterministic work. Delegate only when a bounded multi-step task benefits from independent research or audit. Multiple independent delegate calls may run in parallel.\n\nAvailable workers:\n${availableWorkers}`,
 		parameters: delegateSchema,
 		executionMode: "parallel",
 		async execute(_toolCallId, input, signal) {
