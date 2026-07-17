@@ -15,4 +15,14 @@ export {
 	runNamedWorker,
 	type RunNamedWorkerOptions,
 } from "./named-worker.ts";
+export {
+	WorkerDirectory,
+	type WorkerConversationSnapshot,
+	type WorkerConversationStatus,
+	type WorkerConversationTurnResult,
+	type WorkerDescriptor,
+	type WorkerDirectoryOptions,
+	type WorkerDirectoryRuntimeOptions,
+} from "./worker-directory.ts";
+export { createWorkerControlTools } from "./worker-tools.ts";
 export { REPI_NAMED_WORKERS } from "./worker-registry.ts";
