@@ -47,13 +47,14 @@ function messageText(messages: Array<{ role: string; content: unknown }>): strin
 		.join("\n");
 }
 
-describe("named worker delegation spike", () => {
+describe("named worker delegation", () => {
 	it("registers only the two stable worker ids with swappable display names", () => {
 		expect(REPI_NAMED_WORKERS.map(({ id, displayName }) => ({ id, displayName }))).toEqual([
 			{ id: "research", displayName: "Mayuri" },
 			{ id: "audit", displayName: "Levi" },
 		]);
 		expect(REPI_NAMED_WORKERS.find((candidate) => candidate.id === "research")?.skillName).toBe("librarian");
+		expect(REPI_NAMED_WORKERS.every((candidate) => Boolean(candidate.personality))).toBe(true);
 	});
 
 	it("runs one isolated named worker with only read-only tools", async () => {
@@ -72,7 +73,7 @@ describe("named worker delegation spike", () => {
 			cwd: process.cwd(),
 			model: registration.getModel(),
 			models,
-			worker: worker(),
+			worker: worker({ personality: "Calm and exact." }),
 			task: "Inspect the example module.",
 		});
 
@@ -83,6 +84,7 @@ describe("named worker delegation spike", () => {
 		expect(toolNames).not.toContain("delegate");
 		expect(systemPrompt).toContain("You are Reviewer");
 		expect(systemPrompt).toContain("Do not delegate");
+		expect(systemPrompt).toContain("Personality: Calm and exact.");
 	});
 
 	it("explicitly invokes Mayuri's loaded librarian skill", async () => {
@@ -213,7 +215,7 @@ describe("named worker delegation spike", () => {
 		expect(result.output).toBe("");
 	});
 
-	it("exposes canonical ids and explicit-request precedence in the delegate contract", () => {
+	it("injects canonical ids and aliases plus explicit-worker precedence", () => {
 		const { registration, models } = createFaux();
 		const delegate = createDelegateTool({
 			cwd: process.cwd(),
@@ -227,11 +229,12 @@ describe("named worker delegation spike", () => {
 			}
 		).properties.worker;
 
-		expect(workerSchema.enum).toEqual(["research", "audit"]);
+		expect(workerSchema.enum).toEqual(["research", "Mayuri", "audit", "Levi"]);
 		expect(workerSchema.description).toContain("Mayuri -> research");
 		expect(workerSchema.description).toContain("Levi -> audit");
 		expect(delegate.description).toContain("explicitly requests a worker");
-		expect(delegate.description).toContain("overrides the simple-task optimization");
+		expect(delegate.description).toContain("simple read/grep/find/ls task");
+		expect(delegate.description).toContain("do not replace the worker");
 		expect(delegate.description).toContain("id=research; name=Mayuri");
 		expect(delegate.description).toContain("id=audit; name=Levi");
 	});
@@ -261,7 +264,7 @@ describe("named worker delegation spike", () => {
 		expect(mayuri.details.result.workerName).toBe("Mayuri");
 	});
 
-	it("exposes the named worker through one parallel-safe parent-facing delegate tool", async () => {
+	it("exposes one parallel-safe parent-facing delegate tool", async () => {
 		const { registration, models } = createFaux();
 		registration.setResponses([() => fauxAssistantMessage("Reviewed the requested boundary.")]);
 		const delegate = createDelegateTool({
