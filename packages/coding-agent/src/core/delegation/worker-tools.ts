@@ -51,7 +51,7 @@ export function createWorkerControlTools(directory: WorkerDirectory): AgentTool[
 		conversationId: Type.String({ description: "Worker conversation id" }),
 	});
 
-	const listTool: AgentTool<typeof Type.Object, unknown> = {
+	const listTool: AgentTool = {
 		name: "worker_list",
 		label: "worker_list",
 		description:
@@ -66,7 +66,7 @@ export function createWorkerControlTools(directory: WorkerDirectory): AgentTool[
 			});
 			return { content: [{ type: "text", text: lines.join("\n") }], details: undefined };
 		},
-	} as AgentTool;
+	};
 
 	const startTool: AgentTool = {
 		name: "worker_start",
