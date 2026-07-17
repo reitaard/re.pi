@@ -57,6 +57,20 @@ export {
 	serializeConversation,
 	shouldCompact,
 } from "./core/compaction/index.ts";
+export {
+	createDelegateTool,
+	type CreateDelegateToolOptions,
+	type DelegateToolDetails,
+	type DelegateToolInput,
+	type NamedWorkerDefinition,
+	type NamedWorkerProgressEvent,
+	type NamedWorkerRunResult,
+	type NamedWorkerRunStatus,
+	type NamedWorkerTask,
+	type NamedWorkerToolName,
+	runNamedWorker,
+	type RunNamedWorkerOptions,
+} from "./core/delegation/index.ts";
 export { createEventBus, type EventBus, type EventBusController } from "./core/event-bus.ts";
 // Extension system
 export type {
@@ -137,7 +151,6 @@ export type {
 	TerminalInputHandler,
 	ToolCallEvent,
 	ToolCallEventResult,
-	ToolDefinition,
 	ToolExecutionMode,
 	ToolInfo,
 	ToolRenderResultOptions,
