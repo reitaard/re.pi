@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { Loader, Text } from "@reitaard/repi-tui";
 import { Type } from "typebox";
 import { getAgentDir } from "./config.ts";
-import type { ExtensionAPI } from "./core/extensions/types.ts";
+import type { ExtensionAPI, ExtensionContext } from "./core/extensions/types.ts";
 import type { RecodeMemoryManager } from "./core/recode-memory/recode-memory-manager.ts";
 import { RecodeMemoryRuntime } from "./core/recode-memory/recode-memory-runtime.ts";
 import type {
@@ -153,7 +153,22 @@ const SearchScope = Type.Union([Scope, Type.Literal("both")]);
 export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryRuntime()): Promise<void> {
 	let config = await readConfig();
 	let adapterActive = true;
+	let activeContext: ExtensionContext | undefined;
 	runtime.setConfig(config);
+	const unsubscribeShiori = runtime.subscribeShiori((state) => {
+		if (!adapterActive || !activeContext) return;
+		if (state.failed) {
+			activeContext.ui.setStatus(
+				"recode-shiori",
+				activeContext.ui.theme.fg("error", `${RECODE_SHIORI_DISPLAY_NAME}: error`),
+			);
+			return;
+		}
+		activeContext.ui.setStatus(
+			"recode-shiori",
+			state.reviewing ? activeContext.ui.theme.fg("success", `${RECODE_SHIORI_DISPLAY_NAME}: reviewing`) : undefined,
+		);
+	});
 
 	pi.registerEntryRenderer<RecodeShioriMessageEntry>(RECODE_SHIORI_MESSAGE_ENTRY, (entry, _options, theme) => {
 		const message = entry.data?.message;
@@ -179,11 +194,18 @@ export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryR
 
 	pi.on("session_start", async (_event, ctx) => {
 		try {
+			activeContext = ctx;
 			const projectTrusted = ctx.isProjectTrusted();
 			await getManager(ctx.cwd, projectTrusted);
 			ctx.ui.setStatus(
 				"recode-memory",
 				ctx.ui.theme.fg(config.enabled ? "success" : "muted", `kioku:${config.scope}`),
+			);
+			ctx.ui.setStatus(
+				"recode-shiori",
+				runtime.isShioriReviewing()
+					? ctx.ui.theme.fg("success", `${RECODE_SHIORI_DISPLAY_NAME}: reviewing`)
+					: undefined,
 			);
 		} catch (error) {
 			ctx.ui.setStatus("recode-memory", ctx.ui.theme.fg("error", "memory:error"));
@@ -196,6 +218,8 @@ export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryR
 
 	pi.on("session_shutdown", async () => {
 		adapterActive = false;
+		activeContext = undefined;
+		unsubscribeShiori();
 	});
 
 	pi.on("before_agent_start", async (event, ctx) => {
@@ -342,7 +366,7 @@ export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryR
 			try {
 				await ctx.waitForIdle();
 				const sessionManager = ctx.sessionManager as SessionManager;
-				if (runtime.isShioriReviewing(sessionManager.getSessionId())) {
+				if (runtime.isShioriReviewing()) {
 					ctx.ui.notify(`${RECODE_SHIORI_DISPLAY_NAME}: A memory review is already running.`, "info");
 					return;
 				}
@@ -358,69 +382,70 @@ export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryR
 					}
 				}
 				if (!shioriModel) throw new Error("Shiori needs an active model");
-				const result = await runtime.runShiori({
-					cwd: ctx.cwd,
-					sessionManager,
-					modelRegistry: ctx.modelRegistry,
-					projectTrusted: ctx.isProjectTrusted(),
-					model: shioriModel,
-					chooseScope: async (_candidate: RecodeShioriMemoryCandidate, globalAccess) => {
-						if (!adapterActive || !ctx.hasUI) return "project";
-						const selected = await ctx.ui.select(`${RECODE_SHIORI_DISPLAY_NAME}: save memory`, [
-							"Project",
-							...(globalAccess ? ["Global"] : []),
-							"Skip",
-						]);
-						if (selected === "Global") return "global";
-						if (selected === "Project") return "project";
-						return undefined;
-					},
-					onProgress: (event) => {
-						if (!adapterActive) return;
-						if (event.type === "start") {
-							greeting = event.message;
-							ctx.ui.setStatus(
-								"recode-shiori",
-								ctx.ui.theme.fg("success", `${RECODE_SHIORI_DISPLAY_NAME}: reviewing`),
-							);
-							ctx.ui.setWidget(RECODE_SHIORI_WIDGET, (tui, activeTheme) => {
-								const loader = new Loader(
-									tui,
-									(text) => text,
-									(text) => text,
-									"",
-									createRecodeShioriIndicator(event.message, activeTheme),
-								);
-								return {
-									render: (width) => loader.render(width).slice(1),
-									invalidate: () => loader.invalidate(),
-									dispose: () => loader.stop(),
-								};
-							});
-							return;
+				void runtime
+					.runShiori({
+						cwd: ctx.cwd,
+						sessionManager,
+						modelRegistry: ctx.modelRegistry,
+						projectTrusted: ctx.isProjectTrusted(),
+						model: shioriModel,
+						chooseScope: async (_candidate: RecodeShioriMemoryCandidate, globalAccess) => {
+							if (!adapterActive || !ctx.hasUI) return "project";
+							const selected = await ctx.ui.select(`${RECODE_SHIORI_DISPLAY_NAME}: save memory`, [
+								"Project",
+								...(globalAccess ? ["Global"] : []),
+								"Skip",
+							]);
+							if (selected === "Global") return "global";
+							if (selected === "Project") return "project";
+							return undefined;
+						},
+						onProgress: (event) => {
+							if (!adapterActive) return;
+							if (event.type === "start") {
+								greeting = event.message;
+								ctx.ui.setWidget(RECODE_SHIORI_WIDGET, (tui, activeTheme) => {
+									const loader = new Loader(
+										tui,
+										(text) => text,
+										(text) => text,
+										"",
+										createRecodeShioriIndicator(event.message, activeTheme),
+									);
+									return {
+										render: (width) => loader.render(width).slice(1),
+										invalidate: () => loader.invalidate(),
+										dispose: () => loader.stop(),
+									};
+								});
+								return;
+							}
+							ctx.ui.setWidget(RECODE_SHIORI_WIDGET, undefined);
+						},
+					})
+					.then((result) => {
+						if (!result && adapterActive) {
+							ctx.ui.notify(`${RECODE_SHIORI_DISPLAY_NAME}: No new session entries to review.`, "info");
 						}
-						ctx.ui.setWidget(RECODE_SHIORI_WIDGET, undefined);
-					},
-				});
-				if (result && adapterActive) {
-					ctx.ui.setStatus(
-						"recode-shiori",
-						ctx.ui.theme.fg("success", `${RECODE_SHIORI_DISPLAY_NAME}: saved ${result.saved}`),
-					);
-				}
-				if (!result && adapterActive) {
-					ctx.ui.notify(`${RECODE_SHIORI_DISPLAY_NAME}: No new session entries to review.`, "info");
-				}
+					})
+					.catch((error: unknown) => {
+						if (adapterActive) {
+							ctx.ui.notify(
+								`${RECODE_SHIORI_DISPLAY_NAME}: ${error instanceof Error ? error.message : String(error)}`,
+								"error",
+							);
+						}
+					})
+					.finally(() => {
+						if (greeting && adapterActive) ctx.ui.setWidget(RECODE_SHIORI_WIDGET, undefined);
+					});
 			} catch (error) {
 				if (adapterActive) {
-					ctx.ui.setStatus("recode-shiori", ctx.ui.theme.fg("error", `${RECODE_SHIORI_DISPLAY_NAME}: error`));
 					ctx.ui.notify(
 						`${RECODE_SHIORI_DISPLAY_NAME}: ${error instanceof Error ? error.message : String(error)}`,
 						"error",
 					);
 				}
-			} finally {
-				if (greeting && adapterActive) ctx.ui.setWidget(RECODE_SHIORI_WIDGET, undefined);
 			}
 		},
 	});

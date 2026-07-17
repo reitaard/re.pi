@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.81.3] - 2026-07-17
+
 ### Changed
 
 - Added a live green elapsed-time counter to the encrypted working indicator for each agent run.
@@ -18,6 +20,7 @@
 
 ### Fixed
 
+- Made `/shiori` launch its process-owned review without blocking later slash commands, restored its existing footer state after session replacement, and rejected repeated reviews immediately.
 - Kept process-owned Kioku managers and Shiori reviews alive across new, resume, fork, and reload session replacement, while checkpoints remain attached to the reviewed session.
 - Kept successful edit/write mutations successful when post-write LSP diagnostics are cancelled or unavailable.
 - Added slash-command argument completion immediately after an exact command and trailing space.

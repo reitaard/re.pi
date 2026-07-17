@@ -202,6 +202,8 @@ describe("Shiori (栞) memory review", () => {
 		const cwd = await mkdtemp(join(tmpdir(), "repi-shiori-runtime-"));
 		const runtime = new RecodeMemoryRuntime();
 		runtime.setConfig(normalizeRecodeMemoryConfig({ cardinalRouting: "auto" }));
+		const reviewingStates: boolean[] = [];
+		const unsubscribe = runtime.subscribeShiori((state) => reviewingStates.push(state.reviewing));
 		const original = SessionManager.inMemory(cwd);
 		original.appendMessage({ role: "user", content: "Always run focused tests before broad checks.", timestamp: 0 });
 		let releaseResponse!: () => void;
@@ -249,15 +251,19 @@ describe("Shiori (栞) memory review", () => {
 					maxTokens: 8192,
 				},
 			});
+			expect(runtime.isShioriReviewing()).toBe(true);
 			SessionManager.inMemory(cwd);
 			releaseResponse();
 			await expect(review).resolves.toMatchObject({ saved: 1, reviewedEntries: 1 });
+			expect(runtime.isShioriReviewing()).toBe(false);
+			expect(reviewingStates).toEqual([true, false]);
 			expect(chooseScope).not.toHaveBeenCalled();
 			expect(getRecodeShioriCheckpoint(original.getBranch())).toMatchObject({ saved: 1 });
 			expect(await readFile(join(cwd, ".pi", "memory", "MEMORY.md"), "utf8")).toContain(
 				"Run focused tests before broad checks.",
 			);
 		} finally {
+			unsubscribe();
 			runtime.close();
 			vi.unstubAllGlobals();
 			await rm(cwd, { recursive: true, force: true });

@@ -16,10 +16,16 @@ interface ManagerEntry {
 	includeProject: boolean;
 }
 
+export interface RecodeShioriRuntimeState {
+	reviewing: boolean;
+	failed: boolean;
+}
+
 /** Process-owned Kioku and Shiori lifecycle, independent of extension/session replacement. */
 export class RecodeMemoryRuntime {
 	private readonly managers = new Map<string, ManagerEntry>();
 	private readonly activeShioriSessions = new Set<string>();
+	private readonly shioriListeners = new Set<(state: RecodeShioriRuntimeState) => void>();
 	private config?: RecodeMemoryConfig;
 
 	setConfig(config: RecodeMemoryConfig): void {
@@ -50,8 +56,18 @@ export class RecodeMemoryRuntime {
 		return manager;
 	}
 
-	isShioriReviewing(sessionId: string): boolean {
-		return this.activeShioriSessions.has(sessionId);
+	isShioriReviewing(): boolean {
+		return this.activeShioriSessions.size > 0;
+	}
+
+	subscribeShiori(listener: (state: RecodeShioriRuntimeState) => void): () => void {
+		this.shioriListeners.add(listener);
+		return () => this.shioriListeners.delete(listener);
+	}
+
+	private emitShioriState(failed = false): void {
+		const state = { reviewing: this.isShioriReviewing(), failed };
+		for (const listener of this.shioriListeners) listener(state);
 	}
 
 	async runShiori(options: {
@@ -67,21 +83,31 @@ export class RecodeMemoryRuntime {
 		onProgress?: (event: RecodeShioriProgressEvent) => void;
 	}): Promise<Awaited<ReturnType<typeof executeRecodeShiori>> | undefined> {
 		const sessionId = options.sessionManager.getSessionId();
-		if (this.activeShioriSessions.has(sessionId)) return undefined;
+		if (this.isShioriReviewing()) return undefined;
 		this.activeShioriSessions.add(sessionId);
 		try {
-			return await executeRecodeShiori({
+			const result = await executeRecodeShiori({
 				...options,
 				config: this.getConfig(),
 				manager: await this.getManager(options.cwd, options.projectTrusted),
+				onProgress: (event) => {
+					options.onProgress?.(event);
+					if (event.type === "start") this.emitShioriState();
+				},
 			});
-		} finally {
 			this.activeShioriSessions.delete(sessionId);
+			this.emitShioriState();
+			return result;
+		} catch (error) {
+			this.activeShioriSessions.delete(sessionId);
+			this.emitShioriState(true);
+			throw error;
 		}
 	}
 
 	close(): void {
 		for (const { manager } of this.managers.values()) manager.close();
 		this.managers.clear();
+		this.shioriListeners.clear();
 	}
 }
