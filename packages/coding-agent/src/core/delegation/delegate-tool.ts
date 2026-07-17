@@ -59,16 +59,22 @@ function validateWorkers(workers: readonly NamedWorkerDefinition[]): Map<string,
 	return registry;
 }
 
+function formatProcessHeader(result: NamedWorkerRunResult): string {
+	const durationSeconds = (result.durationMs / 1_000).toFixed(result.durationMs < 10_000 ? 1 : 0);
+	return `[worker ${result.workerId}/${result.workerName} | run ${result.runId.slice(0, 8)} | ${result.status} | ${durationSeconds}s]`;
+}
+
 function formatToolResult(result: NamedWorkerRunResult): string {
+	const header = formatProcessHeader(result);
 	switch (result.status) {
 		case "completed":
-			return `${result.workerName} completed the delegated task.\n\n${result.output}`;
+			return `${header}\n${result.output}`;
 		case "cancelled":
-			return `${result.workerName} was cancelled${result.error ? `: ${result.error}` : "."}`;
+			return `${header}\n${result.error ?? "Delegated worker was cancelled."}`;
 		case "timeout":
-			return `${result.workerName} timed out${result.error ? `: ${result.error}` : "."}`;
+			return `${header}\n${result.error ?? "Delegated worker timed out."}`;
 		case "failed":
-			return `${result.workerName} failed${result.error ? `: ${result.error}` : "."}`;
+			return `${header}\n${result.error ?? "Delegated worker failed."}`;
 	}
 }
 
@@ -88,9 +94,9 @@ export function createDelegateTool(options: CreateDelegateToolOptions): AgentToo
 	return {
 		name: "delegate",
 		label: "delegate",
-		description: `Delegate one focused, read-only task to a named worker. Delegation depth is limited to one. Do not call this tool when the user says to work directly or not to delegate. Do not delegate merely to perform a single read, grep, find, or ls operation; use the parent agent's own tools for simple deterministic work. Delegate only when a bounded multi-step task benefits from independent research or audit. Phase 1 runs one delegated worker at a time. If delegation fails, report the failure or continue only with exact scoped paths already known; never launch an unbounded repository-wide scan.\n\nAvailable workers:\n${availableWorkers}`,
+		description: `Delegate one focused, read-only task to a named worker. Delegation depth is limited to one. Do not call this tool when the user says to work directly or not to delegate. Do not delegate merely to perform a single read, grep, find, or ls operation; use the parent agent's own tools for simple deterministic work. Delegate only when a bounded multi-step task benefits from independent research or audit. You may launch multiple independent workers in one turn; the configured model provider may queue their requests. Track each returned worker id, run id, status, and duration before deciding the next action. If delegation fails, report the failure or continue only with exact scoped paths already known; never launch an unbounded repository-wide scan.\n\nAvailable workers:\n${availableWorkers}`,
 		parameters: delegateSchema,
-		executionMode: "sequential",
+		executionMode: "parallel",
 		async execute(_toolCallId, input, signal) {
 			const worker = workers.get(input.worker);
 			if (!worker) {
