@@ -4,7 +4,12 @@ import type { Model } from "@reitaard/repi-ai";
 import { getAgentDir } from "../config.ts";
 import { resolvePath } from "../utils/paths.ts";
 import { AuthStorage } from "./auth-storage.ts";
-import { createDelegateTool, REPI_NAMED_WORKERS } from "./delegation/index.ts";
+import {
+	createDelegateTool,
+	createWorkerControlTools,
+	REPI_NAMED_WORKERS,
+	WorkerDirectory,
+} from "./delegation/index.ts";
 import type { SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
 import { ModelRegistry } from "./model-registry.ts";
 import {
@@ -20,25 +25,13 @@ import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapp
 
 const DELEGATION_ENV = "REPI_DELEGATION";
 
-/**
- * Non-fatal issues collected while creating services or sessions.
- *
- * Runtime creation returns diagnostics to the caller instead of printing or
- * exiting. The app layer decides whether warnings should be shown and whether
- * errors should abort startup.
- */
+/** Non-fatal issues collected while creating services or sessions. */
 export interface AgentSessionRuntimeDiagnostic {
 	type: "info" | "warning" | "error";
 	message: string;
 }
 
-/**
- * Inputs for creating cwd-bound runtime services.
- *
- * These services are recreated whenever the effective session cwd changes.
- * CLI-provided resource paths should be resolved to absolute paths before they
- * reach this function, so later cwd switches do not reinterpret them.
- */
+/** Inputs for creating cwd-bound runtime services. */
 export interface CreateAgentSessionServicesOptions {
 	cwd: string;
 	agentDir?: string;
@@ -50,12 +43,7 @@ export interface CreateAgentSessionServicesOptions {
 	resourceLoaderReloadOptions?: ResourceLoaderReloadOptions;
 }
 
-/**
- * Inputs for creating an AgentSession from already-created services.
- *
- * Use this after services exist and any cwd-bound model/tool/session options
- * have been resolved against those services.
- */
+/** Inputs for creating an AgentSession from already-created services. */
 export interface CreateAgentSessionFromServicesOptions {
 	services: AgentSessionServices;
 	sessionManager: SessionManager;
@@ -69,12 +57,7 @@ export interface CreateAgentSessionFromServicesOptions {
 	customTools?: ToolDefinition[];
 }
 
-/**
- * Coherent cwd-bound runtime services for one effective session cwd.
- *
- * This is infrastructure only. The AgentSession itself is created separately so
- * session options can be resolved against these services first.
- */
+/** Coherent cwd-bound runtime services for one effective session cwd. */
 export interface AgentSessionServices {
 	cwd: string;
 	agentDir: string;
@@ -82,6 +65,8 @@ export interface AgentSessionServices {
 	settingsManager: SettingsManager;
 	modelRegistry: ModelRegistry;
 	resourceLoader: ResourceLoader;
+	/** Shared by every Aizen/session built from these services. */
+	workerDirectory?: WorkerDirectory;
 	diagnostics: AgentSessionRuntimeDiagnostic[];
 }
 
@@ -96,19 +81,37 @@ function resolveCurrentModel(options: CreateAgentSessionFromServicesOptions): Mo
 	return options.services.modelRegistry.find(persisted.provider, persisted.modelId) ?? options.model;
 }
 
-function resolveCustomTools(options: CreateAgentSessionFromServicesOptions): ToolDefinition[] | undefined {
-	const customTools = [...(options.customTools ?? [])];
-	if (!isTruthyEnvFlag(process.env[DELEGATION_ENV]) || customTools.some((tool) => tool.name === "delegate")) {
-		return customTools.length > 0 ? customTools : undefined;
-	}
-	const delegate = createDelegateTool({
-		cwd: options.services.cwd,
+function getOrCreateWorkerDirectory(options: CreateAgentSessionFromServicesOptions): WorkerDirectory {
+	const runtime = {
 		getModel: () => resolveCurrentModel(options),
 		getSkills: () => options.services.resourceLoader.getSkills().skills,
 		modelRegistry: options.services.modelRegistry,
+	};
+	if (options.services.workerDirectory) {
+		options.services.workerDirectory.updateRuntime(runtime);
+		return options.services.workerDirectory;
+	}
+	const directory = new WorkerDirectory({
+		cwd: options.services.cwd,
 		workers: REPI_NAMED_WORKERS,
+		...runtime,
 	});
-	customTools.push(createToolDefinitionFromAgentTool(delegate));
+	options.services.workerDirectory = directory;
+	return directory;
+}
+
+function resolveCustomTools(options: CreateAgentSessionFromServicesOptions): ToolDefinition[] | undefined {
+	const customTools = [...(options.customTools ?? [])];
+	if (!isTruthyEnvFlag(process.env[DELEGATION_ENV])) return customTools.length > 0 ? customTools : undefined;
+
+	const directory = getOrCreateWorkerDirectory(options);
+	const workerTools = [createDelegateTool({ directory }), ...createWorkerControlTools(directory)];
+	const existingNames = new Set(customTools.map((tool) => tool.name));
+	for (const tool of workerTools) {
+		if (existingNames.has(tool.name)) continue;
+		customTools.push(createToolDefinitionFromAgentTool(tool));
+		existingNames.add(tool.name);
+	}
 	return customTools;
 }
 
@@ -116,17 +119,13 @@ function applyExtensionFlagValues(
 	resourceLoader: ResourceLoader,
 	extensionFlagValues: Map<string, boolean | string> | undefined,
 ): AgentSessionRuntimeDiagnostic[] {
-	if (!extensionFlagValues) {
-		return [];
-	}
+	if (!extensionFlagValues) return [];
 
 	const diagnostics: AgentSessionRuntimeDiagnostic[] = [];
 	const extensionsResult = resourceLoader.getExtensions();
 	const registeredFlags = new Map<string, { type: "boolean" | "string" }>();
 	for (const extension of extensionsResult.extensions) {
-		for (const [name, flag] of extension.flags) {
-			registeredFlags.set(name, { type: flag.type });
-		}
+		for (const [name, flag] of extension.flags) registeredFlags.set(name, { type: flag.type });
 	}
 
 	const unknownFlags: string[] = [];
@@ -144,10 +143,7 @@ function applyExtensionFlagValues(
 			extensionsResult.runtime.flagValues.set(name, value);
 			continue;
 		}
-		diagnostics.push({
-			type: "error",
-			message: `Extension flag "--${name}" requires a value`,
-		});
+		diagnostics.push({ type: "error", message: `Extension flag "--${name}" requires a value` });
 	}
 
 	if (unknownFlags.length > 0) {
@@ -156,15 +152,10 @@ function applyExtensionFlagValues(
 			message: `Unknown option${unknownFlags.length === 1 ? "" : "s"}: ${unknownFlags.map((name) => `--${name}`).join(", ")}`,
 		});
 	}
-
 	return diagnostics;
 }
 
-/**
- * Create cwd-bound runtime services.
- *
- * Returns services plus diagnostics. It does not create an AgentSession.
- */
+/** Create cwd-bound runtime services. */
 export async function createAgentSessionServices(
 	options: CreateAgentSessionServicesOptions,
 ): Promise<AgentSessionServices> {
@@ -188,10 +179,7 @@ export async function createAgentSessionServices(
 			modelRegistry.registerProvider(name, config);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			diagnostics.push({
-				type: "error",
-				message: `Extension "${extensionPath}" error: ${message}`,
-			});
+			diagnostics.push({ type: "error", message: `Extension "${extensionPath}" error: ${message}` });
 		}
 	}
 	extensionsResult.runtime.pendingProviderRegistrations = [];
@@ -208,13 +196,7 @@ export async function createAgentSessionServices(
 	};
 }
 
-/**
- * Create an AgentSession from previously created services.
- *
- * This keeps session creation separate from service creation so callers can
- * resolve model, thinking, tools, and other session inputs against the target
- * cwd before constructing the session.
- */
+/** Create an AgentSession from previously created services. */
 export async function createAgentSessionFromServices(
 	options: CreateAgentSessionFromServicesOptions,
 ): Promise<CreateAgentSessionResult> {
