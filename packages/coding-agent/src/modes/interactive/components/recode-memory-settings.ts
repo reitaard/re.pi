@@ -1,4 +1,5 @@
 import { Container, type SettingItem, SettingsList } from "@reitaard/repi-tui";
+import { RECODE_SHIORI_DISPLAY_NAME } from "../../../core/recode-memory/recode-shiori.ts";
 import { getSettingsListTheme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 
@@ -66,22 +67,22 @@ export class RecodeMemorySettingsComponent extends Container {
 			},
 			{
 				id: "shiori-model",
-				label: "Shiori model",
-				description: "Model used by Shiori to review session memory",
+				label: `${RECODE_SHIORI_DISPLAY_NAME} model`,
+				description: `Model used by ${RECODE_SHIORI_DISPLAY_NAME} to review session memory`,
 				currentValue: state.shioriModel,
 				values: state.shioriModels,
 			},
 			{
 				id: "shiori-thinking",
-				label: "Shiori thinking",
-				description: "Allow Shiori to reason before extracting memory",
+				label: `${RECODE_SHIORI_DISPLAY_NAME} thinking`,
+				description: `Allow ${RECODE_SHIORI_DISPLAY_NAME} to reason before extracting memory`,
 				currentValue: state.shioriThinking ? "on" : "off",
 				values: ["off", "on"],
 			},
 			{
 				id: "cardinal-routing",
 				label: "Cardinal routing",
-				description: "Choose where Shiori's durable memories are saved",
+				description: `Choose where ${RECODE_SHIORI_DISPLAY_NAME}'s durable memories are saved`,
 				currentValue: state.cardinalRouting,
 				values: ["auto", "project", "global", "ask"],
 			},

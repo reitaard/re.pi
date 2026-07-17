@@ -34,7 +34,13 @@ import { createRecodeShioriIndicator } from "./modes/interactive/components/reco
 import type { Theme } from "./modes/interactive/theme/theme.ts";
 
 const RECODE_KIOKU_DISPLAY_NAME = "Kioku (\u8a18\u61b6)";
+const RECODE_SHIORI_MODEL_LABEL = `${RECODE_SHIORI_DISPLAY_NAME} model`;
+const RECODE_SHIORI_THINKING_LABEL = `${RECODE_SHIORI_DISPLAY_NAME} thinking`;
 const RECODE_SHIORI_WIDGET = "recode-shiori-active";
+
+export function formatRecodeMemoryFooter(scope: RecodeMemoryScopeSelection | "error"): string {
+	return `${RECODE_KIOKU_DISPLAY_NAME}: ${scope}`;
+}
 
 const DEFAULT_CONFIG: RecodeMemoryConfig = {
 	enabled: true,
@@ -135,8 +141,8 @@ function statusText(manager: RecodeMemoryManager): string {
 		`Global memory access: ${manager.getConfig().globalAccess ? "enabled" : "disabled"}`,
 		`Global auto-recall: ${manager.getConfig().globalAutoRecall ? "enabled" : "disabled"}`,
 		`${RECODE_SHIORI_DISPLAY_NAME}: manual`,
-		`Shiori model: ${manager.getConfig().shioriModel?.id ?? "current"}`,
-		`Shiori thinking: ${manager.getConfig().shioriThinking ? "on" : "off"}`,
+		`${RECODE_SHIORI_MODEL_LABEL}: ${manager.getConfig().shioriModel?.id ?? "current"}`,
+		`${RECODE_SHIORI_THINKING_LABEL}: ${manager.getConfig().shioriThinking ? "on" : "off"}`,
 		`Cardinal routing: ${manager.getConfig().cardinalRouting}`,
 		`Indexed: ${status.documents} documents, ${status.chunks} chunks`,
 		`Active project: ${dirname(dirname(status.projectRoot))}`,
@@ -235,7 +241,7 @@ export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryR
 			await getManager(ctx.cwd, projectTrusted);
 			ctx.ui.setStatus(
 				"recode-memory",
-				ctx.ui.theme.fg(config.enabled ? "success" : "muted", `kioku:${config.scope}`),
+				ctx.ui.theme.fg(config.enabled ? "success" : "muted", formatRecodeMemoryFooter(config.scope)),
 			);
 			ctx.ui.setStatus(
 				"recode-shiori",
@@ -244,7 +250,7 @@ export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryR
 					: undefined,
 			);
 		} catch (error) {
-			ctx.ui.setStatus("recode-memory", ctx.ui.theme.fg("error", "memory:error"));
+			ctx.ui.setStatus("recode-memory", ctx.ui.theme.fg("error", formatRecodeMemoryFooter("error")));
 			ctx.ui.notify(
 				`Memory initialization failed: ${error instanceof Error ? error.message : String(error)}`,
 				"error",
@@ -614,12 +620,24 @@ export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryR
 				{ value: "global-auto on", description: "Inject relevant global memory before agent turns" },
 				{ value: "global-auto off", description: "Keep global memory available only on demand" },
 				{ value: "cardinal auto", description: "Route project knowledge and global preferences automatically" },
-				{ value: "cardinal project", description: "Save every Shiori memory to this project" },
-				{ value: "cardinal global", description: "Save every Shiori memory to global memory" },
-				{ value: "cardinal ask", description: "Ask where to save each Shiori memory" },
-				{ value: "shiori thinking off", description: "Keep Shiori fast and non-thinking" },
-				{ value: "shiori thinking on", description: "Allow Shiori to reason before extracting memory" },
-				{ value: "shiori model current", description: "Use the active RePi model for Shiori" },
+				{
+					value: "cardinal project",
+					description: `Save every ${RECODE_SHIORI_DISPLAY_NAME} memory to this project`,
+				},
+				{
+					value: "cardinal global",
+					description: `Save every ${RECODE_SHIORI_DISPLAY_NAME} memory to global memory`,
+				},
+				{ value: "cardinal ask", description: `Ask where to save each ${RECODE_SHIORI_DISPLAY_NAME} memory` },
+				{ value: "shiori thinking off", description: `Keep ${RECODE_SHIORI_DISPLAY_NAME} fast and non-thinking` },
+				{
+					value: "shiori thinking on",
+					description: `Allow ${RECODE_SHIORI_DISPLAY_NAME} to reason before extracting memory`,
+				},
+				{
+					value: "shiori model current",
+					description: `Use the active RePi model for ${RECODE_SHIORI_DISPLAY_NAME}`,
+				},
 				{ value: "scope global", description: "Use global memory for explicit searches" },
 				{ value: "scope project", description: "Use project memory for explicit searches" },
 				{ value: "scope both", description: "Search project and global memory" },
@@ -650,7 +668,10 @@ export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryR
 								await updateConfig({ ...config, enabled: value === "enabled" });
 								ctx.ui.setStatus(
 									"recode-memory",
-									ctx.ui.theme.fg(config.enabled ? "success" : "muted", `kioku:${config.scope}`),
+									ctx.ui.theme.fg(
+										config.enabled ? "success" : "muted",
+										formatRecodeMemoryFooter(config.scope),
+									),
 								);
 								break;
 							case "project-auto-recall":
@@ -699,7 +720,10 @@ export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryR
 								break;
 							case "search-scope":
 								await updateConfig({ ...config, scope: value as RecodeMemoryScopeSelection });
-								ctx.ui.setStatus("recode-memory", ctx.ui.theme.fg("success", `kioku:${config.scope}`));
+								ctx.ui.setStatus(
+									"recode-memory",
+									ctx.ui.theme.fg("success", formatRecodeMemoryFooter(config.scope)),
+								);
 								break;
 							case "reindex": {
 								const result = await active.sync(ctx.isProjectTrusted());
@@ -752,8 +776,8 @@ export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryR
 						`Global memory access: ${config.globalAccess ? "enabled" : "disabled"}`,
 						`Global auto-recall: ${config.globalAutoRecall ? "enabled" : "disabled"}`,
 						`${RECODE_SHIORI_DISPLAY_NAME}: manual`,
-						`Shiori model: ${config.shioriModel?.id ?? `current (${ctx.model?.id ?? "none"})`}`,
-						`Shiori thinking: ${config.shioriThinking ? "on" : "off"}`,
+						`${RECODE_SHIORI_MODEL_LABEL}: ${config.shioriModel?.id ?? `current (${ctx.model?.id ?? "none"})`}`,
+						`${RECODE_SHIORI_THINKING_LABEL}: ${config.shioriThinking ? "on" : "off"}`,
 						`Cardinal routing: ${config.cardinalRouting}`,
 						`Default search scope: ${config.scope}`,
 						"Reindex memory",
@@ -779,12 +803,12 @@ export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryR
 							globalAccess: enabled ? true : config.globalAccess,
 							globalAutoRecall: enabled,
 						});
-					} else if (choice.startsWith("Shiori model:")) {
+					} else if (choice.startsWith(`${RECODE_SHIORI_MODEL_LABEL}:`)) {
 						const provider = ctx.model?.provider;
 						const models = provider
 							? ctx.modelRegistry.getAvailable().filter((model) => model.provider === provider)
 							: [];
-						const selected = await ctx.ui.select("Shiori model", [
+						const selected = await ctx.ui.select(RECODE_SHIORI_MODEL_LABEL, [
 							"Current model",
 							...models.map((model) => model.id),
 						]);
@@ -797,7 +821,7 @@ export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryR
 							if (model)
 								await updateConfig({ ...config, shioriModel: { provider: model.provider, id: model.id } });
 						}
-					} else if (choice.startsWith("Shiori thinking:")) {
+					} else if (choice.startsWith(`${RECODE_SHIORI_THINKING_LABEL}:`)) {
 						await updateConfig({ ...config, shioriThinking: !config.shioriThinking });
 					} else if (choice.startsWith("Cardinal routing:")) {
 						const selected = await ctx.ui.select("Cardinal routing", ["auto", "project", "global", "ask"]);
@@ -831,7 +855,7 @@ export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryR
 				await updateConfig({ ...config, enabled: trimmed === "on" });
 				ctx.ui.setStatus(
 					"recode-memory",
-					ctx.ui.theme.fg(config.enabled ? "success" : "muted", `kioku:${config.scope}`),
+					ctx.ui.theme.fg(config.enabled ? "success" : "muted", formatRecodeMemoryFooter(config.scope)),
 				);
 				ctx.ui.notify(`Memory ${config.enabled ? "enabled" : "disabled"}`, "info");
 				return;
@@ -873,14 +897,14 @@ export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryR
 			}
 			if (trimmed === "shiori thinking on" || trimmed === "shiori thinking off") {
 				await updateConfig({ ...config, shioriThinking: trimmed.endsWith("on") });
-				ctx.ui.notify(`Shiori thinking ${config.shioriThinking ? "enabled" : "disabled"}`, "info");
+				ctx.ui.notify(`${RECODE_SHIORI_THINKING_LABEL} ${config.shioriThinking ? "enabled" : "disabled"}`, "info");
 				return;
 			}
 			if (trimmed === "shiori model current") {
 				const next = { ...config };
 				delete next.shioriModel;
 				await updateConfig(next);
-				ctx.ui.notify("Shiori will use the current RePi model", "info");
+				ctx.ui.notify(`${RECODE_SHIORI_DISPLAY_NAME} will use the current RePi model`, "info");
 				return;
 			}
 			if (trimmed.startsWith("shiori model ")) {
@@ -892,11 +916,14 @@ export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryR
 							.find((candidate) => candidate.provider === provider && candidate.id === modelId)
 					: undefined;
 				if (!model) {
-					ctx.ui.notify(`Shiori model ${modelId || "(empty)"} is unavailable from the current provider`, "error");
+					ctx.ui.notify(
+						`${RECODE_SHIORI_MODEL_LABEL} ${modelId || "(empty)"} is unavailable from the current provider`,
+						"error",
+					);
 					return;
 				}
 				await updateConfig({ ...config, shioriModel: { provider: model.provider, id: model.id } });
-				ctx.ui.notify(`Shiori model set to ${model.id}`, "info");
+				ctx.ui.notify(`${RECODE_SHIORI_MODEL_LABEL} set to ${model.id}`, "info");
 				return;
 			}
 			if (trimmed.startsWith("scope ")) {
@@ -906,7 +933,7 @@ export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryR
 					return;
 				}
 				await updateConfig({ ...config, scope });
-				ctx.ui.setStatus("recode-memory", ctx.ui.theme.fg("success", `kioku:${scope}`));
+				ctx.ui.setStatus("recode-memory", ctx.ui.theme.fg("success", formatRecodeMemoryFooter(scope)));
 				ctx.ui.notify(`Memory scope set to ${scope}`, "info");
 				return;
 			}

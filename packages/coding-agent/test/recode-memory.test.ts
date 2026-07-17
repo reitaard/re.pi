@@ -6,7 +6,11 @@ import { chunkRecodeMemory } from "../src/core/recode-memory/recode-memory-chunk
 import { RecodeMemoryManager } from "../src/core/recode-memory/recode-memory-manager.ts";
 import { resolveRecodeMemoryLocation } from "../src/core/recode-memory/recode-memory-runtime.ts";
 import { archiveRecodeShioriDeskItem, placeOnRecodeShioriDesk } from "../src/core/recode-memory/recode-shiori-desk.ts";
-import { normalizeRecodeMemoryConfig, resolveAutomaticMemoryScope } from "../src/recode-memory.ts";
+import {
+	formatRecodeMemoryFooter,
+	normalizeRecodeMemoryConfig,
+	resolveAutomaticMemoryScope,
+} from "../src/recode-memory.ts";
 
 const roots: string[] = [];
 const managers: RecodeMemoryManager[] = [];
@@ -38,6 +42,11 @@ function createManager(root: string): RecodeMemoryManager {
 }
 
 describe("re.code core memory", () => {
+	it("uses the Kioku kanji display name in footer status", () => {
+		expect(formatRecodeMemoryFooter("project")).toBe("Kioku (記憶): project");
+		expect(formatRecodeMemoryFooter("error")).toBe("Kioku (記憶): error");
+	});
+
 	it("reuses an existing project memory root when launched from inside it", () => {
 		const project = resolve(join(tmpdir(), "repi-project"));
 		const memoryRoot = join(project, ".pi", "memory");

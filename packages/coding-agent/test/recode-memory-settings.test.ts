@@ -34,8 +34,8 @@ describe("Kioku memory settings", () => {
 
 		for (const character of "shiori") component.handleInput(character);
 		const filtered = stripAnsi(component.render(80).join("\n"));
-		expect(filtered).toContain("Shiori model");
-		expect(filtered).toContain("Shiori thinking");
+		expect(filtered).toContain("Shiori (栞) model");
+		expect(filtered).toContain("Shiori (栞) thinking");
 		expect(filtered).not.toContain("Project auto-recall");
 	});
 });
