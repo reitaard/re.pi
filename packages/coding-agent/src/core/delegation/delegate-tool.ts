@@ -88,9 +88,9 @@ export function createDelegateTool(options: CreateDelegateToolOptions): AgentToo
 	return {
 		name: "delegate",
 		label: "delegate",
-		description: `Delegate one focused, read-only task to a named worker. Delegation depth is limited to one. Do not call this tool when the user says to work directly or not to delegate. Do not delegate merely to perform a single read, grep, find, or ls operation; use the parent agent's own tools for simple deterministic work. Delegate only when a bounded multi-step task benefits from independent research or audit. Multiple independent delegate calls may run in parallel.\n\nAvailable workers:\n${availableWorkers}`,
+		description: `Delegate one focused, read-only task to a named worker. Delegation depth is limited to one. Do not call this tool when the user says to work directly or not to delegate. Do not delegate merely to perform a single read, grep, find, or ls operation; use the parent agent's own tools for simple deterministic work. Delegate only when a bounded multi-step task benefits from independent research or audit. Phase 1 runs one delegated worker at a time. If delegation fails, report the failure or continue only with exact scoped paths already known; never launch an unbounded repository-wide scan.\n\nAvailable workers:\n${availableWorkers}`,
 		parameters: delegateSchema,
-		executionMode: "parallel",
+		executionMode: "sequential",
 		async execute(_toolCallId, input, signal) {
 			const worker = workers.get(input.worker);
 			if (!worker) {
