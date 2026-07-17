@@ -4,7 +4,8 @@ import { Loader, Text } from "@reitaard/repi-tui";
 import { Type } from "typebox";
 import { getAgentDir } from "./config.ts";
 import type { ExtensionAPI } from "./core/extensions/types.ts";
-import { RecodeMemoryManager } from "./core/recode-memory/recode-memory-manager.ts";
+import type { RecodeMemoryManager } from "./core/recode-memory/recode-memory-manager.ts";
+import { RecodeMemoryRuntime } from "./core/recode-memory/recode-memory-runtime.ts";
 import type {
 	RecodeMemoryConfig,
 	RecodeMemoryScopeSelection,
@@ -15,9 +16,10 @@ import type {
 import {
 	RECODE_SHIORI_DISPLAY_NAME,
 	RECODE_SHIORI_MESSAGE_ENTRY,
+	type RecodeShioriMemoryCandidate,
 	type RecodeShioriMessageEntry,
-	runRecodeShiori,
 } from "./core/recode-memory/recode-shiori.ts";
+import type { SessionManager } from "./core/session-manager.ts";
 import { createRecodeShioriIndicator } from "./modes/interactive/components/recode-shiori-indicator.ts";
 
 const RECODE_KIOKU_DISPLAY_NAME = "Kioku (\u8a18\u61b6)";
@@ -148,9 +150,10 @@ export function resolveAutomaticMemoryScope(
 const Scope = Type.Union([Type.Literal("global"), Type.Literal("project")]);
 const SearchScope = Type.Union([Scope, Type.Literal("both")]);
 
-export async function recodeMemory(pi: ExtensionAPI): Promise<void> {
+export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryRuntime()): Promise<void> {
 	let config = await readConfig();
-	let manager: RecodeMemoryManager | undefined;
+	let adapterActive = true;
+	runtime.setConfig(config);
 
 	pi.registerEntryRenderer<RecodeShioriMessageEntry>(RECODE_SHIORI_MESSAGE_ENTRY, (entry, _options, theme) => {
 		const message = entry.data?.message;
@@ -165,21 +168,12 @@ export async function recodeMemory(pi: ExtensionAPI): Promise<void> {
 	});
 
 	async function getManager(cwd: string, includeProject: boolean): Promise<RecodeMemoryManager> {
-		if (!manager) {
-			manager = new RecodeMemoryManager({
-				globalRoot: join(getAgentDir(), "memory"),
-				projectRoot: join(cwd, ".pi", "memory"),
-				databasePath: join(getAgentDir(), "recode-memory.sqlite"),
-				config,
-			});
-			await manager.initialize(includeProject);
-		}
-		return manager;
+		return runtime.getManager(cwd, includeProject);
 	}
 
 	async function updateConfig(next: RecodeMemoryConfig): Promise<void> {
 		config = next;
-		manager?.setConfig(config);
+		runtime.setConfig(config);
 		await saveConfig(config);
 	}
 
@@ -201,8 +195,7 @@ export async function recodeMemory(pi: ExtensionAPI): Promise<void> {
 	});
 
 	pi.on("session_shutdown", async () => {
-		manager?.close();
-		manager = undefined;
+		adapterActive = false;
 	});
 
 	pi.on("before_agent_start", async (event, ctx) => {
@@ -347,6 +340,12 @@ export async function recodeMemory(pi: ExtensionAPI): Promise<void> {
 		handler: async (_args, ctx) => {
 			let greeting: string | undefined;
 			try {
+				await ctx.waitForIdle();
+				const sessionManager = ctx.sessionManager as SessionManager;
+				if (runtime.isShioriReviewing(sessionManager.getSessionId())) {
+					ctx.ui.notify(`${RECODE_SHIORI_DISPLAY_NAME}: A memory review is already running.`, "info");
+					return;
+				}
 				let shioriModel = ctx.model;
 				if (config.shioriModel) {
 					const preferred = ctx.modelRegistry.find(config.shioriModel.provider, config.shioriModel.id);
@@ -358,15 +357,32 @@ export async function recodeMemory(pi: ExtensionAPI): Promise<void> {
 						);
 					}
 				}
-				await runRecodeShiori({
-					pi,
-					ctx,
-					config,
-					manager: await getManager(ctx.cwd, ctx.isProjectTrusted()),
+				if (!shioriModel) throw new Error("Shiori needs an active model");
+				const result = await runtime.runShiori({
+					cwd: ctx.cwd,
+					sessionManager,
+					modelRegistry: ctx.modelRegistry,
+					projectTrusted: ctx.isProjectTrusted(),
 					model: shioriModel,
+					chooseScope: async (_candidate: RecodeShioriMemoryCandidate, globalAccess) => {
+						if (!adapterActive || !ctx.hasUI) return "project";
+						const selected = await ctx.ui.select(`${RECODE_SHIORI_DISPLAY_NAME}: save memory`, [
+							"Project",
+							...(globalAccess ? ["Global"] : []),
+							"Skip",
+						]);
+						if (selected === "Global") return "global";
+						if (selected === "Project") return "project";
+						return undefined;
+					},
 					onProgress: (event) => {
+						if (!adapterActive) return;
 						if (event.type === "start") {
 							greeting = event.message;
+							ctx.ui.setStatus(
+								"recode-shiori",
+								ctx.ui.theme.fg("success", `${RECODE_SHIORI_DISPLAY_NAME}: reviewing`),
+							);
 							ctx.ui.setWidget(RECODE_SHIORI_WIDGET, (tui, activeTheme) => {
 								const loader = new Loader(
 									tui,
@@ -384,22 +400,27 @@ export async function recodeMemory(pi: ExtensionAPI): Promise<void> {
 							return;
 						}
 						ctx.ui.setWidget(RECODE_SHIORI_WIDGET, undefined);
-						if (greeting) {
-							pi.appendEntry<RecodeShioriMessageEntry>(RECODE_SHIORI_MESSAGE_ENTRY, { message: greeting });
-						}
-						pi.appendEntry<RecodeShioriMessageEntry>(RECODE_SHIORI_MESSAGE_ENTRY, { message: event.message });
 					},
 				});
-			} catch (error) {
-				if (greeting) {
-					pi.appendEntry<RecodeShioriMessageEntry>(RECODE_SHIORI_MESSAGE_ENTRY, { message: greeting });
+				if (result && adapterActive) {
+					ctx.ui.setStatus(
+						"recode-shiori",
+						ctx.ui.theme.fg("success", `${RECODE_SHIORI_DISPLAY_NAME}: saved ${result.saved}`),
+					);
 				}
-				ctx.ui.notify(
-					`${RECODE_SHIORI_DISPLAY_NAME}: ${error instanceof Error ? error.message : String(error)}`,
-					"error",
-				);
+				if (!result && adapterActive) {
+					ctx.ui.notify(`${RECODE_SHIORI_DISPLAY_NAME}: No new session entries to review.`, "info");
+				}
+			} catch (error) {
+				if (adapterActive) {
+					ctx.ui.setStatus("recode-shiori", ctx.ui.theme.fg("error", `${RECODE_SHIORI_DISPLAY_NAME}: error`));
+					ctx.ui.notify(
+						`${RECODE_SHIORI_DISPLAY_NAME}: ${error instanceof Error ? error.message : String(error)}`,
+						"error",
+					);
+				}
 			} finally {
-				if (greeting) ctx.ui.setWidget(RECODE_SHIORI_WIDGET, undefined);
+				if (greeting && adapterActive) ctx.ui.setWidget(RECODE_SHIORI_WIDGET, undefined);
 			}
 		},
 	});

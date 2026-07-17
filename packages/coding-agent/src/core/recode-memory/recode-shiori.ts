@@ -1,6 +1,6 @@
 import type { Model } from "@reitaard/repi-ai";
-import type { ExtensionAPI, ExtensionCommandContext } from "../extensions/types.ts";
-import type { SessionEntry } from "../session-manager.ts";
+import type { ModelRegistry } from "../model-registry.ts";
+import type { SessionEntry, SessionManager } from "../session-manager.ts";
 import type { RecodeMemoryManager } from "./recode-memory-manager.ts";
 import type { RecodeMemoryConfig, RecodeMemoryScope, RecodeShioriRouting } from "./recode-memory-types.ts";
 import { runRecodeShioriHarness } from "./recode-shiori-harness.ts";
@@ -32,7 +32,6 @@ const SHIORI_MEMORY_GREETINGS = [
 const SHIORI_CHUNK_CHARACTERS = 24_000;
 const SHIORI_MAX_CHUNKS_PER_RUN = 4;
 const SHIORI_MAX_MEMORIES_PER_CHUNK = 10;
-const activeShioriSessions = new WeakSet<object>();
 
 export function getRecodeShioriGreeting(now = new Date(), random = Math.random): string {
 	const hour = now.getHours();
@@ -82,7 +81,7 @@ interface RecodeShioriReviewChunk {
 	transcript: string;
 }
 
-interface RecodeShioriRunResult {
+export interface RecodeShioriRunResult {
 	reviewedEntries: number;
 	saved: number;
 	skippedDuplicates: number;
@@ -294,24 +293,22 @@ ${transcript}`;
 async function chooseRouting(
 	routing: RecodeShioriRouting,
 	candidate: RecodeShioriMemoryCandidate,
-	ctx: ExtensionCommandContext,
 	globalAccess: boolean,
+	chooseScope?: (
+		candidate: RecodeShioriMemoryCandidate,
+		globalAccess: boolean,
+	) => Promise<RecodeMemoryScope | undefined>,
 ): Promise<{ scope?: RecodeMemoryScope; cancelled: boolean }> {
 	if (routing === "project") return { scope: "project", cancelled: false };
-	if (routing === "global" && globalAccess) return { scope: "global", cancelled: false };
-	if (routing === "auto" && (candidate.scope === "project" || globalAccess)) {
-		return { scope: candidate.scope, cancelled: false };
+	if (routing === "global") return { scope: globalAccess ? "global" : "project", cancelled: false };
+	if (routing === "auto") {
+		return {
+			scope: candidate.scope === "global" && globalAccess ? "global" : "project",
+			cancelled: false,
+		};
 	}
-	if (!ctx.hasUI) return { scope: "project", cancelled: false };
-	const selected = await ctx.ui.select(`${RECODE_SHIORI_DISPLAY_NAME}: save memory`, [
-		"Project",
-		...(globalAccess ? ["Global"] : []),
-		"Skip",
-	]);
-	if (selected === undefined) return { cancelled: true };
-	if (selected === "Global") return { scope: "global", cancelled: false };
-	if (selected === "Project") return { scope: "project", cancelled: false };
-	return { cancelled: false };
+	if (!chooseScope) return { scope: "project", cancelled: false };
+	return { scope: await chooseScope(candidate, globalAccess), cancelled: false };
 }
 
 async function isDuplicate(manager: RecodeMemoryManager, candidate: RecodeShioriMemoryCandidate): Promise<boolean> {
@@ -320,119 +317,94 @@ async function isDuplicate(manager: RecodeMemoryManager, candidate: RecodeShiori
 	return results.some((result) => normalizeText(result.text).includes(normalized));
 }
 
-async function runRecodeShioriUnlocked(options: {
-	pi: ExtensionAPI;
-	ctx: ExtensionCommandContext;
+export async function executeRecodeShiori(options: {
+	cwd: string;
+	sessionManager: SessionManager;
+	modelRegistry: ModelRegistry;
+	projectTrusted: boolean;
 	config: RecodeMemoryConfig;
 	manager: RecodeMemoryManager;
-	model?: Model<any>;
+	model: Model<any>;
+	chooseScope?: (
+		candidate: RecodeShioriMemoryCandidate,
+		globalAccess: boolean,
+	) => Promise<RecodeMemoryScope | undefined>;
 	onProgress?: (event: RecodeShioriProgressEvent) => void;
 }): Promise<RecodeShioriRunResult | undefined> {
-	const { pi, ctx, config, manager, onProgress } = options;
-	const model = options.model ?? ctx.model;
+	const { config, manager, model, onProgress, sessionManager } = options;
 	if (!config.enabled) throw new Error("Kioku memory is disabled. Enable it from /memory");
-	if (!ctx.isProjectTrusted()) throw new Error("Shiori is unavailable until this project is trusted");
-	if (!model) throw new Error("Shiori needs an active model");
-	await ctx.waitForIdle();
+	if (!options.projectTrusted) throw new Error("Shiori is unavailable until this project is trusted");
 
-	const branch = ctx.sessionManager.getBranch();
+	const branch = sessionManager.getBranch();
 	const review = buildRecodeShioriReviewChunks(branch);
-	if (review.chunks.length === 0) {
-		ctx.ui.notify(`${RECODE_SHIORI_DISPLAY_NAME}: No new session entries to review.`, "info");
-		return undefined;
-	}
+	if (review.chunks.length === 0) return undefined;
 
 	const startedAt = new Date();
 	const greeting = `${getRecodeShioriGreeting(startedAt)} (${review.pendingEntries} entries)`;
-	if (onProgress) onProgress({ type: "start", message: greeting });
-	else pi.appendEntry<RecodeShioriMessageEntry>(RECODE_SHIORI_MESSAGE_ENTRY, { message: greeting });
-	ctx.ui.setStatus("recode-shiori", ctx.ui.theme.fg("success", `${RECODE_SHIORI_DISPLAY_NAME}: reviewing`));
+	onProgress?.({ type: "start", message: greeting });
 	let saved = 0;
 	let skippedDuplicates = 0;
 	let reviewedEntries = 0;
 	let lastReviewedEntryId = review.chunks[0]!.entries.at(-1)!.id;
 	const seenCandidates = new Set<string>();
 	const pendingWrites: RecodeShioriMemoryCandidate[] = [];
-
-	try {
-		for (const chunk of review.chunks) {
-			const output = await runRecodeShioriHarness({
-				cwd: ctx.cwd,
-				model,
-				modelRegistry: ctx.modelRegistry,
-				thinking: config.shioriThinking,
-				systemPrompt: buildRecodeShioriSystemPrompt(startedAt),
-				prompt: reviewPrompt(chunk.transcript),
-			});
-			const candidates = parseRecodeShioriCandidates(output);
-			for (const candidate of candidates) {
-				const candidateKey = normalizeText(candidate.text);
-				if (seenCandidates.has(candidateKey)) {
-					skippedDuplicates += 1;
-					continue;
-				}
-				seenCandidates.add(candidateKey);
-				const route = await chooseRouting(config.cardinalRouting, candidate, ctx, config.globalAccess);
-				if (route.cancelled) throw new Error("Cardinal routing cancelled");
-				if (!route.scope) continue;
-				const routed = { ...candidate, scope: route.scope };
-				if (await isDuplicate(manager, routed)) {
-					skippedDuplicates += 1;
-					continue;
-				}
-				pendingWrites.push(routed);
+	for (const chunk of review.chunks) {
+		const output = await runRecodeShioriHarness({
+			cwd: options.cwd,
+			model,
+			modelRegistry: options.modelRegistry,
+			thinking: config.shioriThinking,
+			systemPrompt: buildRecodeShioriSystemPrompt(startedAt),
+			prompt: reviewPrompt(chunk.transcript),
+		});
+		const candidates = parseRecodeShioriCandidates(output);
+		for (const candidate of candidates) {
+			const candidateKey = normalizeText(candidate.text);
+			if (seenCandidates.has(candidateKey)) {
+				skippedDuplicates += 1;
+				continue;
 			}
-			reviewedEntries += chunk.entries.length;
-			lastReviewedEntryId = chunk.entries.at(-1)!.id;
+			seenCandidates.add(candidateKey);
+			const route = await chooseRouting(config.cardinalRouting, candidate, config.globalAccess, options.chooseScope);
+			if (route.cancelled) throw new Error("Cardinal routing cancelled");
+			if (!route.scope) continue;
+			const routed = { ...candidate, scope: route.scope };
+			if (await isDuplicate(manager, routed)) {
+				skippedDuplicates += 1;
+				continue;
+			}
+			pendingWrites.push(routed);
 		}
-		for (const candidate of pendingWrites) {
-			await manager.write(candidate.scope, candidate.text, false, true, candidate.tags, false);
-			saved += 1;
-		}
-		if (saved > 0) await manager.sync(true);
-		pi.appendEntry(RECODE_SHIORI_CHECKPOINT, {
-			lastReviewedEntryId,
-			reviewedAt: new Date().toISOString(),
-			saved,
-		} satisfies RecodeShioriCheckpoint);
-		ctx.ui.setStatus("recode-shiori", ctx.ui.theme.fg("success", `${RECODE_SHIORI_DISPLAY_NAME}: saved ${saved}`));
-		const savedSummary = saved === 0 ? "No new memories" : `Saved ${saved} ${saved === 1 ? "memory" : "memories"}`;
-		const completion = [
-			savedSummary,
-			`${reviewedEntries} reviewed`,
-			skippedDuplicates > 0
-				? `${skippedDuplicates} ${skippedDuplicates === 1 ? "duplicate" : "duplicates"} skipped`
-				: undefined,
-			review.hasMore ? "more entries remain" : undefined,
-		]
-			.filter((part): part is string => part !== undefined)
-			.join(" · ");
-		if (onProgress) onProgress({ type: "complete", message: completion });
-		else pi.appendEntry<RecodeShioriMessageEntry>(RECODE_SHIORI_MESSAGE_ENTRY, { message: completion });
-		return { reviewedEntries, saved, skippedDuplicates, hasMore: review.hasMore, lastReviewedEntryId };
-	} catch (error) {
-		ctx.ui.setStatus("recode-shiori", ctx.ui.theme.fg("error", `${RECODE_SHIORI_DISPLAY_NAME}: error`));
-		throw error;
+		reviewedEntries += chunk.entries.length;
+		lastReviewedEntryId = chunk.entries.at(-1)!.id;
 	}
-}
-
-export async function runRecodeShiori(options: {
-	pi: ExtensionAPI;
-	ctx: ExtensionCommandContext;
-	config: RecodeMemoryConfig;
-	manager: RecodeMemoryManager;
-	model?: Model<any>;
-	onProgress?: (event: RecodeShioriProgressEvent) => void;
-}): Promise<RecodeShioriRunResult | undefined> {
-	const session = options.ctx.sessionManager;
-	if (activeShioriSessions.has(session)) {
-		options.ctx.ui.notify(`${RECODE_SHIORI_DISPLAY_NAME}: A memory review is already running.`, "info");
-		return undefined;
+	for (const candidate of pendingWrites) {
+		await manager.write(candidate.scope, candidate.text, false, true, candidate.tags, false);
+		saved += 1;
 	}
-	activeShioriSessions.add(session);
-	try {
-		return await runRecodeShioriUnlocked(options);
-	} finally {
-		activeShioriSessions.delete(session);
-	}
+	if (saved > 0) await manager.sync(true);
+	sessionManager.appendCustomEntry(RECODE_SHIORI_CHECKPOINT, {
+		lastReviewedEntryId,
+		reviewedAt: new Date().toISOString(),
+		saved,
+	} satisfies RecodeShioriCheckpoint);
+	const savedSummary = saved === 0 ? "No new memories" : `Saved ${saved} ${saved === 1 ? "memory" : "memories"}`;
+	const completion = [
+		savedSummary,
+		`${reviewedEntries} reviewed`,
+		skippedDuplicates > 0
+			? `${skippedDuplicates} ${skippedDuplicates === 1 ? "duplicate" : "duplicates"} skipped`
+			: undefined,
+		review.hasMore ? "more entries remain" : undefined,
+	]
+		.filter((part): part is string => part !== undefined)
+		.join(" · ");
+	sessionManager.appendCustomEntry(RECODE_SHIORI_MESSAGE_ENTRY, {
+		message: greeting,
+	} satisfies RecodeShioriMessageEntry);
+	sessionManager.appendCustomEntry(RECODE_SHIORI_MESSAGE_ENTRY, {
+		message: completion,
+	} satisfies RecodeShioriMessageEntry);
+	onProgress?.({ type: "complete", message: completion });
+	return { reviewedEntries, saved, skippedDuplicates, hasMore: review.hasMore, lastReviewedEntryId };
 }

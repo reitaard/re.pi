@@ -18,6 +18,7 @@
 
 ### Fixed
 
+- Kept process-owned Kioku managers and Shiori reviews alive across new, resume, fork, and reload session replacement, while checkpoints remain attached to the reviewed session.
 - Kept successful edit/write mutations successful when post-write LSP diagnostics are cancelled or unavailable.
 - Added slash-command argument completion immediately after an exact command and trailing space.
 - Made tool surfaces, status colors, and the generating animation readable in light terminals while preserving one consistent welcome brand.

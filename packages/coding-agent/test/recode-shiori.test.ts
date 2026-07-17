@@ -1,20 +1,21 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import type { ExtensionAPI, ExtensionCommandContext } from "../src/core/extensions/types.ts";
-import type { RecodeMemoryManager } from "../src/core/recode-memory/recode-memory-manager.ts";
+import { RecodeMemoryRuntime } from "../src/core/recode-memory/recode-memory-runtime.ts";
 import {
 	buildRecodeShioriReviewChunks,
 	getRecodeShioriCheckpoint,
 	getRecodeShioriGreeting,
 	parseRecodeShioriCandidates,
 	RECODE_SHIORI_CHECKPOINT,
-	runRecodeShiori,
 } from "../src/core/recode-memory/recode-shiori.ts";
 import {
 	addRecodeShioriResponseFormat,
 	getRecodeLmStudioNativeChatUrl,
 	runRecodeShioriHarness,
 } from "../src/core/recode-memory/recode-shiori-harness.ts";
-import type { SessionEntry } from "../src/core/session-manager.ts";
+import { type SessionEntry, SessionManager } from "../src/core/session-manager.ts";
 import { normalizeRecodeMemoryConfig } from "../src/recode-memory.ts";
 
 function userEntry(id: string, parentId: string | null, text: string): SessionEntry {
@@ -197,39 +198,69 @@ describe("Shiori (栞) memory review", () => {
 		expect(candidates[0]?.tags).toEqual(["preference", "testing"]);
 	});
 
-	it("ignores overlapping reviews for the same session and releases the lock after failure", async () => {
-		let rejectWait: ((error: Error) => void) | undefined;
-		let waitCalls = 0;
-		const notify = vi.fn();
-		const sessionManager = {};
-		const ctx = {
-			isProjectTrusted: () => true,
-			model: {},
-			sessionManager,
-			ui: { notify },
-			waitForIdle: () => {
-				waitCalls += 1;
-				if (waitCalls > 1) return Promise.reject(new Error("retry reached wait"));
-				return new Promise<void>((_resolve, reject) => {
-					rejectWait = reject;
-				});
-			},
-		} as unknown as ExtensionCommandContext;
-		const options = {
-			pi: {} as ExtensionAPI,
-			ctx,
-			config: normalizeRecodeMemoryConfig({}),
-			manager: {} as RecodeMemoryManager,
-		};
-
-		const first = runRecodeShiori(options);
-		await Promise.resolve();
-		await expect(runRecodeShiori(options)).resolves.toBeUndefined();
-		expect(notify).toHaveBeenCalledWith("Shiori (栞): A memory review is already running.", "info");
-
-		rejectWait?.(new Error("first review failed"));
-		await expect(first).rejects.toThrow("first review failed");
-		await expect(runRecodeShiori(options)).rejects.toThrow("retry reached wait");
-		expect(waitCalls).toBe(2);
+	it("finishes the original session review after the UI switches sessions", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "repi-shiori-runtime-"));
+		const runtime = new RecodeMemoryRuntime();
+		runtime.setConfig(normalizeRecodeMemoryConfig({ cardinalRouting: "auto" }));
+		const original = SessionManager.inMemory(cwd);
+		original.appendMessage({ role: "user", content: "Always run focused tests before broad checks.", timestamp: 0 });
+		let releaseResponse!: () => void;
+		const responseReady = new Promise<void>((resolve) => {
+			releaseResponse = resolve;
+		});
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => {
+				await responseReady;
+				return new Response(
+					JSON.stringify({
+						output: [
+							{
+								type: "message",
+								content:
+									'{"memories":[{"text":"Run focused tests before broad checks.","tags":["testing"],"scope":"global","kind":"workflow","confidence":0.95,"evidenceEntryIds":[]}]}',
+							},
+						],
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				);
+			}),
+		);
+		const chooseScope = vi.fn().mockResolvedValue("global");
+		try {
+			const review = runtime.runShiori({
+				cwd,
+				sessionManager: original,
+				modelRegistry: {
+					getApiKeyAndHeaders: vi.fn().mockResolvedValue({ ok: true, apiKey: "test-key", headers: {} }),
+				} as never,
+				projectTrusted: true,
+				chooseScope,
+				model: {
+					id: "qwen3.5-9b",
+					name: "Qwen3.5 9B",
+					api: "openai-completions",
+					provider: "open-provider",
+					baseUrl: "http://127.0.0.1:1234/v1",
+					reasoning: true,
+					input: ["text"],
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+					contextWindow: 32768,
+					maxTokens: 8192,
+				},
+			});
+			SessionManager.inMemory(cwd);
+			releaseResponse();
+			await expect(review).resolves.toMatchObject({ saved: 1, reviewedEntries: 1 });
+			expect(chooseScope).not.toHaveBeenCalled();
+			expect(getRecodeShioriCheckpoint(original.getBranch())).toMatchObject({ saved: 1 });
+			expect(await readFile(join(cwd, ".pi", "memory", "MEMORY.md"), "utf8")).toContain(
+				"Run focused tests before broad checks.",
+			);
+		} finally {
+			runtime.close();
+			vi.unstubAllGlobals();
+			await rm(cwd, { recursive: true, force: true });
+		}
 	});
 });
