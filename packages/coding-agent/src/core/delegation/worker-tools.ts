@@ -1,0 +1,149 @@
+import type { AgentTool } from "@reitaard/repi-agent-core";
+import { Type } from "typebox";
+import type {
+	WorkerConversationSnapshot,
+	WorkerConversationTurnResult,
+	WorkerDirectory,
+} from "./worker-directory.ts";
+
+function workerReferenceSchema(directory: WorkerDirectory) {
+	const workers = directory.getWorkerDefinitions();
+	const references = workers.flatMap((worker) => [worker.id, worker.displayName]);
+	const mapping = workers.map((worker) => `${worker.id}=${worker.displayName}`).join(", ");
+	return Type.String({
+		description: `Worker id or display name. Prefer canonical ids. Available: ${mapping}.`,
+		enum: references,
+	});
+}
+
+function formatTurn(turn: WorkerConversationTurnResult): string {
+	const { conversation, result } = turn;
+	const duration = (result.durationMs / 1_000).toFixed(result.durationMs < 10_000 ? 1 : 0);
+	const header = `[conversation ${conversation.conversationId.slice(0, 8)} | worker ${result.workerId}/${result.workerName} | run ${result.runId.slice(0, 8)} | ${result.status} | ${duration}s]`;
+	return `${header}\n${result.output || result.error || `[${result.status}]`}`;
+}
+
+function formatStatus(snapshot: WorkerConversationSnapshot): string {
+	const elapsed = (snapshot.elapsedMs / 1_000).toFixed(snapshot.elapsedMs < 10_000 ? 1 : 0);
+	const tool = snapshot.lastToolName ? ` | tool ${snapshot.lastToolName}` : "";
+	const error = snapshot.error ? `\nerror: ${snapshot.error}` : "";
+	const output = snapshot.lastOutput
+		? `\nlast output: ${snapshot.lastOutput.length > 600 ? `${snapshot.lastOutput.slice(0, 597)}...` : snapshot.lastOutput}`
+		: "";
+	return `[conversation ${snapshot.conversationId.slice(0, 8)} | worker ${snapshot.workerId}/${snapshot.workerName} | run ${snapshot.runId?.slice(0, 8) ?? "none"} | ${snapshot.status} | ${elapsed}s | turns ${snapshot.turnCount}${tool}]\ntask: ${snapshot.taskSummary}${error}${output}`;
+}
+
+export function createWorkerControlTools(directory: WorkerDirectory): AgentTool[] {
+	const startSchema = Type.Object({
+		worker: workerReferenceSchema(directory),
+		message: Type.String({ description: "First task or message for the worker" }),
+		context: Type.Optional(Type.String({ description: "Small caller context needed for this conversation" })),
+	});
+	const messageSchema = Type.Object({
+		conversationId: Type.String({ description: "Worker conversation id returned by worker_start" }),
+		message: Type.String({ description: "Next message for the same worker personality and conversation" }),
+		context: Type.Optional(Type.String({ description: "Small new caller context for this turn" })),
+	});
+	const statusSchema = Type.Object({
+		conversationId: Type.Optional(Type.String({ description: "Specific conversation id; omit to list all" })),
+	});
+	const conversationSchema = Type.Object({
+		conversationId: Type.String({ description: "Worker conversation id" }),
+	});
+
+	const listTool: AgentTool<typeof Type.Object, unknown> = {
+		name: "worker_list",
+		label: "worker_list",
+		description:
+			"List the live worker directory: canonical ids, display names, roles, personality, skill, and tools. Use this when worker identity or capability is uncertain.",
+		parameters: Type.Object({}),
+		executionMode: "parallel",
+		async execute() {
+			const lines = directory.listWorkers().map((worker) => {
+				const personality = worker.personality ? ` personality=${worker.personality}` : "";
+				const skill = worker.skillName ? ` skill=${worker.skillName}` : "";
+				return `- id=${worker.id}; name=${worker.displayName}; role=${worker.description}; tools=${worker.tools.join(",")}${skill}${personality}`;
+			});
+			return { content: [{ type: "text", text: lines.join("\n") }], details: undefined };
+		},
+	} as AgentTool;
+
+	const startTool: AgentTool = {
+		name: "worker_start",
+		label: "worker_start",
+		description:
+			"Open a named worker conversation and send its first message. The conversation remains addressable by conversationId, preserves bounded dialogue context, and may run in parallel with other worker_start calls.",
+		parameters: startSchema,
+		executionMode: "parallel",
+		async execute(_toolCallId, input, signal) {
+			const turn = await directory.startConversation(input.worker, input.message, input.context, signal);
+			return { content: [{ type: "text", text: formatTurn(turn) }], details: turn };
+		},
+	};
+
+	const messageTool: AgentTool = {
+		name: "worker_message",
+		label: "worker_message",
+		description:
+			"Continue an existing worker conversation. The same named personality receives the previous caller/worker dialogue as bounded context. Do not use a conversation id belonging to another worker.",
+		parameters: messageSchema,
+		executionMode: "parallel",
+		async execute(_toolCallId, input, signal) {
+			const turn = await directory.messageConversation(input.conversationId, input.message, input.context, signal);
+			return { content: [{ type: "text", text: formatTurn(turn) }], details: turn };
+		},
+	};
+
+	const statusTool: AgentTool = {
+		name: "worker_status",
+		label: "worker_status",
+		description:
+			"Show live or recent worker conversation state: identity, run id, status, elapsed time, turn count, current/last tool, and bounded last result. Hidden reasoning and child tool transcripts are never exposed.",
+		parameters: statusSchema,
+		executionMode: "parallel",
+		async execute(_toolCallId, input) {
+			const snapshots = directory.getStatus(input.conversationId);
+			const text = snapshots.length > 0 ? snapshots.map(formatStatus).join("\n\n") : "No worker conversations.";
+			return { content: [{ type: "text", text }], details: { conversations: snapshots } };
+		},
+	};
+
+	const cancelTool: AgentTool = {
+		name: "worker_cancel",
+		label: "worker_cancel",
+		description: "Cancel the currently running turn for one worker conversation without closing the conversation.",
+		parameters: conversationSchema,
+		executionMode: "parallel",
+		async execute(_toolCallId, input) {
+			const cancelled = directory.cancelConversation(input.conversationId);
+			return {
+				content: [
+					{
+						type: "text",
+						text: cancelled
+							? `Cancellation requested for worker conversation ${input.conversationId}.`
+							: `Worker conversation ${input.conversationId} is not currently running.`,
+					},
+				],
+				details: { cancelled },
+			};
+		},
+	};
+
+	const closeTool: AgentTool = {
+		name: "worker_close",
+		label: "worker_close",
+		description: "Close and forget one worker conversation. Any active turn is cancelled first.",
+		parameters: conversationSchema,
+		executionMode: "parallel",
+		async execute(_toolCallId, input) {
+			const snapshot = directory.closeConversation(input.conversationId);
+			return {
+				content: [{ type: "text", text: `Closed worker conversation ${snapshot.conversationId}.` }],
+				details: { conversation: snapshot },
+			};
+		},
+	};
+
+	return [listTool, startTool, messageTool, statusTool, cancelTool, closeTool];
+}
