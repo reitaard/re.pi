@@ -41,12 +41,35 @@ Automatic recall is bounded to 6,000 characters by default. Project and global a
 /memory auto on|off             Toggle project auto-recall
 /memory global on|off           Toggle explicit global access
 /memory global-auto on|off      Toggle automatic global injection
+/memory cardinal auto           Route project knowledge and global preferences automatically
+/memory cardinal project        Route every Shiori memory to this project
+/memory cardinal global         Route every Shiori memory to global memory
+/memory cardinal ask            Ask where to save each Shiori memory
+/memory shiori model current    Use the active RePi model for Shiori
+/memory shiori model <id>       Use an available model from the current provider
+/memory shiori thinking on|off  Control reasoning for Shiori only
 /memory scope global            Search global memory only
 /memory scope project           Search project memory only
 /memory scope both              Search both scopes
 ```
 
 Selecting a global search scope does not bypass the global-access setting.
+
+## Shiori, Cardinal, and Kioku
+
+`/shiori` manually starts `Shiori (栞)`, RePi's focused session-memory reviewer. She combines the RePi process's local time with one of her short memory greetings, then reads only session entries after her latest session checkpoint and uses an isolated, tool-free `AgentHarness` call. The same local timestamp is included in the review prompt. She never inherits the coding prompt, coding tools, or the live coding-agent context. Shiori uses the current model by default, but `/memory` can select another available model from the current provider and independently turn Shiori thinking on or off.
+
+For an LM Studio `/v1` provider, Shiori uses LM Studio's native chat endpoint so `reasoning: "off"` is enforced per request without disabling thinking for normal RePi coding. Non-thinking Shiori reviews are capped at 1,024 output tokens. Other providers retain the portable AgentHarness path and request-local JSON schema.
+
+While Shiori works, her complete greeting renders directly on the terminal background with an animated star and a moving green-lime shimmer. It settles into durable UI-only greeting and compact completion entries when the review finishes; those entries never enter future LLM context.
+
+Long sessions are divided into bounded chunks. One invocation processes at most four chunks and reports when another `/shiori` call is needed. The checkpoint advances only after a successful review, so an error or cancelled routing decision does not silently lose unreviewed history.
+
+Only one Shiori review can run per session. Repeated `/shiori` submissions while a review is active are ignored without starting additional model calls. Failed reviews release the lock and can be retried.
+
+Cardinal is deterministic code, not another model. It applies the configured routing policy, normalizes tags, rejects duplicates, writes approved entries to Markdown, and asks `Kioku (記憶)` to reconcile its SQLite index once after the batch. `Kioku (記憶)` remains the existing Markdown plus FTS5/BM25 memory layer.
+
+Automatic routing uses project memory for repository-specific decisions and global memory for stable cross-project user preferences. When a candidate requires global memory but global access is disabled, the TUI asks for an allowed destination; non-interactive use safely falls back to project memory.
 
 ## Agent tools
 

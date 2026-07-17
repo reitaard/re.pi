@@ -6,6 +6,7 @@ import {
 	WorkingStatusIndicator,
 } from "../src/modes/interactive/components/status-indicator.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { stripAnsi } from "../src/utils/ansi.ts";
 
 describe("status indicators", () => {
 	afterEach(() => {
@@ -50,5 +51,18 @@ describe("status indicators", () => {
 		const callsBeforeDispose = requestRender.mock.calls.length;
 		vi.advanceTimersByTime(1100);
 		expect(requestRender).toHaveBeenCalledTimes(callsBeforeDispose);
+	});
+
+	it("shows the live run time beside the default encrypted animation", () => {
+		initTheme("dark");
+		vi.useFakeTimers();
+		const tui = { requestRender: vi.fn() } as unknown as TUI;
+		const indicator = new WorkingStatusIndicator(tui, "Working...");
+
+		expect(stripAnsi(indicator.render(80).join("\n"))).toContain("· 0s");
+		vi.advanceTimersByTime(61_000);
+		expect(stripAnsi(indicator.render(80).join("\n"))).toContain("· 1m 01s");
+
+		indicator.dispose();
 	});
 });

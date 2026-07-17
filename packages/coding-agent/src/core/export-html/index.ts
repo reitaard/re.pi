@@ -1,10 +1,11 @@
 import type { AgentState } from "@reitaard/repi-agent-core";
 import { existsSync, readFileSync, writeFileSync } from "fs";
-import { basename, join } from "path";
-import { APP_NAME, getExportTemplateDir } from "../../config.ts";
+import { join } from "path";
+import { getExportTemplateDir } from "../../config.ts";
 import { getResolvedThemeColors, getThemeExportColors } from "../../modes/interactive/theme/theme.ts";
 import { normalizePath, resolvePath } from "../../utils/paths.ts";
 import type { ToolDefinition } from "../extensions/types.ts";
+import { getRecodeSessionReference } from "../recode-session-identity.ts";
 import type { SessionEntry } from "../session-manager.ts";
 import { SessionManager } from "../session-manager.ts";
 
@@ -273,8 +274,13 @@ export async function exportSessionToHtml(
 
 	let outputPath = opts.outputPath ? normalizePath(opts.outputPath) : undefined;
 	if (!outputPath) {
-		const sessionBasename = basename(sessionFile, ".jsonl");
-		outputPath = `${APP_NAME}-session-${sessionBasename}.html`;
+		const header = sm.getHeader();
+		outputPath = `repi-session-${getRecodeSessionReference({
+			id: sm.getSessionId(),
+			timestamp: header?.timestamp,
+			cwd: sm.getCwd(),
+			name: sm.getSessionName(),
+		})}.html`;
 	}
 
 	writeFileSync(outputPath, html, "utf8");
@@ -307,8 +313,13 @@ export async function exportFromFile(inputPath: string, options?: ExportOptions 
 
 	let outputPath = opts.outputPath ? normalizePath(opts.outputPath) : undefined;
 	if (!outputPath) {
-		const inputBasename = basename(resolvedInputPath, ".jsonl");
-		outputPath = `${APP_NAME}-session-${inputBasename}.html`;
+		const header = sm.getHeader();
+		outputPath = `repi-session-${getRecodeSessionReference({
+			id: sm.getSessionId(),
+			timestamp: header?.timestamp,
+			cwd: sm.getCwd(),
+			name: sm.getSessionName(),
+		})}.html`;
 	}
 
 	writeFileSync(outputPath, html, "utf8");

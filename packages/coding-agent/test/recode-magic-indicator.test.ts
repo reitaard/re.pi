@@ -31,13 +31,13 @@ describe("re.code generating animation", () => {
 		expect(loader.loopFromFrame).toBeGreaterThan(0);
 		expect(frames[0]).toContain("Nucleating");
 		expect(frames.slice(loader.loopFromFrame)).not.toContainEqual(expect.stringContaining("Nucleating"));
-		expect(frames.slice(0, 40).every((frame) => /Nucleating\.{0,3}$/.test(frame))).toBe(true);
-		expect(frames.slice(0, 40).some((frame) => frame.endsWith("Nucleating."))).toBe(true);
-		expect(frames.slice(0, 40).some((frame) => frame.endsWith("Nucleating.."))).toBe(true);
-		expect(frames.slice(0, 40).some((frame) => frame.endsWith("Nucleating..."))).toBe(true);
-		expect(new Set(frames.slice(0, 40)).size).toBeGreaterThan(1);
-		expect(frames.slice(40, loader.loopFromFrame).some((frame) => frame.includes("Nucleat"))).toBe(true);
-		expect(frames.slice(40, loader.loopFromFrame).some((frame) => !frame.includes("Nucleating"))).toBe(true);
+		expect(frames.slice(0, 80).every((frame) => /Nucleating\.{0,3}$/.test(frame))).toBe(true);
+		expect(frames.slice(0, 80).some((frame) => frame.endsWith("Nucleating."))).toBe(true);
+		expect(frames.slice(0, 80).some((frame) => frame.endsWith("Nucleating.."))).toBe(true);
+		expect(frames.slice(0, 80).some((frame) => frame.endsWith("Nucleating..."))).toBe(true);
+		expect(new Set(frames.slice(0, 80)).size).toBeGreaterThan(1);
+		expect(frames.slice(80, loader.loopFromFrame).some((frame) => frame.includes("Nucleat"))).toBe(true);
+		expect(frames.slice(80, loader.loopFromFrame).some((frame) => !frame.includes("Nucleating"))).toBe(true);
 	});
 
 	it("loops a five-shade lime encrypted band without a Generating label", () => {

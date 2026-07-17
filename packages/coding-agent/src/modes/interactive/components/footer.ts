@@ -112,7 +112,8 @@ export class FooterComponent implements Component {
 		// After compaction, tokens are unknown until the next LLM response.
 		const contextUsage = this.session.getContextUsage();
 		const contextPercentValue = contextUsage?.percent ?? 0;
-		const contextPercent = contextUsage?.percent !== null ? contextPercentValue.toFixed(1) : "?";
+		const contextPercent = contextUsage?.percent == null ? "?" : contextPercentValue.toFixed(1);
+		const contextTokens = contextUsage?.tokens == null ? undefined : formatTokens(contextUsage.tokens);
 
 		// Replace home directory with ~
 		let pwd = formatCwdForFooter(this.session.sessionManager.getCwd(), process.env.HOME || process.env.USERPROFILE);
@@ -147,10 +148,14 @@ export class FooterComponent implements Component {
 
 		// Suggest compaction before a small local model reaches its less reliable long-context range.
 		const compactHint =
-			contextPercentValue >= SMART_CONTEXT_COMPACT_THRESHOLD_PERCENT ? theme.fg("accent", " (compact?)") : "";
-		const contextPercentStr =
-			contextPercent === "?" ? theme.fg("footer", "?") : `${theme.fg("accent", `${contextPercent}%`)}${compactHint}`;
-		statsParts.push(contextPercentStr);
+			contextPercentValue >= SMART_CONTEXT_COMPACT_THRESHOLD_PERCENT && this.session.isCompactionAvailable()
+				? " (compact?)"
+				: "";
+		const contextText =
+			contextPercent === "?"
+				? "ctx ?"
+				: `ctx ${contextTokens ? `${contextTokens} ` : ""}${contextPercent}%${compactHint}`;
+		statsParts.push(contextPercent === "?" ? theme.fg("footer", contextText) : theme.fg("accent", contextText));
 		if (areExperimentalFeaturesEnabled()) {
 			statsParts.push(`${theme.fg("dim", "•")} ${theme.bold(theme.fg("warning", "xp"))}`);
 		}

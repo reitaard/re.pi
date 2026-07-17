@@ -25,6 +25,8 @@ function createManager(root: string): RecodeMemoryManager {
 			autoRecall: true,
 			globalAccess: false,
 			globalAutoRecall: false,
+			cardinalRouting: "auto",
+			shioriThinking: false,
 			maxResults: 6,
 			maxInjectedCharacters: 6000,
 		},

@@ -4,6 +4,13 @@
 
 ### Changed
 
+- Added a live green elapsed-time counter to the encrypted working indicator for each agent run.
+- Added the manual `Shiori (栞)` session-memory reviewer, deterministic Cardinal routing, session checkpoints, and batched Kioku indexing through `/shiori` and `/memory`.
+- Constrained Shiori's OpenAI-compatible model calls with a request-local JSON schema while retaining balanced JSON parsing as a compatibility fallback.
+- Added independent Shiori model and thinking preferences, plus LM Studio native per-request reasoning control so coding can keep thinking enabled while memory review stays lightweight.
+- Prevented overlapping Shiori reviews from repeated `/shiori` submissions in the same session.
+- Added human-readable RePi session references to `/session` and default HTML/JSONL export filenames while preserving the full internal session UUID.
+- Added current context tokens to the footer and limited the `(compact?)` hint to branches that are actually eligible for compaction.
 - Split explicit global-memory access from automatic global prompt recall, while preserving legacy `globalRecall` configurations.
 - Made memory project-first by default, added independent project/global auto-recall controls, and documented trust, global tags, and watcher-based reconciliation.
 - Changed configured language servers to start lazily when a matching capability is used instead of warming every server during session startup.

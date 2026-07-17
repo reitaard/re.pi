@@ -175,6 +175,7 @@ export class RecodeMemoryManager {
 		daily = false,
 		includeProject = this.includeProject,
 		tags: string[] = [],
+		reconcile = true,
 	): Promise<string> {
 		const cleaned = text.trim();
 		if (!cleaned) throw new Error("Memory text cannot be empty");
@@ -207,7 +208,7 @@ export class RecodeMemoryManager {
 		}
 		const tagPrefix = normalizedTags.map((tag, index) => (index === 0 ? `#${tag}` : `[[${tag}]]`)).join(" ");
 		await appendFile(path, `\n- ${tagPrefix ? `${tagPrefix} ` : ""}${cleaned.replace(/\s+/g, " ")}\n`, "utf8");
-		await this.sync(includeProject);
+		if (reconcile) await this.sync(includeProject);
 		return path;
 	}
 

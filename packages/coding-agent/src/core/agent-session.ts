@@ -88,6 +88,7 @@ import { emitSessionShutdownEvent } from "./extensions/runner.ts";
 import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
 import type { ModelRegistry } from "./model-registry.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
+import { getRecodeSessionReference } from "./recode-session-identity.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
 import type { BranchSummaryEntry, CompactionEntry, SessionEntry, SessionManager } from "./session-manager.ts";
 import { CURRENT_SESSION_VERSION, getLatestCompactionEntry, type SessionHeader } from "./session-manager.ts";
@@ -294,6 +295,7 @@ export class AgentSession {
 	private _compactionAbortController: AbortController | undefined = undefined;
 	private _autoCompactionAbortController: AbortController | undefined = undefined;
 	private _overflowRecoveryAttempted = false;
+	private _compactionAvailabilityCache?: { key: string; available: boolean };
 
 	// Branch summarization state
 	private _branchSummaryAbortController: AbortController | undefined = undefined;
@@ -1730,6 +1732,16 @@ export class AgentSession {
 	// =========================================================================
 	// Compaction
 	// =========================================================================
+
+	/** Return whether the current branch contains history eligible for compaction. */
+	isCompactionAvailable(): boolean {
+		const settings = this.settingsManager.getCompactionSettings();
+		const key = `${this.sessionManager.getLeafId() ?? "empty"}:${JSON.stringify(settings)}`;
+		if (this._compactionAvailabilityCache?.key === key) return this._compactionAvailabilityCache.available;
+		const available = prepareCompaction(this.sessionManager.getBranch(), settings) !== null;
+		this._compactionAvailabilityCache = { key, available };
+		return available;
+	}
 
 	/**
 	 * Manually compact the session context.
@@ -3168,10 +3180,14 @@ export class AgentSession {
 	 * @returns The resolved output file path.
 	 */
 	exportToJsonl(outputPath?: string): string {
-		const filePath = resolvePath(
-			outputPath ?? `session-${new Date().toISOString().replace(/[:.]/g, "-")}.jsonl`,
-			process.cwd(),
-		);
+		const sessionHeader = this.sessionManager.getHeader();
+		const reference = getRecodeSessionReference({
+			id: this.sessionManager.getSessionId(),
+			timestamp: sessionHeader?.timestamp,
+			cwd: this.sessionManager.getCwd(),
+			name: this.sessionManager.getSessionName(),
+		});
+		const filePath = resolvePath(outputPath ?? `repi-session-${reference}.jsonl`, process.cwd());
 		const dir = dirname(filePath);
 		if (!existsSync(dir)) {
 			mkdirSync(dir, { recursive: true });

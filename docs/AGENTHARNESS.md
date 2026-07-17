@@ -53,6 +53,13 @@ damage.
 - The implementation is sufficiently isolated for later adaptation; do not move
   it into `AgentSession` or invent a service facade before a harness consumer
   exists.
+- `Shiori (栞)` is the first narrow memory-harness consumer: `/shiori` reviews
+  bounded session chunks through an isolated, tool-free `AgentHarness` call.
+  Cardinal routing, checkpoint persistence, Markdown writes, deduplication, and
+  Kioku indexing remain deterministic coding-agent responsibilities.
+- This proves isolated model/auth reuse but does not migrate the production
+  coding loop. Do not generalize Shiori's narrow bridge into the future
+  `MemoryService` contract before the one-shot/RPC coding-path adapter exists.
 
 ### LSP
 

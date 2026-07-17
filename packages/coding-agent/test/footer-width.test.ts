@@ -1,3 +1,4 @@
+import { sep } from "node:path";
 import { visibleWidth } from "@reitaard/repi-tui";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { AgentSession } from "../src/core/agent-session.ts";
@@ -22,6 +23,8 @@ function createSession(options: {
 	thinkingLevel?: string;
 	usage?: AssistantUsage;
 	contextPercent?: number;
+	contextTokens?: number | null;
+	compactionAvailable?: boolean;
 }): AgentSession {
 	const usage = options.usage;
 	const entries =
@@ -52,7 +55,13 @@ function createSession(options: {
 			getSessionName: () => options.sessionName,
 			getCwd: () => "/tmp/project",
 		},
-		getContextUsage: () => ({ contextWindow: 200_000, percent: options.contextPercent ?? 12.3 }),
+		getContextUsage: () => ({
+			contextWindow: 200_000,
+			tokens: options.contextTokens === undefined ? 24_600 : options.contextTokens,
+			percent: options.contextPercent ?? 12.3,
+		}),
+		isCompactionAvailable: () => options.compactionAvailable ?? false,
+		getAvailableThinkingLevels: () => ["off", "minimal", "low", "medium", "high"],
 		modelRegistry: {
 			isUsingOAuth: () => false,
 		},
@@ -82,7 +91,7 @@ describe("formatCwdForFooter", () => {
 
 	it("abbreviates the home directory and descendants", () => {
 		expect(formatCwdForFooter("/home/user", "/home/user")).toBe("~");
-		expect(formatCwdForFooter("/home/user/project", "/home/user")).toBe("~/project");
+		expect(formatCwdForFooter("/home/user/project", "/home/user")).toBe(`~${sep}project`);
 	});
 });
 
@@ -161,8 +170,8 @@ describe("FooterComponent width handling", () => {
 
 		expect(statsLine).toContain(theme.fg("accent", "↑12k"));
 		expect(statsLine).toContain(theme.fg("accent", "↓678"));
-		expect(statsLine).toContain(theme.fg("accent", "12.3%"));
-		expect(stripAnsi(statsLine)).toContain("↑12k ↓678 12.3%");
+		expect(statsLine).toContain(theme.fg("accent", "ctx 25k 12.3%"));
+		expect(stripAnsi(statsLine)).toContain("↑12k ↓678 ctx 25k 12.3%");
 		expect(stripAnsi(statsLine)).not.toContain("200k");
 		expect(stripAnsi(statsLine)).not.toContain("compact?");
 	});
@@ -172,12 +181,19 @@ describe("FooterComponent width handling", () => {
 			createSession({ sessionName: "", contextPercent: 39.9 }),
 			createFooterData(1),
 		);
-		const footer = new FooterComponent(createSession({ sessionName: "", contextPercent: 40 }), createFooterData(1));
+		const unavailable = new FooterComponent(
+			createSession({ sessionName: "", contextPercent: 45, compactionAvailable: false }),
+			createFooterData(1),
+		);
+		const footer = new FooterComponent(
+			createSession({ sessionName: "", contextPercent: 40, compactionAvailable: true }),
+			createFooterData(1),
+		);
 		const statsLine = footer.render(120)[1];
 
 		expect(stripAnsi(belowThreshold.render(120)[1])).not.toContain("compact?");
-		expect(statsLine).toContain(theme.fg("accent", "40.0%"));
-		expect(statsLine).toContain(theme.fg("accent", " (compact?)"));
-		expect(stripAnsi(statsLine)).toContain("40.0% (compact?)");
+		expect(stripAnsi(unavailable.render(120)[1])).not.toContain("compact?");
+		expect(statsLine).toContain(theme.fg("accent", "ctx 25k 40.0% (compact?)"));
+		expect(stripAnsi(statsLine)).toContain("ctx 25k 40.0% (compact?)");
 	});
 });

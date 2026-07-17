@@ -1,5 +1,11 @@
 export type RecodeMemoryScope = "global" | "project";
 export type RecodeMemoryScopeSelection = RecodeMemoryScope | "both";
+export type RecodeShioriRouting = "ask" | "auto" | "global" | "project";
+
+export interface RecodeShioriModelPreference {
+	provider: string;
+	id: string;
+}
 
 export interface RecodeMemoryConfig {
 	enabled: boolean;
@@ -7,6 +13,9 @@ export interface RecodeMemoryConfig {
 	autoRecall: boolean;
 	globalAccess: boolean;
 	globalAutoRecall: boolean;
+	cardinalRouting: RecodeShioriRouting;
+	shioriModel?: RecodeShioriModelPreference;
+	shioriThinking: boolean;
 	maxResults: number;
 	maxInjectedCharacters: number;
 }

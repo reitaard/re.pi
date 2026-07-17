@@ -15,7 +15,7 @@ pi --session <path|id> # Use a specific session file or partial session ID
 pi --fork <path|id>    # Fork a session file or partial session ID into a new session
 ```
 
-Use `/session` in interactive mode to see the current session file, session ID, message count, tokens, and cost.
+Use `/session` in interactive mode to see the current human-readable reference, session file, internal session ID, message count, tokens, and cost. The reference combines the session date, `/name` value or project directory, and a short ID. The full UUID remains the storage identity.
 
 For the JSONL file format and SessionManager API, see [Session Format](session-format.md).
 
@@ -56,6 +56,8 @@ Use `/name <name>` to set a human-readable session name:
 ```text
 /name Refactor auth module
 ```
+
+When no export path is supplied, RePi uses that name in a readable filename such as `repi-session-2026-07-17-refactor-auth-module-019f6b81.html`. Explicit export paths are unchanged.
 
 Set the name at startup with `--name` or `-n`:
 
