@@ -124,8 +124,25 @@ describe("WorkerDirectory", () => {
 		expect(directory.getStatus(active.conversationId)[0].status).toBe("cancelled");
 	});
 
-	it("mounts deterministic list, conversation, status, cancel, and close tools", () => {
+	it("returns a typed failed turn and never leaves a conversation stuck running", async () => {
+		const { models } = createFaux();
+		const directory = new WorkerDirectory({
+			cwd: process.cwd(),
+			workers: workers(),
+			getModel: () => undefined,
+			models,
+		});
+
+		const turn = await directory.startConversation("Mayuri", "Try without an active model.");
+		expect(turn.result.status).toBe("failed");
+		expect(turn.result.error).toContain("without an active model");
+		expect(turn.conversation.status).toBe("failed");
+		expect(directory.getStatus(turn.conversation.conversationId)[0].status).toBe("failed");
+	});
+
+	it("mounts deterministic controls and exposes the full conversation id to the model", async () => {
 		const { registration, models } = createFaux();
+		registration.setResponses([() => fauxAssistantMessage("Conversation started.")]);
 		const directory = new WorkerDirectory({
 			cwd: process.cwd(),
 			workers: workers(),
@@ -143,5 +160,13 @@ describe("WorkerDirectory", () => {
 			"worker_close",
 		]);
 		expect(tools.every((tool) => tool.executionMode === "parallel")).toBe(true);
+
+		const start = tools.find((tool) => tool.name === "worker_start");
+		if (!start) throw new Error("worker_start tool missing");
+		const response = await start.execute("start-1", { worker: "Mayuri", message: "Start a conversation." });
+		const fullId = response.details.conversation.conversationId;
+		const text = response.content.find((item) => item.type === "text")?.text ?? "";
+		expect(fullId).toMatch(/^[0-9a-f-]{36}$/);
+		expect(text).toContain(`conversationId: ${fullId}`);
 	});
 });
