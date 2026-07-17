@@ -4,7 +4,7 @@ import type { NamedWorkerDefinition } from "./named-worker.ts";
  * Stable worker ids are protocol/configuration identities. Display names may be
  * changed without breaking prompts, stored jobs, or routing.
  */
-export const REPI_NAMED_WORKERS = [
+export const REPI_NAMED_WORKERS: readonly NamedWorkerDefinition[] = [
 	{
 		id: "research",
 		displayName: "Mayuri",
@@ -26,4 +26,4 @@ export const REPI_NAMED_WORKERS = [
 		systemPrompt:
 			"Audit only the requested boundary. Prioritize high-impact findings with exact evidence, reject speculative problems, and recommend the smallest safe correction rather than a broad rewrite.",
 	},
-] as const satisfies readonly NamedWorkerDefinition[];
+];
