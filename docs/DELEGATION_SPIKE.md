@@ -15,7 +15,8 @@ current AgentSession parent
 ```
 
 This is a tactical bridge. It proves real harness usage now while the larger
-main-agent migration remains separate.
+main-agent migration remains separate. The later sequence is recorded in
+`docs/AGENT_ORCHESTRATION_PLAN.md`.
 
 ## Workers
 
@@ -32,6 +33,11 @@ breaking prompts or stored configuration.
   - tools: `read`, `grep`, `find`, `ls`
   - thinking: off
   - output cap: 2048 tokens
+
+The delegate schema injects the canonical ids into every model request. Display
+names are accepted as case-insensitive aliases, so `Mayuri` resolves to
+`research` and `Levi` resolves to `audit`; returned results still use the stable
+canonical id.
 
 Mayuri does not contain an invented copy of the Librarian instructions. The
 worker resolves the real skill named `librarian` from coding-agent's existing
@@ -67,11 +73,13 @@ replacement paths without separate mode patches.
 
 - No worker starts unless the parent calls `delegate`.
 - The user may explicitly say `do not delegate` or `do this yourself`.
+- An explicit request to use a worker overrides the simple-task optimization.
+- The parent is told to use canonical ids and never invent worker names.
 - Child sessions are fresh, in-memory, and discarded after the result.
 - Children never receive the `delegate` tool, so nesting is impossible.
 - Worker tools are read-only.
 - Independent delegate calls are marked parallel-safe.
-- Parent cancellation and timeout call `AgentHarness.abort()`.
+- Parent cancellation and the 300-second timeout call `AgentHarness.abort()`.
 - Results are typed as `completed`, `failed`, `cancelled`, or `timeout`.
 - Returned text is bounded before entering the parent context.
 - Workers do not write Kioku.
@@ -86,6 +94,7 @@ to an untrusted remote channel yet.
 - `packages/coding-agent/src/core/delegation/worker-registry.ts`
 - `packages/coding-agent/src/core/agent-session-services.ts`
 - `packages/coding-agent/test/delegation.test.ts`
+- `docs/AGENT_ORCHESTRATION_PLAN.md`
 
 ## Verification
 
@@ -99,6 +108,7 @@ npm --prefix packages/agent run test:harness
 npm --prefix packages/coding-agent test -- test/recode-shiori.test.ts
 ```
 
-Then perform one live run with `REPI_DELEGATION=1` and ask the parent to use
-`research` or `audit`. Mayuri requires a loaded skill whose exact skill name is
-`librarian`.
+Then perform one live run with `REPI_DELEGATION=1` and explicitly request both
+`research`/Mayuri and `audit`/Levi. The parent must emit two real `delegate` calls
+rather than reading the assigned files itself. Mayuri requires a loaded skill
+whose exact skill name is `librarian`.
