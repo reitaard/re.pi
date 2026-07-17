@@ -1,9 +1,9 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Loader, Text } from "@reitaard/repi-tui";
 import { Type } from "typebox";
 import { getAgentDir } from "./config.ts";
-import type { ExtensionAPI, ExtensionContext } from "./core/extensions/types.ts";
+import type { ExtensionAPI, ExtensionContext, ToolRenderResultOptions } from "./core/extensions/types.ts";
 import type { RecodeMemoryManager } from "./core/recode-memory/recode-memory-manager.ts";
 import { RecodeMemoryRuntime } from "./core/recode-memory/recode-memory-runtime.ts";
 import type {
@@ -25,11 +25,13 @@ import {
 	placeOnRecodeShioriDesk,
 } from "./core/recode-memory/recode-shiori-desk.ts";
 import type { SessionManager } from "./core/session-manager.ts";
+import { keyHint } from "./modes/interactive/components/keybinding-hints.ts";
 import {
 	type RecodeMemorySettingId,
 	RecodeMemorySettingsComponent,
 } from "./modes/interactive/components/recode-memory-settings.ts";
 import { createRecodeShioriIndicator } from "./modes/interactive/components/recode-shiori-indicator.ts";
+import type { Theme } from "./modes/interactive/theme/theme.ts";
 
 const RECODE_KIOKU_DISPLAY_NAME = "Kioku (\u8a18\u61b6)";
 const RECODE_SHIORI_WIDGET = "recode-shiori-active";
@@ -137,10 +139,31 @@ function statusText(manager: RecodeMemoryManager): string {
 		`Shiori thinking: ${manager.getConfig().shioriThinking ? "on" : "off"}`,
 		`Cardinal routing: ${manager.getConfig().cardinalRouting}`,
 		`Indexed: ${status.documents} documents, ${status.chunks} chunks`,
+		`Active project: ${dirname(dirname(status.projectRoot))}`,
 		`Global: ${status.globalRoot}`,
 		`Project: ${status.projectRoot}`,
 		`Database: ${status.databasePath}`,
 	].join("\n");
+}
+
+function renderKiokuResult(
+	result: { content: Array<{ type: string; text?: string }> },
+	options: ToolRenderResultOptions,
+	theme: Theme,
+): Text {
+	const output = result.content
+		.filter((item) => item.type === "text")
+		.map((item) => item.text ?? "")
+		.join("\n")
+		.trim();
+	const lines = output ? output.split("\n") : [];
+	const visible = options.expanded ? lines : lines.slice(0, 12);
+	const remaining = lines.length - visible.length;
+	let text = visible.map((line) => theme.fg("toolOutput", line)).join("\n");
+	if (remaining > 0) {
+		text += `${theme.fg("muted", `\n... (${remaining} more lines,`)} ${keyHint("app.tools.expand", "to expand")}${theme.fg("muted", ")")}`;
+	}
+	return new Text(text, 0, 0);
 }
 
 export function resolveAutomaticMemoryScope(
@@ -258,8 +281,10 @@ export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryR
 	pi.registerTool({
 		name: "kioku_search",
 		label: "Kioku (記憶) Search",
-		description: "Search indexed Kioku memory. Not for workspace files.",
-		promptSnippet: "Use for Kioku recall only; use normal file tools for workspace files.",
+		description: "Search indexed Kioku memory for the active working-directory project. Not for workspace files.",
+		promptSnippet:
+			"Use for Kioku recall only; the active project is exactly the launch working directory. Never infer another project. If the user requests project-only memory, never search global memory.",
+		renderResult: renderKiokuResult,
 		parameters: Type.Object({
 			query: Type.String({ description: "Search query" }),
 			limit: Type.Optional(Type.Number({ minimum: 1, maximum: 20 })),
@@ -294,6 +319,7 @@ export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryR
 		label: "Kioku (記憶) Write",
 		description: "Save concise, user-approved durable knowledge to Kioku. Never store secrets.",
 		promptSnippet: "Use only for approved Kioku memory, never ordinary workspace files.",
+		renderResult: renderKiokuResult,
 		parameters: Type.Object({
 			scope: Scope,
 			text: Type.String({ description: "Concise durable memory" }),
@@ -335,7 +361,9 @@ export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryR
 		name: "kioku_read",
 		label: "Kioku (記憶) Read",
 		description: "Read from a Kioku root. Use normal read for workspace MEMORY.md files.",
-		promptSnippet: "Use only for Kioku roots; never substitute another project or global memory.",
+		promptSnippet:
+			"Use only for Kioku roots; the active project is exactly the launch working directory. Never substitute another project or read global memory when the user requests project-only memory.",
+		renderResult: renderKiokuResult,
 		parameters: Type.Object({
 			scope: Scope,
 			path: Type.Optional(Type.String({ description: "Relative path; defaults to MEMORY.md" })),
@@ -365,6 +393,9 @@ export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryR
 		name: "kioku_status",
 		label: "Kioku (記憶) Status",
 		description: "Show Kioku roots, scopes, and index counts.",
+		promptSnippet:
+			"Treat Active project as authoritative. Do not infer a different project from repositories or memory-related files found beneath it.",
+		renderResult: renderKiokuResult,
 		parameters: Type.Object({}),
 		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
 			const active = await getManager(ctx.cwd, ctx.isProjectTrusted());

@@ -77,4 +77,15 @@ describe("BashExecutionComponent width handling (#2569)", () => {
 			expect(w, `Line ${i} visibleWidth=${w} > 60`).toBeLessThanOrEqual(60);
 		}
 	});
+
+	it("reveals collapsed direct-shell output when tool expansion is enabled", () => {
+		const { stub } = createTuiStub(120);
+		const component = new BashExecutionComponent("!! list files", stub, true);
+		component.appendOutput(Array.from({ length: 30 }, (_, index) => `line-${index + 1}`).join("\n"));
+		component.setComplete(0, false);
+
+		expect(component.render(120).join("\n")).not.toContain("line-1\n");
+		component.setExpanded(true);
+		expect(component.render(120).join("\n")).toContain("line-1");
+	});
 });
