@@ -10,6 +10,15 @@ export interface ToolExecutionOptions {
 	imageWidthCells?: number;
 }
 
+function humanizeIdentifier(value: string): string {
+	return value
+		.replaceAll("-", "_")
+		.split("_")
+		.filter(Boolean)
+		.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+		.join(" ");
+}
+
 export class ToolExecutionComponent extends Container {
 	private contentBox: Box;
 	private contentText: Text;
@@ -134,6 +143,48 @@ export class ToolExecutionComponent extends Container {
 
 	private createCallFallback(): Component {
 		return new Text(theme.fg("toolTitle", theme.bold(this.toolName)), 0, 0);
+	}
+
+	private shouldRenderPendingCustomCall(): boolean {
+		return (
+			this.toolDefinition !== undefined &&
+			this.builtInToolDefinition === undefined &&
+			this.getRenderShell() === "default" &&
+			!this.argsComplete &&
+			!this.executionStarted &&
+			this.result === undefined
+		);
+	}
+
+	private createPendingCustomCall(): Component {
+		const args =
+			this.args && typeof this.args === "object"
+				? (this.args as Record<string, unknown>)
+				: ({} as Record<string, unknown>);
+		const normalizedName = this.toolName.toLowerCase();
+		let label = this.toolDefinition?.label.trim() || humanizeIdentifier(this.toolName);
+		let activity = "Preparing";
+
+		if (normalizedName.includes("mcp")) {
+			const server =
+				typeof args.connect === "string" ? args.connect : typeof args.server === "string" ? args.server : undefined;
+			const tool = typeof args.tool === "string" ? args.tool : undefined;
+			const toolServer = tool?.split("_", 1)[0];
+			label = server ? humanizeIdentifier(server) : toolServer ? humanizeIdentifier(toolServer) : "MCP";
+			activity = server || args.connect !== undefined ? "Connecting" : "Preparing";
+		} else if (normalizedName.includes("lsp")) {
+			label = "LSP";
+			activity = "Analyzing";
+		} else if (normalizedName.includes("skill")) {
+			label = "Skill";
+			activity = "Loading";
+		} else if (normalizedName.includes("memory")) {
+			activity = "Recalling";
+		} else if (normalizedName.includes("search") || normalizedName.includes("fetch")) {
+			activity = "Searching";
+		}
+
+		return new Text(theme.fg("toolTitle", `${theme.bold(label)}: ${theme.fg("muted", `${activity}...`)}`), 0, 0);
 	}
 
 	private createResultFallback(): Component | undefined {
@@ -287,7 +338,10 @@ export class ToolExecutionComponent extends Container {
 			renderContainer.clear();
 
 			const callRenderer = this.getCallRenderer();
-			if (!callRenderer) {
+			if (this.shouldRenderPendingCustomCall()) {
+				renderContainer.addChild(this.createPendingCustomCall());
+				hasContent = true;
+			} else if (!callRenderer) {
 				renderContainer.addChild(this.createCallFallback());
 				hasContent = true;
 			} else {

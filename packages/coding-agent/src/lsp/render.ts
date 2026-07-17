@@ -38,7 +38,7 @@ export function formatLspCall(args: LspToolInput, theme: Theme, context: ToolRen
 		context.executionStarted ? "accent" : "warning",
 		LSP_SPINNER_FRAMES[state.spinnerFrame ?? 0] ?? "⠋",
 	);
-	const actionText = action ? ` ${theme.fg("accent", action)}` : "";
+	const actionText = action ? ` ${theme.fg("accent", action)}` : `${theme.fg("muted", ": Analyzing...")}`;
 	return `${indicator} ${theme.fg("mdLink", theme.bold("LSP"))}${actionText}${target ? ` ${theme.fg("toolOutput", target)}` : ""}`;
 }
 

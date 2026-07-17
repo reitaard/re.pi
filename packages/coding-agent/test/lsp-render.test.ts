@@ -52,7 +52,7 @@ describe("LSP renderer", () => {
 			invalidate: () => invalidations++,
 		};
 		const pending = formatLspCall({} as never, theme, baseContext as never);
-		expect(stripAnsi(pending)).toBe("⠋ LSP");
+		expect(stripAnsi(pending)).toBe("⠋ LSP: Analyzing...");
 		expect(pending).toContain(theme.fg("warning", "⠋"));
 		expect(pending).toContain(theme.fg("mdLink", theme.bold("LSP")));
 		expect(state.spinnerInterval).toBeDefined();

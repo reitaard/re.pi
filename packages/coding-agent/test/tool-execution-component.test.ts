@@ -51,6 +51,7 @@ describe("ToolExecutionComponent parity", () => {
 			createFakeTui(),
 			process.cwd(),
 		);
+		component.setArgsComplete();
 		expect(stripAnsi(component.render(120).join("\n"))).toContain("custom call");
 
 		component.updateResult(
@@ -67,6 +68,57 @@ describe("ToolExecutionComponent parity", () => {
 		expect(rendered).toContain("custom result");
 	});
 
+	test("shows a pending activity instead of rendering incomplete custom tool arguments", () => {
+		let renderCallCount = 0;
+		const toolDefinition: ToolDefinition = {
+			...createBaseToolDefinition("mcp"),
+			label: "MCP",
+			renderCall: () => {
+				renderCallCount++;
+				return new Text("mcp status", 0, 0);
+			},
+		};
+		const component = new ToolExecutionComponent(
+			"mcp",
+			"tool-pending-mcp",
+			{},
+			{},
+			toolDefinition,
+			createFakeTui(),
+			process.cwd(),
+		);
+
+		const pending = stripAnsi(component.render(120).join("\n"));
+		expect(pending).toContain("MCP: Preparing...");
+		expect(pending).not.toContain("mcp status");
+		expect(renderCallCount).toBe(0);
+
+		component.updateArgs({ tool: "playwright_browser_navigate" });
+		expect(stripAnsi(component.render(120).join("\n"))).toContain("Playwright: Preparing...");
+		expect(renderCallCount).toBe(0);
+
+		component.setArgsComplete();
+		expect(stripAnsi(component.render(120).join("\n"))).toContain("mcp status");
+		expect(renderCallCount).toBe(1);
+	});
+
+	test("keeps built-in renderers active while their arguments stream", () => {
+		const component = new ToolExecutionComponent(
+			"read",
+			"tool-pending-built-in",
+			{ path: "README.md" },
+			{},
+			undefined,
+			createFakeTui(),
+			process.cwd(),
+		);
+
+		const rendered = stripAnsi(component.render(120).join("\n"));
+		expect(rendered).toContain("read");
+		expect(rendered).toContain("README.md");
+		expect(rendered).not.toContain("Preparing...");
+	});
+
 	test("renders every tool state with the shared dim-violet background", () => {
 		const component = new ToolExecutionComponent(
 			"custom_tool",
@@ -78,9 +130,9 @@ describe("ToolExecutionComponent parity", () => {
 			process.cwd(),
 		);
 		const pendingLines = component.render(120);
-		expect(pendingLines.join("\n")).toContain("\x1b[48;5;60m");
+		expect(pendingLines.join("\n")).toContain(theme.getBgAnsi("toolPendingBg"));
 		expect(pendingLines.join("\n")).toContain(theme.getFgAnsi("toolPendingStatus"));
-		const surfaceLines = pendingLines.filter((line) => line.includes("\x1b[48;5;60m"));
+		const surfaceLines = pendingLines.filter((line) => line.includes(theme.getBgAnsi("toolPendingBg")));
 		expect(surfaceLines.length).toBeGreaterThan(1);
 		for (const line of surfaceLines) {
 			expect(stripAnsi(line).startsWith("▎")).toBe(true);
@@ -92,12 +144,12 @@ describe("ToolExecutionComponent parity", () => {
 
 		component.updateResult({ content: [{ type: "text", text: "done" }], details: {}, isError: false }, false);
 
-		expect(component.render(120).join("\n")).toContain("\x1b[48;5;60m");
+		expect(component.render(120).join("\n")).toContain(theme.getBgAnsi("toolPendingBg"));
 		expect(component.render(120).join("\n")).toContain(theme.getFgAnsi("toolSuccessStatus"));
 
 		component.updateResult({ content: [{ type: "text", text: "failed" }], details: {}, isError: true }, false);
 
-		expect(component.render(120).join("\n")).toContain("\x1b[48;5;60m");
+		expect(component.render(120).join("\n")).toContain(theme.getBgAnsi("toolPendingBg"));
 		expect(component.render(120).join("\n")).toContain(theme.getFgAnsi("toolErrorStatus"));
 	});
 
@@ -112,13 +164,13 @@ describe("ToolExecutionComponent parity", () => {
 			process.cwd(),
 		);
 
-		expect(component.render(120).join("\n")).toContain("\x1b[48;5;60m");
+		expect(component.render(120).join("\n")).toContain(theme.getBgAnsi("toolPendingBg"));
 		component.markExecutionStarted();
-		expect(component.render(120).join("\n")).toContain("\x1b[48;5;60m");
+		expect(component.render(120).join("\n")).toContain(theme.getBgAnsi("toolPendingBg"));
 		component.updateResult({ content: [{ type: "text", text: "ok" }], details: {}, isError: false }, false);
-		expect(component.render(120).join("\n")).toContain("\x1b[48;5;65m");
+		expect(component.render(120).join("\n")).toContain(theme.getBgAnsi("toolSuccessBg"));
 		component.updateResult({ content: [{ type: "text", text: "failed" }], details: {}, isError: true }, false);
-		expect(component.render(120).join("\n")).toContain("\x1b[48;5;131m");
+		expect(component.render(120).join("\n")).toContain(theme.getBgAnsi("toolErrorBg"));
 	});
 
 	test("self-rendered empty tool rows take no layout space", () => {
@@ -168,7 +220,7 @@ describe("ToolExecutionComponent parity", () => {
 		);
 		component.updateResult({ content: [], details: { diff: "+1 after", firstChangedLine: 1 }, isError: false });
 		const renderedWithAnsi = component.render(120).join("\n");
-		expect(renderedWithAnsi).toContain("\x1b[48;5;60m");
+		expect(renderedWithAnsi).toContain(theme.getBgAnsi("toolPendingBg"));
 		const rendered = stripAnsi(renderedWithAnsi);
 		expect(rendered).toContain("edit");
 		expect(rendered).toContain("README.md");

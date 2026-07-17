@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Show accurate pending activity for incomplete custom tool calls instead of rendering misleading fallback operations.
+
 ## [0.81.3] - 2026-07-17
 
 ### Changed
