@@ -213,6 +213,54 @@ describe("named worker delegation spike", () => {
 		expect(result.output).toBe("");
 	});
 
+	it("exposes canonical ids and explicit-request precedence in the delegate contract", () => {
+		const { registration, models } = createFaux();
+		const delegate = createDelegateTool({
+			cwd: process.cwd(),
+			model: registration.getModel(),
+			models,
+			workers: REPI_NAMED_WORKERS,
+		});
+		const workerSchema = (
+			delegate.parameters as unknown as {
+				properties: { worker: { enum?: string[]; description?: string } };
+			}
+		).properties.worker;
+
+		expect(workerSchema.enum).toEqual(["research", "audit"]);
+		expect(workerSchema.description).toContain("Mayuri -> research");
+		expect(workerSchema.description).toContain("Levi -> audit");
+		expect(delegate.description).toContain("explicitly requests a worker");
+		expect(delegate.description).toContain("overrides the simple-task optimization");
+		expect(delegate.description).toContain("id=research; name=Mayuri");
+		expect(delegate.description).toContain("id=audit; name=Levi");
+	});
+
+	it("accepts display-name aliases but returns the canonical worker id", async () => {
+		const { registration, models } = createFaux();
+		registration.setResponses([
+			() => fauxAssistantMessage("Levi result."),
+			() => fauxAssistantMessage("Mayuri result."),
+		]);
+		const delegate = createDelegateTool({
+			cwd: process.cwd(),
+			model: registration.getModel(),
+			models,
+			workers: [
+				worker({ id: "research", displayName: "Mayuri" }),
+				worker({ id: "audit", displayName: "Levi" }),
+			],
+		});
+
+		const levi = await delegate.execute("call-levi", { worker: "Levi", task: "Audit the boundary." });
+		const mayuri = await delegate.execute("call-mayuri", { worker: "mAyUrI", task: "Research the boundary." });
+
+		expect(levi.details.result.workerId).toBe("audit");
+		expect(levi.details.result.workerName).toBe("Levi");
+		expect(mayuri.details.result.workerId).toBe("research");
+		expect(mayuri.details.result.workerName).toBe("Mayuri");
+	});
+
 	it("exposes the named worker through one parallel-safe parent-facing delegate tool", async () => {
 		const { registration, models } = createFaux();
 		registration.setResponses([() => fauxAssistantMessage("Reviewed the requested boundary.")]);
