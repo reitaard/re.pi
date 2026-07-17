@@ -1,3 +1,6 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
 	createModels,
 	fauxAssistantMessage,
@@ -10,6 +13,7 @@ import {
 	type NamedWorkerDefinition,
 	runNamedWorker,
 } from "../src/core/delegation/named-worker.ts";
+import { REPI_NAMED_WORKERS } from "../src/core/delegation/worker-registry.ts";
 
 let providerCount = 0;
 
@@ -29,7 +33,29 @@ function worker(overrides: Partial<NamedWorkerDefinition> = {}): NamedWorkerDefi
 	};
 }
 
+function messageText(messages: Array<{ role: string; content: unknown }>): string {
+	return messages
+		.flatMap((message) => {
+			if (typeof message.content === "string") return [message.content];
+			if (!Array.isArray(message.content)) return [];
+			return message.content.flatMap((part) =>
+				part && typeof part === "object" && "type" in part && part.type === "text" && "text" in part
+					? [String(part.text)]
+					: [],
+			);
+		})
+		.join("\n");
+}
+
 describe("named worker delegation spike", () => {
+	it("registers only the two stable worker ids with swappable display names", () => {
+		expect(REPI_NAMED_WORKERS.map(({ id, displayName }) => ({ id, displayName }))).toEqual([
+			{ id: "research", displayName: "Mayuri" },
+			{ id: "audit", displayName: "Levi" },
+		]);
+		expect(REPI_NAMED_WORKERS.find((candidate) => candidate.id === "research")?.skillName).toBe("librarian");
+	});
+
 	it("runs one isolated named worker with only read-only tools", async () => {
 		const { registration, models } = createFaux();
 		let toolNames: string[] = [];
@@ -57,6 +83,62 @@ describe("named worker delegation spike", () => {
 		expect(toolNames).not.toContain("delegate");
 		expect(systemPrompt).toContain("You are Reviewer");
 		expect(systemPrompt).toContain("Do not delegate");
+	});
+
+	it("explicitly invokes Mayuri's loaded librarian skill", async () => {
+		const { registration, models } = createFaux();
+		const dir = await mkdtemp(join(tmpdir(), "repi-librarian-"));
+		const skillPath = join(dir, "SKILL.md");
+		await writeFile(
+			skillPath,
+			"---\nname: librarian\ndescription: Find authoritative sources.\n---\n\n# Librarian\nPrefer authoritative sources.",
+			"utf8",
+		);
+		let prompt = "";
+		registration.setResponses([
+			(context) => {
+				prompt = messageText(context.messages);
+				return fauxAssistantMessage("Research complete.");
+			},
+		]);
+
+		try {
+			const result = await runNamedWorker({
+				cwd: process.cwd(),
+				model: registration.getModel(),
+				models,
+				worker: worker({ id: "research", displayName: "Mayuri", skillName: "librarian" }),
+				skills: [
+					{
+						name: "librarian",
+						description: "Find authoritative sources.",
+						filePath: skillPath,
+					},
+				],
+				task: "Find the authoritative lifecycle documentation.",
+			});
+
+			expect(result.status).toBe("completed");
+			expect(prompt).toContain('<skill name="librarian"');
+			expect(prompt).toContain("Prefer authoritative sources");
+			expect(prompt).toContain("Find the authoritative lifecycle documentation");
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("returns a typed failure when a required worker skill is not loaded", async () => {
+		const { registration, models } = createFaux();
+		const result = await runNamedWorker({
+			cwd: process.cwd(),
+			model: registration.getModel(),
+			models,
+			worker: worker({ id: "research", displayName: "Mayuri", skillName: "librarian" }),
+			task: "Research the repository.",
+		});
+
+		expect(result.status).toBe("failed");
+		expect(result.error).toContain('requires the loaded skill "librarian"');
 	});
 
 	it("supports a smaller worker-specific read-only tool set", async () => {
@@ -131,7 +213,7 @@ describe("named worker delegation spike", () => {
 		expect(result.output).toBe("");
 	});
 
-	it("exposes the named worker through one parent-facing delegate tool", async () => {
+	it("exposes the named worker through one parallel-safe parent-facing delegate tool", async () => {
 		const { registration, models } = createFaux();
 		registration.setResponses([() => fauxAssistantMessage("Reviewed the requested boundary.")]);
 		const delegate = createDelegateTool({
@@ -141,6 +223,7 @@ describe("named worker delegation spike", () => {
 			workers: [worker()],
 		});
 
+		expect(delegate.executionMode).toBe("parallel");
 		const toolResult = await delegate.execute("call-1", {
 			worker: "reviewer",
 			task: "Review the boundary.",
