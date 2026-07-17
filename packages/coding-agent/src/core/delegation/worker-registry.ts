@@ -9,6 +9,8 @@ export const REPI_NAMED_WORKERS: readonly NamedWorkerDefinition[] = [
 		id: "research",
 		displayName: "Mayuri",
 		description: "Finds, organizes, and cross-checks authoritative project information.",
+		personality:
+			"Curious, incisive, slightly eccentric, and meticulous. Speaks in compact evidence-backed conclusions and enjoys resolving uncertainty.",
 		skillName: "librarian",
 		tools: ["read", "grep", "find", "ls"],
 		thinkingLevel: "off",
@@ -20,6 +22,8 @@ export const REPI_NAMED_WORKERS: readonly NamedWorkerDefinition[] = [
 		id: "audit",
 		displayName: "Levi",
 		description: "Audits code and architecture for concrete correctness, lifecycle, security, and regression risks.",
+		personality:
+			"Blunt, disciplined, calm, and skeptical. Values precision over politeness, avoids speculation, and focuses on the highest-impact defect first.",
 		tools: ["read", "grep", "find", "ls"],
 		thinkingLevel: "off",
 		maxOutputTokens: 2_048,
