@@ -266,24 +266,42 @@ export class WorkerDirectory {
 				record.updatedAt = Date.now();
 				this.runtime.onProgress?.(event);
 			});
-			record.runId = result.runId;
-			record.status = statusFromResult(result);
-			record.finishedAt = Date.now();
-			record.updatedAt = record.finishedAt;
-			record.turnCount += 1;
-			record.lastOutput = result.output || undefined;
-			record.error = result.error;
-			record.history.push({ role: "caller", text: message.trim() });
-			record.history.push({
-				role: "worker",
-				text: result.output || result.error || `[${result.status}]`,
-			});
-			this.trimHistory(record);
+			this.recordResult(record, message, result);
+			return result;
+		} catch (error: unknown) {
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			const result: NamedWorkerRunResult = {
+				runId: record.runId ?? randomUUID(),
+				workerId: record.worker.id,
+				workerName: record.worker.displayName,
+				status: "failed",
+				output: "",
+				error: errorMessage,
+				durationMs: record.startedAt ? Date.now() - record.startedAt : 0,
+				truncated: false,
+			};
+			this.recordResult(record, message, result);
 			return result;
 		} finally {
 			record.abortController = undefined;
 			signal?.removeEventListener("abort", onAbort);
 		}
+	}
+
+	private recordResult(record: WorkerConversationRecord, message: string, result: NamedWorkerRunResult): void {
+		record.runId = result.runId;
+		record.status = statusFromResult(result);
+		record.finishedAt = Date.now();
+		record.updatedAt = record.finishedAt;
+		record.turnCount += 1;
+		record.lastOutput = result.output || undefined;
+		record.error = result.error;
+		record.history.push({ role: "caller", text: message.trim() });
+		record.history.push({
+			role: "worker",
+			text: result.output || result.error || `[${result.status}]`,
+		});
+		this.trimHistory(record);
 	}
 
 	private async run(
