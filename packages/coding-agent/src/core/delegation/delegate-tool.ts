@@ -6,6 +6,7 @@ import {
 	type NamedWorkerDefinition,
 	type NamedWorkerProgressEvent,
 	type NamedWorkerRunResult,
+	type NamedWorkerSkill,
 	runNamedWorker,
 } from "./named-worker.ts";
 
@@ -25,8 +26,13 @@ export interface DelegateToolDetails {
 
 export interface CreateDelegateToolOptions {
 	cwd: string;
-	model: Model<any>;
+	/** Fixed model for tests or simple hosts. */
+	model?: Model<any>;
+	/** Live model resolver for hosts where the parent can switch models. */
+	getModel?: () => Model<any> | undefined;
 	workers: readonly NamedWorkerDefinition[];
+	skills?: readonly NamedWorkerSkill[];
+	getSkills?: () => readonly NamedWorkerSkill[];
 	models?: Models;
 	modelRegistry?: ModelRegistry;
 	timeoutMs?: number;
@@ -35,7 +41,12 @@ export interface CreateDelegateToolOptions {
 }
 
 function buildWorkerDescription(workers: readonly NamedWorkerDefinition[]): string {
-	return workers.map((worker) => `- ${worker.id}: ${worker.displayName} — ${worker.description}`).join("\n");
+	return workers
+		.map((worker) => {
+			const skill = worker.skillName ? ` [skill: ${worker.skillName}]` : "";
+			return `- ${worker.id}: ${worker.displayName}${skill} — ${worker.description}`;
+		})
+		.join("\n");
 }
 
 function validateWorkers(workers: readonly NamedWorkerDefinition[]): Map<string, NamedWorkerDefinition> {
@@ -62,7 +73,7 @@ function formatToolResult(result: NamedWorkerRunResult): string {
 }
 
 /**
- * Create the parent-facing delegate tool for the non-production delegation spike.
+ * Create the parent-facing delegate tool.
  *
  * Workers receive only their configured read-only tools. The delegate tool itself
  * is never present in a child harness, which makes delegation depth exactly one.
@@ -71,22 +82,26 @@ export function createDelegateTool(options: CreateDelegateToolOptions): AgentToo
 	typeof delegateSchema,
 	DelegateToolDetails
 > {
+	if (!options.model && !options.getModel) throw new Error("createDelegateTool requires model or getModel");
 	const workers = validateWorkers(options.workers);
 	const availableWorkers = buildWorkerDescription(options.workers);
 	return {
 		name: "delegate",
 		label: "delegate",
-		description: `Delegate one focused, read-only task to a named worker. Delegation depth is limited to one.\n\nAvailable workers:\n${availableWorkers}`,
+		description: `Delegate one focused, read-only task to a named worker. Delegation depth is limited to one. Do not call this tool when the user says to work directly or not to delegate. Multiple independent delegate calls may run in parallel.\n\nAvailable workers:\n${availableWorkers}`,
 		parameters: delegateSchema,
-		executionMode: "sequential",
+		executionMode: "parallel",
 		async execute(_toolCallId, input, signal) {
 			const worker = workers.get(input.worker);
 			if (!worker) {
 				throw new Error(`Unknown named worker: ${input.worker}. Available: ${[...workers.keys()].join(", ")}`);
 			}
+			const model = options.getModel?.() ?? options.model;
+			if (!model) throw new Error("Cannot delegate without an active parent model");
 			const result = await runNamedWorker({
 				cwd: options.cwd,
-				model: options.model,
+				model,
+				skills: options.getSkills?.() ?? options.skills,
 				models: options.models,
 				modelRegistry: options.modelRegistry,
 				worker,
