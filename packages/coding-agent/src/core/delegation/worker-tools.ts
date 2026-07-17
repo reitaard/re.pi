@@ -33,7 +33,8 @@ function formatStatus(snapshot: WorkerConversationSnapshot): string {
 	return `[conversation ${snapshot.conversationId.slice(0, 8)} | worker ${snapshot.workerId}/${snapshot.workerName} | run ${snapshot.runId?.slice(0, 8) ?? "none"} | ${snapshot.status} | ${elapsed}s | turns ${snapshot.turnCount}${tool}]\ntask: ${snapshot.taskSummary}${error}${output}`;
 }
 
-export function createWorkerControlTools(directory: WorkerDirectory): AgentTool[] {
+export function createWorkerControlTools(directory: WorkerDirectory): AgentTool<any>[] {
+	const listSchema = Type.Object({});
 	const startSchema = Type.Object({
 		worker: workerReferenceSchema(directory),
 		message: Type.String({ description: "First task or message for the worker" }),
@@ -51,12 +52,12 @@ export function createWorkerControlTools(directory: WorkerDirectory): AgentTool[
 		conversationId: Type.String({ description: "Worker conversation id" }),
 	});
 
-	const listTool: AgentTool = {
+	const listTool: AgentTool<typeof listSchema, undefined> = {
 		name: "worker_list",
 		label: "worker_list",
 		description:
 			"List the live worker directory: canonical ids, display names, roles, personality, skill, and tools. Use this when worker identity or capability is uncertain.",
-		parameters: Type.Object({}),
+		parameters: listSchema,
 		executionMode: "parallel",
 		async execute() {
 			const lines = directory.listWorkers().map((worker) => {
@@ -68,11 +69,11 @@ export function createWorkerControlTools(directory: WorkerDirectory): AgentTool[
 		},
 	};
 
-	const startTool: AgentTool = {
+	const startTool: AgentTool<typeof startSchema, WorkerConversationTurnResult> = {
 		name: "worker_start",
 		label: "worker_start",
 		description:
-			"Open a named worker conversation and send its first message. The conversation remains addressable by conversationId, preserves bounded dialogue context, and may run in parallel with other worker_start calls.",
+			"Open a named worker conversation and send its first message. The conversation remains addressable by conversationId, preserves bounded dialogue context, and may run in parallel with other worker_start calls. When the user explicitly chose this worker, report worker failure instead of silently doing the assigned task yourself unless fallback was requested.",
 		parameters: startSchema,
 		executionMode: "parallel",
 		async execute(_toolCallId, input, signal) {
@@ -81,11 +82,11 @@ export function createWorkerControlTools(directory: WorkerDirectory): AgentTool[
 		},
 	};
 
-	const messageTool: AgentTool = {
+	const messageTool: AgentTool<typeof messageSchema, WorkerConversationTurnResult> = {
 		name: "worker_message",
 		label: "worker_message",
 		description:
-			"Continue an existing worker conversation. The same named personality receives the previous caller/worker dialogue as bounded context. Do not use a conversation id belonging to another worker.",
+			"Continue an existing worker conversation. The same named personality receives the previous caller/worker dialogue as bounded context. Report worker failure instead of replacing that worker with parent work unless fallback was requested.",
 		parameters: messageSchema,
 		executionMode: "parallel",
 		async execute(_toolCallId, input, signal) {
@@ -94,7 +95,7 @@ export function createWorkerControlTools(directory: WorkerDirectory): AgentTool[
 		},
 	};
 
-	const statusTool: AgentTool = {
+	const statusTool: AgentTool<typeof statusSchema, { conversations: WorkerConversationSnapshot[] }> = {
 		name: "worker_status",
 		label: "worker_status",
 		description:
@@ -108,7 +109,7 @@ export function createWorkerControlTools(directory: WorkerDirectory): AgentTool[
 		},
 	};
 
-	const cancelTool: AgentTool = {
+	const cancelTool: AgentTool<typeof conversationSchema, { cancelled: boolean }> = {
 		name: "worker_cancel",
 		label: "worker_cancel",
 		description: "Cancel the currently running turn for one worker conversation without closing the conversation.",
@@ -130,7 +131,7 @@ export function createWorkerControlTools(directory: WorkerDirectory): AgentTool[
 		},
 	};
 
-	const closeTool: AgentTool = {
+	const closeTool: AgentTool<typeof conversationSchema, { conversation: WorkerConversationSnapshot }> = {
 		name: "worker_close",
 		label: "worker_close",
 		description: "Close and forget one worker conversation. Any active turn is cancelled first.",
