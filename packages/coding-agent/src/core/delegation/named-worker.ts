@@ -3,6 +3,7 @@ import {
 	AgentHarness,
 	InMemorySessionStorage,
 	Session,
+	type AgentTool,
 	type ThinkingLevel,
 } from "@reitaard/repi-agent-core";
 import { NodeExecutionEnv } from "@reitaard/repi-agent-core/node";
@@ -118,7 +119,7 @@ function validateWorker(worker: NamedWorkerDefinition): void {
 	}
 }
 
-function createWorkerTools(cwd: string, names: readonly NamedWorkerToolName[]) {
+function createWorkerTools(cwd: string, names: readonly NamedWorkerToolName[]): AgentTool[] {
 	return names.map((name) => {
 		switch (name) {
 			case "read":
@@ -129,6 +130,10 @@ function createWorkerTools(cwd: string, names: readonly NamedWorkerToolName[]) {
 				return createFindTool(cwd);
 			case "ls":
 				return createLsTool(cwd);
+			default: {
+				const unsupported: never = name;
+				throw new Error(`Unsupported delegated worker tool: ${String(unsupported)}`);
+			}
 		}
 	});
 }
@@ -176,8 +181,9 @@ function assistantText(message: AssistantMessage): string {
 function clipResult(text: string, limit: number): { output: string; truncated: boolean } {
 	if (text.length <= limit) return { output: text, truncated: false };
 	const suffix = "\n...[delegated result truncated]";
+	if (limit <= suffix.length) return { output: suffix.slice(0, limit), truncated: true };
 	return {
-		output: `${text.slice(0, Math.max(0, limit - suffix.length))}${suffix}`,
+		output: `${text.slice(0, limit - suffix.length)}${suffix}`,
 		truncated: true,
 	};
 }
@@ -284,6 +290,7 @@ export async function runNamedWorker(options: RunNamedWorkerOptions): Promise<Na
 	};
 	const onAbort = () => requestAbort("cancelled");
 	options.signal?.addEventListener("abort", onAbort, { once: true });
+	if (options.signal?.aborted) requestAbort("cancelled");
 	const timer = setTimeout(() => requestAbort("timeout"), timeoutMs);
 	const unsubscribe = harness.subscribe((event) => {
 		if (event.type !== "tool_execution_start" && event.type !== "tool_execution_end") return;
