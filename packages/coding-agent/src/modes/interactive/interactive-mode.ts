@@ -618,8 +618,37 @@ export class InteractiveMode {
 				{ value: "off", label: "off", description: "Disable language servers" },
 				{ value: "project-on", label: "project-on", description: "Restrict LSP to the current project" },
 				{ value: "project-off", label: "project-off", description: "Allow unrestricted LSP access" },
+				{
+					value: "project-only on",
+					label: "project-only on",
+					description: "Restrict LSP to the current project",
+				},
+				{
+					value: "project-only off",
+					label: "project-only off",
+					description: "Allow unrestricted LSP access",
+				},
+				{
+					value: "server ",
+					label: "server <name> on|off",
+					description: "Enable or disable one language server",
+				},
 			];
 			lspCommand.getArgumentCompletions = (prefix: string): AutocompleteItem[] | null => {
+				const normalized = prefix.trimStart();
+				const matches = options.filter((option) => option.value.startsWith(normalized));
+				return matches.length > 0 ? matches : null;
+			};
+		}
+
+		const lspmuxCommand = slashCommands.find((command) => command.name === "lspmux");
+		if (lspmuxCommand) {
+			const options: AutocompleteItem[] = [
+				{ value: "status", label: "status", description: "Show LSP multiplexing status" },
+				{ value: "on", label: "on", description: "Enable LSP multiplexing" },
+				{ value: "off", label: "off", description: "Disable LSP multiplexing" },
+			];
+			lspmuxCommand.getArgumentCompletions = (prefix: string): AutocompleteItem[] | null => {
 				const normalized = prefix.trimStart();
 				const matches = options.filter((option) => option.value.startsWith(normalized));
 				return matches.length > 0 ? matches : null;

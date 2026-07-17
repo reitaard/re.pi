@@ -305,7 +305,7 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 			};
 		}
 
-		if (!options.force && textBeforeCursor.startsWith("/")) {
+		if (textBeforeCursor.startsWith("/")) {
 			const spaceIndex = textBeforeCursor.indexOf(" ");
 
 			if (spaceIndex === -1) {
@@ -344,18 +344,17 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 				return name === commandName;
 			});
 			if (!command || !("getArgumentCompletions" in command) || !command.getArgumentCompletions) {
-				return null;
+				if (!options.force) return null;
+			} else {
+				const argumentSuggestions = await command.getArgumentCompletions(argumentText);
+				if (Array.isArray(argumentSuggestions) && argumentSuggestions.length > 0) {
+					return {
+						items: argumentSuggestions,
+						prefix: argumentText,
+					};
+				}
+				if (!options.force) return null;
 			}
-
-			const argumentSuggestions = await command.getArgumentCompletions(argumentText);
-			if (!Array.isArray(argumentSuggestions) || argumentSuggestions.length === 0) {
-				return null;
-			}
-
-			return {
-				items: argumentSuggestions,
-				prefix: argumentText,
-			};
 		}
 
 		const pathMatch = this.extractPathPrefix(textBeforeCursor, options.force ?? false);

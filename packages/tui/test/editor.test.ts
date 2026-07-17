@@ -2821,6 +2821,57 @@ describe("Editor component", () => {
 			assert.strictEqual(editor.isShowingAutocomplete(), true);
 		});
 
+		it("keeps staged slash command help visible across Tab completions", async () => {
+			const editor = new Editor(createTestTUI(), defaultEditorTheme);
+			const provider = new CombinedAutocompleteProvider(
+				[
+					{
+						name: "shiori",
+						description: "Review session memory",
+						getArgumentCompletions: (prefix) => {
+							const options = [
+								{
+									value: "review ",
+									label: "review <path>",
+									description: "Review a selected file",
+								},
+							];
+							return options.filter((option) => option.value.startsWith(prefix));
+						},
+					},
+				],
+				process.cwd(),
+			);
+			editor.setAutocompleteProvider(provider);
+			for (const character of "/shiori") editor.handleInput(character);
+			await flushAutocomplete();
+			assert.strictEqual(editor.isShowingAutocomplete(), true);
+
+			editor.handleInput("\t");
+			await flushAutocomplete();
+			assert.strictEqual(editor.getText(), "/shiori ");
+			assert.strictEqual(editor.isShowingAutocomplete(), true);
+			assert.match(
+				editor
+					.render(80)
+					.map((line) => stripVTControlCharacters(line))
+					.join("\n"),
+				/review <path>.*Review a selected file/,
+			);
+
+			editor.handleInput("\t");
+			await flushAutocomplete();
+			assert.strictEqual(editor.getText(), "/shiori review ");
+			assert.strictEqual(editor.isShowingAutocomplete(), true);
+			assert.match(
+				editor
+					.render(80)
+					.map((line) => stripVTControlCharacters(line))
+					.join("\n"),
+				/review <path>.*Review a selected file/,
+			);
+		});
+
 		it("ignores invalid slash command argument completion results", async () => {
 			const editor = new Editor(createTestTUI(), defaultEditorTheme);
 			const provider = new CombinedAutocompleteProvider(

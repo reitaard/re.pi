@@ -665,6 +665,7 @@ export class Editor implements Component, Focusable {
 			if (kb.matches(data, "tui.input.tab")) {
 				const selected = this.autocompleteList.getSelectedItem();
 				if (selected && this.autocompleteProvider) {
+					const continueSlashCompletion = this.autocompletePrefix.startsWith("/") || selected.value.endsWith(" ");
 					this.pushUndoSnapshot();
 					this.lastAction = null;
 					const result = this.autocompleteProvider.applyCompletion(
@@ -679,6 +680,7 @@ export class Editor implements Component, Focusable {
 					this.setCursorCol(result.cursorCol);
 					this.cancelAutocomplete();
 					if (this.onChange) this.onChange(this.getText());
+					if (continueSlashCompletion) this.tryTriggerAutocomplete(true);
 				}
 				return;
 			}

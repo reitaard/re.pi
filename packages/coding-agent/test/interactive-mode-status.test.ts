@@ -482,6 +482,56 @@ describe("InteractiveMode.createBaseAutocompleteProvider", () => {
 			},
 		]);
 	});
+
+	test("completes every RePi LSP control command", async () => {
+		type FakeInteractiveMode = {
+			session: {
+				scopedModels: [];
+				modelRegistry: { getAvailable: () => [] };
+				promptTemplates: [];
+				extensionRunner: { getRegisteredCommands: () => [] };
+				resourceLoader: { getSkills: () => { skills: [] } };
+			};
+			settingsManager: { getEnableSkillCommands: () => boolean };
+			skillCommands: Map<string, string>;
+			sessionManager: { getCwd: () => string };
+			fdPath: null;
+			getLoginProviderOptions: () => [];
+		};
+
+		const createBaseAutocompleteProvider = (
+			InteractiveMode as unknown as {
+				prototype: { createBaseAutocompleteProvider(this: FakeInteractiveMode): AutocompleteProvider };
+			}
+		).prototype.createBaseAutocompleteProvider;
+		const fakeThis: FakeInteractiveMode = {
+			session: {
+				scopedModels: [],
+				modelRegistry: { getAvailable: () => [] },
+				promptTemplates: [],
+				extensionRunner: { getRegisteredCommands: () => [] },
+				resourceLoader: { getSkills: () => ({ skills: [] }) },
+			},
+			settingsManager: { getEnableSkillCommands: () => false },
+			skillCommands: new Map(),
+			sessionManager: { getCwd: () => "/tmp" },
+			fdPath: null,
+			getLoginProviderOptions: () => [],
+		};
+		const provider = createBaseAutocompleteProvider.call(fakeThis);
+
+		const lspLine = "/lsp project-only ";
+		const lsp = await provider.getSuggestions([lspLine], 0, lspLine.length, {
+			signal: new AbortController().signal,
+		});
+		expect(lsp?.items.map((item) => item.value)).toEqual(["project-only on", "project-only off"]);
+
+		const muxLine = "/lspmux ";
+		const mux = await provider.getSuggestions([muxLine], 0, muxLine.length, {
+			signal: new AbortController().signal,
+		});
+		expect(mux?.items.map((item) => item.value)).toEqual(["status", "on", "off"]);
+	});
 });
 describe("InteractiveMode.showLoadedResources", () => {
 	beforeAll(() => {
