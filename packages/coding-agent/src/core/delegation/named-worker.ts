@@ -19,6 +19,7 @@ import {
 import { type ProviderStreamOptions, stream, streamSimple } from "@reitaard/repi-ai/compat";
 import type { ModelRegistry } from "../model-registry.ts";
 import { createFindTool, createGrepTool, createLsTool, createReadTool } from "../tools/index.ts";
+import { createWorkspaceToolCallGuard } from "./workspace-guard.ts";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_MAX_OUTPUT_TOKENS = 4_096;
@@ -317,6 +318,7 @@ export async function runNamedWorker(options: RunNamedWorkerOptions): Promise<Na
 		resources: workerSkill ? { skills: [workerSkill] } : undefined,
 		tools,
 	});
+	harness.on("tool_call", createWorkspaceToolCallGuard(options.cwd));
 
 	let abortReason: "cancelled" | "timeout" | undefined;
 	let abortError: string | undefined;
