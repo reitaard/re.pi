@@ -4,6 +4,7 @@ import type { Model } from "@reitaard/repi-ai";
 import { getAgentDir } from "../config.ts";
 import { resolvePath } from "../utils/paths.ts";
 import { AuthStorage } from "./auth-storage.ts";
+import { createDelegateTool, REPI_NAMED_WORKERS } from "./delegation/index.ts";
 import type { SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
 import { ModelRegistry } from "./model-registry.ts";
 import {
@@ -15,6 +16,9 @@ import {
 import { type CreateAgentSessionOptions, type CreateAgentSessionResult, createAgentSession } from "./sdk.ts";
 import type { SessionManager } from "./session-manager.ts";
 import { SettingsManager } from "./settings-manager.ts";
+import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.ts";
+
+const DELEGATION_ENV = "REPI_DELEGATION";
 
 /**
  * Non-fatal issues collected while creating services or sessions.
@@ -79,6 +83,33 @@ export interface AgentSessionServices {
 	modelRegistry: ModelRegistry;
 	resourceLoader: ResourceLoader;
 	diagnostics: AgentSessionRuntimeDiagnostic[];
+}
+
+function isTruthyEnvFlag(value: string | undefined): boolean {
+	if (!value) return false;
+	return value === "1" || value.toLowerCase() === "true" || value.toLowerCase() === "yes";
+}
+
+function resolveCurrentModel(options: CreateAgentSessionFromServicesOptions): Model<any> | undefined {
+	const persisted = options.sessionManager.buildSessionContext().model;
+	if (!persisted) return options.model;
+	return options.services.modelRegistry.find(persisted.provider, persisted.modelId) ?? options.model;
+}
+
+function resolveCustomTools(options: CreateAgentSessionFromServicesOptions): ToolDefinition[] | undefined {
+	const customTools = [...(options.customTools ?? [])];
+	if (!isTruthyEnvFlag(process.env[DELEGATION_ENV]) || customTools.some((tool) => tool.name === "delegate")) {
+		return customTools.length > 0 ? customTools : undefined;
+	}
+	const delegate = createDelegateTool({
+		cwd: options.services.cwd,
+		getModel: () => resolveCurrentModel(options),
+		getSkills: () => options.services.resourceLoader.getSkills().skills,
+		modelRegistry: options.services.modelRegistry,
+		workers: REPI_NAMED_WORKERS,
+	});
+	customTools.push(createToolDefinitionFromAgentTool(delegate));
+	return customTools;
 }
 
 function applyExtensionFlagValues(
@@ -201,7 +232,7 @@ export async function createAgentSessionFromServices(
 		tools: options.tools,
 		excludeTools: options.excludeTools,
 		noTools: options.noTools,
-		customTools: options.customTools,
+		customTools: resolveCustomTools(options),
 		sessionStartEvent: options.sessionStartEvent,
 	});
 }
