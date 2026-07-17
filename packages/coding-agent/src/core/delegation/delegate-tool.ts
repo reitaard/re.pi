@@ -2,21 +2,22 @@ import type { AgentTool } from "@reitaard/repi-agent-core";
 import type { Model, Models } from "@reitaard/repi-ai";
 import { type Static, Type } from "typebox";
 import type { ModelRegistry } from "../model-registry.ts";
-import {
-	type NamedWorkerDefinition,
-	type NamedWorkerProgressEvent,
-	type NamedWorkerRunResult,
-	type NamedWorkerSkill,
-	runNamedWorker,
+import type {
+	NamedWorkerDefinition,
+	NamedWorkerProgressEvent,
+	NamedWorkerRunResult,
+	NamedWorkerSkill,
 } from "./named-worker.ts";
+import { WorkerDirectory } from "./worker-directory.ts";
 
 function createDelegateSchema(workers: readonly NamedWorkerDefinition[]) {
 	const workerIds = workers.map((worker) => worker.id);
+	const references = workers.flatMap((worker) => [worker.id, worker.displayName]);
 	const aliases = workers.map((worker) => `${worker.displayName} -> ${worker.id}`).join(", ");
 	return Type.Object({
 		worker: Type.String({
-			description: `Canonical worker id. Allowed values: ${workerIds.join(", ")}. Display-name aliases: ${aliases}.`,
-			enum: workerIds,
+			description: `Worker id or display name. Prefer canonical ids: ${workerIds.join(", ")}. Aliases: ${aliases}.`,
+			enum: references,
 		}),
 		task: Type.String({ description: "One focused task for the worker" }),
 		context: Type.Optional(
@@ -34,56 +35,32 @@ export interface DelegateToolDetails {
 }
 
 export interface CreateDelegateToolOptions {
-	cwd: string;
+	cwd?: string;
+	/** Shared directory for any Aizen/host that should see the same worker registry. */
+	directory?: WorkerDirectory;
 	/** Fixed model for tests or simple hosts. */
 	model?: Model<any>;
 	/** Live model resolver for hosts where the parent can switch models. */
 	getModel?: () => Model<any> | undefined;
-	workers: readonly NamedWorkerDefinition[];
+	workers?: readonly NamedWorkerDefinition[];
 	skills?: readonly NamedWorkerSkill[];
 	getSkills?: () => readonly NamedWorkerSkill[];
 	models?: Models;
 	modelRegistry?: ModelRegistry;
+	/** Optional host policy. Omit for no worker time limit. */
 	timeoutMs?: number;
 	maxResultCharacters?: number;
 	onProgress?: (event: NamedWorkerProgressEvent) => void;
 }
 
-interface ValidatedWorkerRegistry {
-	byId: Map<string, NamedWorkerDefinition>;
-	byAlias: Map<string, NamedWorkerDefinition>;
-}
-
-function normalizeWorkerReference(value: string): string {
-	return value.trim().toLowerCase();
-}
-
 function buildWorkerDescription(workers: readonly NamedWorkerDefinition[]): string {
 	return workers
 		.map((worker) => {
-			const skill = worker.skillName ? ` [skill: ${worker.skillName}]` : "";
-			return `- id=${worker.id}; name=${worker.displayName}${skill}; role=${worker.description}`;
+			const skill = worker.skillName ? `; skill=${worker.skillName}` : "";
+			const personality = worker.personality ? `; personality=${worker.personality}` : "";
+			return `- id=${worker.id}; name=${worker.displayName}; role=${worker.description}${skill}${personality}`;
 		})
 		.join("\n");
-}
-
-function validateWorkers(workers: readonly NamedWorkerDefinition[]): ValidatedWorkerRegistry {
-	if (workers.length === 0) throw new Error("createDelegateTool requires at least one named worker");
-	const byId = new Map<string, NamedWorkerDefinition>();
-	const byAlias = new Map<string, NamedWorkerDefinition>();
-	for (const worker of workers) {
-		if (byId.has(worker.id)) throw new Error(`Duplicate named worker id: ${worker.id}`);
-		byId.set(worker.id, worker);
-		for (const alias of [worker.id, worker.displayName]) {
-			const key = normalizeWorkerReference(alias);
-			const existing = byAlias.get(key);
-			if (existing && existing.id !== worker.id) {
-				throw new Error(`Named worker reference collision: ${alias} maps to both ${existing.id} and ${worker.id}`);
-			}
-			byAlias.set(key, worker);
-		}
-	}
-	return { byId, byAlias };
 }
 
 function formatProcessHeader(result: NamedWorkerRunResult): string {
@@ -105,48 +82,47 @@ function formatToolResult(result: NamedWorkerRunResult): string {
 	}
 }
 
+function resolveDirectory(options: CreateDelegateToolOptions): WorkerDirectory {
+	if (options.directory) return options.directory;
+	if (!options.cwd) throw new Error("createDelegateTool requires cwd when directory is not supplied");
+	if (!options.workers) throw new Error("createDelegateTool requires workers when directory is not supplied");
+	return new WorkerDirectory({
+		cwd: options.cwd,
+		workers: options.workers,
+		model: options.model,
+		getModel: options.getModel,
+		skills: options.skills,
+		getSkills: options.getSkills,
+		models: options.models,
+		modelRegistry: options.modelRegistry,
+		timeoutMs: options.timeoutMs,
+		maxResultCharacters: options.maxResultCharacters,
+		onProgress: options.onProgress,
+	});
+}
+
 /**
- * Create the parent-facing delegate tool.
+ * Create the parent-facing one-shot delegate tool.
  *
- * Workers receive only their configured read-only tools. The delegate tool itself
- * is never present in a child harness, which makes delegation depth exactly one.
+ * Persistent, directly addressable worker conversations are exposed separately
+ * through worker_start/worker_message and share the same WorkerDirectory.
  */
 export function createDelegateTool(options: CreateDelegateToolOptions): AgentTool<
 	DelegateSchema,
 	DelegateToolDetails
 > {
-	if (!options.model && !options.getModel) throw new Error("createDelegateTool requires model or getModel");
-	const workers = validateWorkers(options.workers);
-	const availableWorkers = buildWorkerDescription(options.workers);
-	const parameters = createDelegateSchema(options.workers);
+	const directory = resolveDirectory(options);
+	const definitions = directory.getWorkerDefinitions();
+	const availableWorkers = buildWorkerDescription(definitions);
+	const parameters = createDelegateSchema(definitions);
 	return {
 		name: "delegate",
 		label: "delegate",
-		description: `Delegate one focused, read-only task to a named worker. Delegation depth is limited to one. The worker argument uses the canonical id shown below; display names are accepted as aliases by the runtime. Never invent a worker id or name. When the user explicitly requests a worker by id, display name, or role, that request overrides the simple-task optimization: call delegate even for a single read, grep, find, or ls task. Only skip delegation for simple deterministic work when the user did not request a worker. You may launch multiple independent workers in one turn; the configured model provider may queue their requests. Track each returned worker id, run id, status, and duration before deciding the next action. If delegation fails, report the failure or continue only with exact scoped paths already known; never launch an unbounded repository-wide scan.\n\nWorker directory:\n${availableWorkers}`,
+		description: `Run one focused, read-only task with a named worker and return only its bounded final result. The worker argument uses the directory below; prefer canonical ids, while display names remain accepted aliases. Never invent a worker. When the user explicitly requests a worker by id, display name, or role, call delegate even for a simple read/grep/find/ls task. You may launch multiple independent delegate calls in one turn; the provider may queue them. There is no built-in worker timeout unless the host explicitly configures one. If an explicitly requested worker fails or is cancelled, report that result; do not replace the worker by doing its task yourself unless the user explicitly requested fallback.\n\nWorker directory:\n${availableWorkers}`,
 		parameters,
 		executionMode: "parallel",
 		async execute(_toolCallId, input, signal) {
-			const worker = workers.byAlias.get(normalizeWorkerReference(input.worker));
-			if (!worker) {
-				const available = options.workers.map((candidate) => `${candidate.id} (${candidate.displayName})`).join(", ");
-				throw new Error(`Unknown named worker: ${input.worker}. Available: ${available}`);
-			}
-			const model = options.getModel?.() ?? options.model;
-			if (!model) throw new Error("Cannot delegate without an active parent model");
-			const result = await runNamedWorker({
-				cwd: options.cwd,
-				model,
-				skills: options.getSkills?.() ?? options.skills,
-				models: options.models,
-				modelRegistry: options.modelRegistry,
-				worker,
-				task: input.task,
-				context: input.context,
-				timeoutMs: options.timeoutMs,
-				maxResultCharacters: options.maxResultCharacters,
-				signal,
-				onProgress: options.onProgress,
-			});
+			const result = await directory.runOneShot(input.worker, input.task, input.context, signal);
 			return {
 				content: [{ type: "text", text: formatToolResult(result) }],
 				details: { result },
