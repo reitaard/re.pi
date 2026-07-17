@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import {
 	AgentHarness,
 	InMemorySessionStorage,
 	Session,
 	type AgentTool,
+	type Skill as HarnessSkill,
 	type ThinkingLevel,
 } from "@reitaard/repi-agent-core";
 import { NodeExecutionEnv } from "@reitaard/repi-agent-core/node";
@@ -24,6 +26,14 @@ const DEFAULT_MAX_RESULT_CHARACTERS = 16_000;
 
 export type NamedWorkerToolName = "read" | "grep" | "find" | "ls";
 
+/** Minimal skill metadata accepted from coding-agent's ResourceLoader. */
+export interface NamedWorkerSkill {
+	name: string;
+	description: string;
+	filePath: string;
+	disableModelInvocation?: boolean;
+}
+
 export interface NamedWorkerDefinition {
 	/** Stable protocol/configuration id. Do not use the display name as durable identity. */
 	id: string;
@@ -33,6 +43,8 @@ export interface NamedWorkerDefinition {
 	description: string;
 	/** Additional role-specific instructions appended to the common worker prompt. */
 	systemPrompt?: string;
+	/** Optional loaded skill name that is explicitly invoked for every task. */
+	skillName?: string;
 	/** Read-only tools available to this worker. Defaults to read, grep, find, and ls. */
 	tools?: readonly NamedWorkerToolName[];
 	/** Worker reasoning level. Defaults to off for low latency. */
@@ -86,6 +98,8 @@ export interface RunNamedWorkerOptions extends NamedWorkerTask {
 	cwd: string;
 	worker: NamedWorkerDefinition;
 	model: Model<any>;
+	/** Skills already discovered by coding-agent's ResourceLoader. */
+	skills?: readonly NamedWorkerSkill[];
 	/** Inject an already configured model registry, primarily for deterministic tests. */
 	models?: Models;
 	/** Used to build a private provider registry when models is not supplied. */
@@ -108,6 +122,7 @@ function validateWorker(worker: NamedWorkerDefinition): void {
 	}
 	if (!worker.displayName.trim()) throw new Error("Worker displayName is required");
 	if (!worker.description.trim()) throw new Error("Worker description is required");
+	if (worker.skillName !== undefined && !worker.skillName.trim()) throw new Error("Worker skillName cannot be empty");
 	if (worker.maxOutputTokens !== undefined) assertPositiveInteger(worker.maxOutputTokens, "maxOutputTokens");
 	const tools = worker.tools ?? ["read", "grep", "find", "ls"];
 	const supported = new Set<NamedWorkerToolName>(["read", "grep", "find", "ls"]);
@@ -212,6 +227,22 @@ OUTPUT
 Return the useful result, concrete evidence, important uncertainty, and recommended next action.`;
 }
 
+async function loadWorkerSkill(
+	worker: NamedWorkerDefinition,
+	skills: readonly NamedWorkerSkill[] | undefined,
+): Promise<HarnessSkill | undefined> {
+	if (!worker.skillName) return undefined;
+	const skill = skills?.find((candidate) => candidate.name === worker.skillName);
+	if (!skill) throw new Error(`${worker.displayName} requires the loaded skill "${worker.skillName}"`);
+	return {
+		name: skill.name,
+		description: skill.description,
+		filePath: skill.filePath,
+		content: await readFile(skill.filePath, "utf8"),
+		disableModelInvocation: skill.disableModelInvocation,
+	};
+}
+
 function emitProgress(options: RunNamedWorkerOptions, event: NamedWorkerProgressEvent): void {
 	try {
 		options.onProgress?.(event);
@@ -261,6 +292,13 @@ export async function runNamedWorker(options: RunNamedWorkerOptions): Promise<Na
 
 	if (options.signal?.aborted) return finish("cancelled", "", "Delegated worker cancelled before start");
 
+	let workerSkill: HarnessSkill | undefined;
+	try {
+		workerSkill = await loadWorkerSkill(options.worker, options.skills);
+	} catch (error: unknown) {
+		return finish("failed", "", error instanceof Error ? error.message : String(error));
+	}
+
 	const maxOutputTokens = options.worker.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
 	const requestModel: Model<any> = {
 		...options.model,
@@ -276,6 +314,7 @@ export async function runNamedWorker(options: RunNamedWorkerOptions): Promise<Na
 		model: requestModel,
 		thinkingLevel: options.worker.thinkingLevel ?? "off",
 		systemPrompt: buildWorkerSystemPrompt(options.worker, options.cwd),
+		resources: workerSkill ? { skills: [workerSkill] } : undefined,
 		tools,
 	});
 
@@ -312,7 +351,8 @@ export async function runNamedWorker(options: RunNamedWorkerOptions): Promise<Na
 	});
 
 	try {
-		const message = await harness.prompt(buildTaskPrompt(options));
+		const prompt = buildTaskPrompt(options);
+		const message = workerSkill ? await harness.skill(workerSkill.name, prompt) : await harness.prompt(prompt);
 		if (abortReason === "timeout") {
 			return finish("timeout", "", abortError ?? `Delegated worker exceeded ${timeoutMs}ms`);
 		}
