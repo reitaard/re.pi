@@ -21,7 +21,7 @@ import type { ModelRegistry } from "../model-registry.ts";
 import { createFindTool, createGrepTool, createLsTool, createReadTool } from "../tools/index.ts";
 import { createWorkspaceToolCallGuard } from "./workspace-guard.ts";
 
-const DEFAULT_TIMEOUT_MS = 120_000;
+const DEFAULT_TIMEOUT_MS = 300_000;
 const DEFAULT_MAX_OUTPUT_TOKENS = 4_096;
 const DEFAULT_MAX_RESULT_CHARACTERS = 16_000;
 
