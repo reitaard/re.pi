@@ -27,13 +27,17 @@ Stable ids are used for routing; display names are case-insensitive aliases.
   - real loaded `librarian` skill
   - curious, meticulous research personality
   - tools: `read`, `grep`, `find`, `ls`
-  - thinking: off
-  - output cap: 2048 tokens
+  - thinking requested off
+  - completion budget: 16384 tokens
 - `audit` -> **Levi**
   - blunt, disciplined audit personality
   - tools: `read`, `grep`, `find`, `ls`
-  - thinking: off
-  - output cap: 2048 tokens
+  - thinking requested off
+  - completion budget: 16384 tokens
+
+The larger completion budget prevents local reasoning models from consuming a
+small 2048-token allowance in reasoning/tool work before producing final text.
+Parent-visible output remains bounded separately before it enters shared context.
 
 The schemas inject both canonical ids and display-name aliases into every model
 request. Returned results always report the stable canonical id.
@@ -82,6 +86,9 @@ provider may queue requests according to its own concurrency setting.
 - If an explicitly requested worker fails or is cancelled, Aizen must report that
   result instead of silently doing the worker's task itself unless fallback was
   requested.
+- Failed `worker_start` and `worker_message` calls are marked terminal for that tool
+  batch and include `AUTOMATIC_RETRY_BLOCKED`; a fresh user message must explicitly
+  authorize retry or fallback.
 - Worker identities and personalities come from the directory, not model memory.
 - Each turn uses a fresh isolated child `AgentHarness`.
 - Worker conversations carry only bounded caller messages and final worker answers.
@@ -119,6 +126,7 @@ import {
 - `packages/coding-agent/test/delegation.test.ts`
 - `packages/coding-agent/test/delegation-isolation.test.ts`
 - `packages/coding-agent/test/worker-directory.test.ts`
+- `packages/coding-agent/test/worker-failure-policy.test.ts`
 - `docs/AGENT_ORCHESTRATION_PLAN.md`
 
 ## Verification
@@ -130,7 +138,8 @@ npm --prefix packages/agent run build
 npm --prefix packages/coding-agent test -- \
   test/delegation.test.ts \
   test/delegation-isolation.test.ts \
-  test/worker-directory.test.ts
+  test/worker-directory.test.ts \
+  test/worker-failure-policy.test.ts
 npm --prefix packages/coding-agent run build
 npm --prefix packages/agent run test:harness
 npm --prefix packages/coding-agent test -- test/recode-shiori.test.ts
@@ -143,5 +152,6 @@ Live test requirements:
 3. Each result returns a conversation id and canonical worker id.
 4. `worker_message` continues one chosen conversation.
 5. No 300-second timeout occurs.
-6. Aizen does not perform an explicitly assigned worker task after worker failure
+6. A failed worker batch does not start fresh worker conversations automatically.
+7. Aizen does not perform an explicitly assigned worker task after worker failure
    unless the user requested fallback.
