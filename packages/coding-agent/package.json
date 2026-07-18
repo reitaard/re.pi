@@ -4,11 +4,11 @@
 	"description": "Coding agent CLI with read, bash, edit, write tools and session management",
 	"type": "module",
 	"piConfig": {
+		"name": "recode",
 		"configDir": ".pi"
 	},
 	"bin": {
-		"pi": "dist/cli.js",
-		"re.pi": "dist/cli.js",
+		"recode": "dist/cli.js",
 		"repi": "dist/cli.js"
 	},
 	"main": "./dist/index.js",

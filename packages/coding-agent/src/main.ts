@@ -49,7 +49,7 @@ import { handleConfigCommand, handlePackageCommand } from "./package-manager-cli
 import { isLocalPath, normalizePath, resolvePath } from "./utils/paths.ts";
 import { cleanupWindowsSelfUpdateQuarantine } from "./utils/windows-self-update.ts";
 
-const EXTENSION_LOAD_FAILURE_HINT = 'Hint: Start without extensions using "pi -ne".';
+const EXTENSION_LOAD_FAILURE_HINT = 'Hint: Start without extensions using "recode -ne".';
 
 /**
  * Read all content from piped stdin.
@@ -537,6 +537,10 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	let appMode = resolveAppMode(parsed, process.stdin.isTTY, process.stdout.isTTY);
+	if (parsed.aizenRuntime && appMode !== "print" && appMode !== "json") {
+		console.error(chalk.red("Error: --aizen-runtime currently requires print (-p) or JSON mode"));
+		process.exit(1);
+	}
 	const shouldTakeOverStdout = appMode !== "interactive" && !isPlainRuntimeMetadataCommand(parsed);
 	if (shouldTakeOverStdout) {
 		takeOverStdout();
@@ -845,6 +849,7 @@ export async function main(args: string[], options?: MainOptions) {
 		printTimings();
 		const exitCode = await runPrintMode(runtime, {
 			mode: toPrintOutputMode(appMode),
+			aizenRuntime: parsed.aizenRuntime,
 			messages: parsed.messages,
 			initialMessage,
 			initialImages,

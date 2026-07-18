@@ -1,5 +1,6 @@
 import type { AssistantMessage, ImageContent } from "@reitaard/repi-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { createAizenRuntime } from "../src/core/recode-aizen-runtime.ts";
 import type { SessionShutdownEvent } from "../src/index.ts";
 import { runPrintMode } from "../src/modes/print-mode.ts";
 
@@ -11,7 +12,7 @@ type FakeExtensionRunner = {
 };
 
 type FakeSession = {
-	sessionManager: { getHeader: () => object | undefined };
+	sessionManager: { getHeader: () => object | undefined; getCwd: () => string };
 	agent: { waitForIdle: () => Promise<void> };
 	state: { messages: AssistantMessage[] };
 	extensionRunner: FakeExtensionRunner;
@@ -64,7 +65,7 @@ function createRuntimeHost(assistantMessage: AssistantMessage): FakeRuntimeHost 
 	const state = { messages: [assistantMessage] };
 
 	const session: FakeSession = {
-		sessionManager: { getHeader: () => undefined },
+		sessionManager: { getHeader: () => undefined, getCwd: () => "/workspace" },
 		agent: { waitForIdle: async () => {} },
 		state,
 		extensionRunner,
@@ -91,6 +92,67 @@ afterEach(() => {
 });
 
 describe("runPrintMode", () => {
+	it("routes an opted-in text run through Aizen without binding legacy extensions", async () => {
+		const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "legacy" }));
+		const response = createAssistantMessage();
+		const prompt = vi.fn(async () => response);
+		const abort = vi.fn(async () => ({ status: "idle" as const }));
+		const createRuntime = vi.fn(() => ({
+			harness: { abort },
+			profile: {},
+			session: {},
+			prompt,
+			subscribe: vi.fn(() => () => {}),
+		}));
+
+		const exitCode = await runPrintMode(
+			runtimeHost as unknown as Parameters<typeof runPrintMode>[0],
+			{
+				mode: "text",
+				aizenRuntime: true,
+				initialMessage: "Inspect the project",
+				messages: ["Summarize it"],
+			},
+			{ createAizenRuntime: createRuntime as unknown as typeof createAizenRuntime },
+		);
+
+		expect(exitCode).toBe(0);
+		expect(createRuntime).toHaveBeenCalledWith({ agentSession: runtimeHost.session, cwd: "/workspace" });
+		expect(prompt).toHaveBeenNthCalledWith(1, "Inspect the project", { images: undefined });
+		expect(prompt).toHaveBeenNthCalledWith(2, "Summarize it");
+		expect(runtimeHost.session.bindExtensions).not.toHaveBeenCalled();
+	});
+
+	it("streams opted-in Aizen events in json mode", async () => {
+		const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "legacy" }));
+		const response = createAssistantMessage({ text: "Aizen ready" });
+		const abort = vi.fn(async () => ({ status: "idle" as const }));
+		let listener: ((event: { type: string }) => void) | undefined;
+		const subscribe = vi.fn((next: (event: { type: string }) => void) => {
+			listener = next;
+			return () => {
+				listener = undefined;
+			};
+		});
+		const prompt = vi.fn(async () => {
+			listener?.({ type: "agent_start" });
+			listener?.({ type: "agent_settled" });
+			return response;
+		});
+		const createRuntime = vi.fn(() => ({ harness: { abort }, profile: {}, session: {}, prompt, subscribe }));
+
+		const exitCode = await runPrintMode(
+			runtimeHost as unknown as Parameters<typeof runPrintMode>[0],
+			{ mode: "json", aizenRuntime: true, initialMessage: "Inspect the project" },
+			{ createAizenRuntime: createRuntime as unknown as typeof createAizenRuntime },
+		);
+
+		expect(exitCode).toBe(0);
+		expect(subscribe).toHaveBeenCalledOnce();
+		expect(prompt).toHaveBeenCalledWith("Inspect the project", { images: undefined });
+		expect(runtimeHost.session.bindExtensions).not.toHaveBeenCalled();
+	});
+
 	it("emits session_shutdown in text mode", async () => {
 		const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "done" }));
 		const { session } = runtimeHost;

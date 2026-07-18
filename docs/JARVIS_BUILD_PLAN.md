@@ -41,7 +41,10 @@ Exit criteria:
 
 ## Phase 1: Put the coding agent on AgentHarness
 
-Status: in progress; responsibility map and shared harness model/auth bridge complete
+Status: in progress; responsibility map, shared model/auth bridge, ordered JSONL
+storage, opt-in text/JSON one-shot resource, lifecycle, retry, compaction, and
+settlement parity, and the first structured operation/turn/tool recovery journal
+are complete
 
 1. Map current `AgentSession` responsibilities to harness, application service,
    or TUI responsibility.
@@ -57,7 +60,8 @@ Required harness work:
 - Finish lifecycle, settlement, abort, hook reentrancy, and save-point tests.
 - Add automatic compaction decision points and retry policy.
 - Define model registry and typed hook/context facades.
-- Implement the minimum durable journal described in
+- Extend the structured operation/turn/tool journal with durable queue and
+  pending-write acceptance records described in
   `packages/agent/docs/durable-harness.md`.
 
 Exit criteria:
@@ -223,7 +227,7 @@ Keep the upstream license, changelog history, issue links, and attribution.
 - [x] Fix portable harness compatibility tests and capability-gate symlinks.
 - [x] Write the AgentSession-to-AgentHarness responsibility map.
 - [x] Consolidate the private ModelRegistry-to-AgentHarness provider/auth bridge.
-- [ ] Prove a one-shot AgentHarness coding run with existing tools.
+- [x] Prove a one-shot AgentHarness coding run with existing tools.
 - [x] Stabilize working coding-agent memory and LSP implementations without premature service extraction.
 - [x] Record the AgentHarness migration hold, parity gates, and ownership map in `docs/AGENTHARNESS.md`.
 - [ ] Design SQLite schemas only after the service and event boundaries are set.

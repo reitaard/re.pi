@@ -35,6 +35,7 @@ export interface Args {
 	extensions?: string[];
 	noExtensions?: boolean;
 	print?: boolean;
+	aizenRuntime?: boolean;
 	export?: string;
 	noSkills?: boolean;
 	skills?: string[];
@@ -144,6 +145,8 @@ export function parseArgs(args: string[]): Args {
 				result.messages.push(next);
 				i++;
 			}
+		} else if (arg === "--aizen-runtime") {
+			result.aizenRuntime = true;
 		} else if (arg === "--export" && i + 1 < args.length) {
 			result.export = args[++i];
 		} else if ((arg === "--extension" || arg === "-e") && i + 1 < args.length) {
@@ -229,7 +232,7 @@ ${chalk.bold("Commands:")}
   ${APP_NAME} install <source> [-l]     Install extension source and add to settings
   ${APP_NAME} remove <source> [-l]      Remove extension source from settings
   ${APP_NAME} uninstall <source> [-l]   Alias for remove
-  ${APP_NAME} update [source|self|pi]   Update pi (use --all for pi and extensions)
+  ${APP_NAME} update [source|self]      Update RePi (use --all for RePi and extensions)
   ${APP_NAME} list                      List installed extensions from settings
   ${APP_NAME} config [-l]               Open TUI to enable/disable package resources (Tab switches scope)
   ${APP_NAME} <command> --help          Show help for install/remove/uninstall/update/list/config
@@ -242,6 +245,7 @@ ${chalk.bold("Options:")}
   --append-system-prompt <text>  Append text or file contents to the system prompt (can be used multiple times)
   --mode <mode>                  Output mode: text (default), json, or rpc
   --print, -p                    Non-interactive mode: process prompt and exit
+  --aizen-runtime               Experimental: run print or JSON mode through Aizen's AgentRuntime
   --continue, -c                 Continue previous session
   --resume, -r                   Select a session to resume
   --session <path|id>            Use specific session file or partial UUID

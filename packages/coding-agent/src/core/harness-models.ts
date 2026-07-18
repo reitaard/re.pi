@@ -1,4 +1,11 @@
-import { createModels, createProvider, type Model, type Models } from "@reitaard/repi-ai";
+import {
+	createModels,
+	createProvider,
+	type Model,
+	type Models,
+	type ProviderHeaders,
+	type StreamOptions,
+} from "@reitaard/repi-ai";
 import { type ProviderStreamOptions, stream, streamSimple } from "@reitaard/repi-ai/compat";
 import type { ModelRegistry } from "./model-registry.ts";
 
@@ -8,8 +15,21 @@ import type { ModelRegistry } from "./model-registry.ts";
  * The collection is intentionally private to the caller. This prevents an
  * isolated runtime from inheriting unrelated providers or ambient model state.
  */
-export function createHarnessModels(model: Model<any>, modelRegistry: ModelRegistry, purpose: string): Models {
-	const models = createModels();
+export function createHarnessModels(
+	model: Model<any>,
+	modelRegistry: ModelRegistry,
+	purpose: string,
+	beforeProviderHeaders?: (headers: ProviderHeaders) => Promise<ProviderHeaders>,
+): Models {
+	const models = createModels({
+		prepareRequest: beforeProviderHeaders
+			? async (_requestModel, options) =>
+					({
+						...options,
+						headers: await beforeProviderHeaders(options?.headers ?? {}),
+					}) as StreamOptions
+			: undefined,
+	});
 	models.setProvider(
 		createProvider({
 			id: model.provider,

@@ -18,13 +18,35 @@ import { basename, dirname } from "node:path";
 import type {
 	Agent,
 	AgentEvent,
+	AgentHarnessOptions,
+	AgentHarnessResources,
 	AgentMessage,
 	AgentState,
 	AgentTool,
+	AfterProviderResponseEvent as HarnessAfterProviderResponseEvent,
+	BeforeAgentStartEvent as HarnessBeforeAgentStartEvent,
+	BeforeAgentStartResult as HarnessBeforeAgentStartResult,
+	BeforeProviderPayloadEvent as HarnessBeforeProviderPayloadEvent,
+	BeforeProviderPayloadResult as HarnessBeforeProviderPayloadResult,
+	ContextEvent as HarnessContextEvent,
+	ContextResult as HarnessContextResult,
+	PromptTemplate as HarnessPromptTemplate,
+	Skill as HarnessSkill,
+	ToolCallEvent as HarnessToolCallEvent,
+	ToolCallResult as HarnessToolCallResult,
+	ToolResultEvent as HarnessToolResultEvent,
+	ToolResultPatch as HarnessToolResultPatch,
 	PrepareNextTurnContext,
 	ThinkingLevel,
 } from "@reitaard/repi-agent-core";
-import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@reitaard/repi-ai/compat";
+import type {
+	AssistantMessage,
+	ImageContent,
+	Message,
+	Model,
+	ProviderHeaders,
+	TextContent,
+} from "@reitaard/repi-ai/compat";
 import {
 	clampThinkingLevel,
 	cleanupSessionResources,
@@ -216,6 +238,33 @@ export interface PromptOptions {
 	source?: InputSource;
 	/** Internal hook used by RPC mode to observe prompt preflight acceptance or rejection. */
 	preflightResult?: (success: boolean) => void;
+}
+
+/** Deterministic application-owned options and turn preparation for Aizen's AgentRuntime. */
+export interface AizenRuntimeProfile
+	extends Required<
+		Pick<
+			AgentHarnessOptions,
+			"model" | "thinkingLevel" | "tools" | "activeToolNames" | "steeringMode" | "followUpMode"
+		>
+	> {
+	systemPrompt: string;
+	resources: AgentHarnessResources<HarnessSkill, HarnessPromptTemplate>;
+	recovery?: {
+		compaction: { enabled: boolean; reserveTokens: number; keepRecentTokens: number };
+		retry: { enabled: boolean; maxRetries: number; baseDelayMs: number };
+	};
+	hooks: {
+		beforeAgentStart(event: HarnessBeforeAgentStartEvent): Promise<HarnessBeforeAgentStartResult | undefined>;
+		context(event: HarnessContextEvent): Promise<HarnessContextResult>;
+		beforeProviderPayload(event: HarnessBeforeProviderPayloadEvent): Promise<HarnessBeforeProviderPayloadResult>;
+		beforeProviderHeaders?(headers: ProviderHeaders): Promise<ProviderHeaders>;
+		afterProviderResponse(event: HarnessAfterProviderResponseEvent): Promise<undefined>;
+		lifecycle?(event: AgentEvent): Promise<void>;
+		settled?(): Promise<void>;
+		toolCall(event: HarnessToolCallEvent): Promise<HarnessToolCallResult | undefined>;
+		toolResult(event: HarnessToolResultEvent): Promise<HarnessToolResultPatch | undefined>;
+	};
 }
 
 /** Result from cycleModel() */
@@ -959,6 +1008,78 @@ export class AgentSession {
 	/** File-based prompt templates */
 	get promptTemplates(): ReadonlyArray<PromptTemplate> {
 		return this._resourceLoader.getPrompts().prompts;
+	}
+
+	/** Snapshot the minimal locked runtime profile RePi currently gives Aizen. */
+	createAizenRuntimeProfile(): AizenRuntimeProfile {
+		const model = this.model;
+		if (!model) {
+			throw new Error(formatNoModelSelectedMessage());
+		}
+		const tools = this.agent.state.tools.slice();
+		const resources: AgentHarnessResources<HarnessSkill, HarnessPromptTemplate> = {
+			promptTemplates: this._resourceLoader.getPrompts().prompts.map(({ name, description, content }) => ({
+				name,
+				description,
+				content,
+			})),
+			skills: this._resourceLoader.getSkills().skills.map((skill) => ({
+				name: skill.name,
+				description: skill.description,
+				content: readFileSync(skill.filePath, "utf-8"),
+				filePath: skill.filePath,
+				disableModelInvocation: skill.disableModelInvocation,
+			})),
+		};
+		return {
+			model,
+			thinkingLevel: this.thinkingLevel,
+			tools,
+			systemPrompt: this._baseSystemPrompt,
+			activeToolNames: tools.map((tool) => tool.name),
+			steeringMode: this.steeringMode,
+			followUpMode: this.followUpMode,
+			resources,
+			recovery: {
+				compaction: this.settingsManager.getCompactionSettings(),
+				retry: this.settingsManager.getRetrySettings(),
+			},
+			hooks: {
+				beforeAgentStart: async (event) => {
+					const result = await this._extensionRunner.emitBeforeAgentStart(
+						event.prompt,
+						event.images,
+						event.systemPrompt,
+						this._baseSystemPromptOptions,
+					);
+					if (!result) return undefined;
+					return {
+						systemPrompt: result.systemPrompt,
+						messages: result.messages?.map((message) => ({
+							role: "custom" as const,
+							customType: message.customType,
+							content: message.content ?? [],
+							display: message.display ?? false,
+							details: message.details,
+							timestamp: Date.now(),
+						})),
+					};
+				},
+				context: async (event) => ({ messages: await this._extensionRunner.emitContext(event.messages) }),
+				beforeProviderPayload: async (event) => ({
+					payload: await this._extensionRunner.emitBeforeProviderRequest(event.payload),
+				}),
+				beforeProviderHeaders: async (headers) => this._extensionRunner.emitBeforeProviderHeaders(headers),
+				afterProviderResponse: async (event) => {
+					await this._extensionRunner.emit(event);
+					return undefined;
+				},
+				lifecycle: async (event) => this._emitExtensionEvent(event),
+				settled: async () => this._extensionRunner.emit({ type: "agent_settled" }).then(() => undefined),
+				toolCall: async (event) => this._extensionRunner.emitToolCall(event),
+				toolResult: async (event) => this._extensionRunner.emitToolResult(event),
+			},
+		};
 	}
 
 	private _normalizePromptSnippet(text: string | undefined): string | undefined {

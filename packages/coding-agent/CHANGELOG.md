@@ -12,6 +12,14 @@
 - Add typed Creator and Aizen orchestration identities so direct and delegated worker transcripts carry the real initiating role from their first turn instead of a generic caller label.
 - Make Mayuri a web-only librarian backed by the loaded search and fetch tools while leaving local project search with Aizen.
 
+### Changed
+
+- Make `recode` the primary CLI command, retain `repi` as a compatibility alias, and give the default coding agent the authoritative Aizen/RePi identity.
+- Add a minimal application-owned Aizen runtime profile that locks the current model, thinking, prompt, tools, and queue modes before AgentRuntime migration.
+- Pass loaded skills, prompt templates, and existing turn, context, provider, and tool interception through Aizen's opt-in AgentRuntime path.
+- Preserve final provider-header mutation and extension lifecycle timing in Aizen's opt-in runtime, and apply existing retry and compaction policy through public AgentHarness operations.
+- Preserve the session-header-first JSONL event contract when JSON one-shot mode opts into Aizen's runtime.
+
 ### Fixed
 
 - Show accurate pending activity for incomplete custom tool calls instead of rendering misleading fallback operations.

@@ -310,20 +310,47 @@ The first shared runtime primitive is now concrete:
   through the existing registry
 - the bridge adds no provider call and no model-visible context
 
-The production one-shot Aizen path is not switched yet. Inspection found three
-boundaries that must be adapted rather than bypassed:
+The production one-shot Aizen path is not switched yet. Phase 1A and Phase 1B
+now adapt the first two boundaries rather than bypassing them:
 
 1. `SessionManager` and the harness `SessionStorage` use different persistence
    contracts; manually appending a harness result would weaken ordered writes.
-2. Coding tools, prompt metadata, context files, and extension hooks are currently
-   assembled inside `AgentSession`; duplicating that assembly would create drift.
-3. Retry and auto-compaction policy still live partly in `AgentSession`; the
-   one-shot path must not silently lose them.
+2. Coding tools, prompt metadata, context files, and extension hooks are assembled
+   inside `AgentSession`; the Aizen profile now adapts the loaded resources and
+   `before_agent_start` preparation without rediscovering them.
+3. Retry and auto-compaction settings remain application-owned, while the
+   one-shot adapter applies them through public `AgentHarness.retry()` and
+   `AgentHarness.compact()` operations.
 
-These match the migration stop conditions. The next code checkpoint should expose
-one prepared turn/runtime snapshot from the existing coding application boundary,
-then adapt ordered session persistence. The print-mode switch comes only after
-focused parity tests cover those contracts.
+`createAizenRuntimeProfile()` snapshots the current model, thinking level,
+system prompt, active tools, queue modes, skills, and prompt templates, and exposes
+the existing `before_agent_start` preparation as a typed callback. `RecodeSessionStorage` preserves
+the harness-generated entry identity, parent chain, active-tool changes, and leaf
+journal in the existing RePi JSONL. `createAizenRuntime()` is a non-production
+proof that composes those boundaries with Pi's `AgentHarness`, `Session`, and
+`NodeExecutionEnv`; a faux-provider turn survives a real session reopen.
+
+Text and JSON print modes now expose the explicit `--aizen-runtime` checkpoint. They route
+the prepared Aizen profile through Pi's `AgentHarness`, writes replies through
+the existing raw-output guard, persists through `RecodeSessionStorage`, and
+abort the harness on termination. JSON mode preserves the existing session-header-first
+JSONL contract and maps Aizen's lifecycle, retry, compaction, and high-level settlement
+events onto the existing public event shapes. The legacy print runtime remains the
+default rollback path.
+
+Provider headers now run after provider authentication is assembled. Lifecycle
+events reach existing extensions before message persistence, and the Aizen
+one-shot adapter applies retry and threshold/overflow compaction without
+duplicating the user prompt. RPC output remains outside this checkpoint; it must
+reach parity before the Aizen route becomes the default.
+
+The first durability checkpoint is also active. `AgentHarness` appends
+model-invisible `recode.agent_harness.journal` custom entries for operation,
+turn, and tool start/finish boundaries. Recovery appends interruption records
+for unfinished work and does not replay uncertain provider or tool activity.
+`getJournalEntries()` exposes the structured history for diagnostics and a
+future Inspector agent. Durable steering/follow-up queues and pending-write
+acceptance markers remain later durability work.
 
 ## Explicitly deferred
 
@@ -359,13 +386,14 @@ Validated checkpoint:
 - `Kreis` is product vocabulary only and `AgentRuntime` is the conceptual name for
   `AgentHarness`
 - the shared `createHarnessModels()` provider/auth bridge is implemented and tested
+- Aizen's opt-in one-shot path preserves loaded skills, prompt templates, and
+  `before_agent_start`, context, provider-payload/response, and tool interception
+  through the shared harness
 - focused worker/runtime tests and `npm run check` pass on the Windows checkpoint
 - `pi-web-access` still needs a RePi compatibility alias before Mayuri's real web
   tools can load through the installed extension
 
-Resume Phase 1 with the smallest prepared-turn boundary from the existing coding
-application. It must expose the current model, thinking level, system prompt,
-resources, active tools, and extension hooks without duplicating their assembly.
-Then adapt ordered `SessionManager` persistence to the harness session contract.
-Only after focused parity tests pass should print mode gain an opt-in AgentRuntime
-route. RPC and interactive migration remain later phases.
+Resume Phase 1 with provider-header and lifecycle hook parity, followed by the
+existing retry and auto-compaction decisions. Keep the legacy one-shot path as the
+rollback until those focused parity tests pass. RPC and interactive migration
+remain later phases.

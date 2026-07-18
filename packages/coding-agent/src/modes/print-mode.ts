@@ -2,13 +2,14 @@
  * Print mode (single-shot): Send prompts, output result, exit.
  *
  * Used for:
- * - `pi -p "prompt"` - text output
- * - `pi --mode json "prompt"` - JSON event stream
+ * - `recode -p "prompt"` - text output
+ * - `recode --mode json "prompt"` - JSON event stream
  */
 
 import type { AssistantMessage, ImageContent } from "@reitaard/repi-ai";
 import type { AgentSessionRuntime } from "../core/agent-session-runtime.ts";
 import { flushRawStdout, writeRawStdout } from "../core/output-guard.ts";
+import { createAizenRuntime } from "../core/recode-aizen-runtime.ts";
 import { killTrackedDetachedChildren } from "../utils/shell.ts";
 
 /**
@@ -17,6 +18,8 @@ import { killTrackedDetachedChildren } from "../utils/shell.ts";
 export interface PrintModeOptions {
 	/** Output mode: "text" for final response only, "json" for all events */
 	mode: "text" | "json";
+	/** Experimental: route this print or JSON run through Aizen's AgentHarness. */
+	aizenRuntime?: boolean;
 	/** Array of additional prompts to send after initialMessage */
 	messages?: string[];
 	/** First message to send (may contain @file content) */
@@ -25,15 +28,40 @@ export interface PrintModeOptions {
 	initialImages?: ImageContent[];
 }
 
+interface PrintModeDependencies {
+	createAizenRuntime: typeof createAizenRuntime;
+}
+
+const defaultDependencies: PrintModeDependencies = { createAizenRuntime };
+
+function writeAssistantMessage(message: AssistantMessage): number {
+	if (message.stopReason === "error" || message.stopReason === "aborted") {
+		console.error(message.errorMessage || `Request ${message.stopReason}`);
+		return 1;
+	}
+
+	for (const content of message.content) {
+		if (content.type === "text") {
+			writeRawStdout(`${content.text}\n`);
+		}
+	}
+	return 0;
+}
+
 /**
  * Run in print (single-shot) mode.
  * Sends prompts to the agent and outputs the result.
  */
-export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: PrintModeOptions): Promise<number> {
-	const { mode, messages = [], initialMessage, initialImages } = options;
+export async function runPrintMode(
+	runtimeHost: AgentSessionRuntime,
+	options: PrintModeOptions,
+	dependencies: PrintModeDependencies = defaultDependencies,
+): Promise<number> {
+	const { mode, aizenRuntime = false, messages = [], initialMessage, initialImages } = options;
 	let exitCode = 0;
 	let session = runtimeHost.session;
 	let unsubscribe: (() => void) | undefined;
+	let abortAizenRuntime: (() => Promise<unknown>) | undefined;
 	let disposed = false;
 	const signalCleanupHandlers: Array<() => void> = [];
 
@@ -53,9 +81,12 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 		for (const signal of signals) {
 			const handler = () => {
 				killTrackedDetachedChildren();
-				void disposeRuntime().finally(() => {
-					process.exit(signal === "SIGHUP" ? 129 : 143);
-				});
+				void Promise.resolve(abortAizenRuntime?.())
+					.catch(() => undefined)
+					.then(disposeRuntime)
+					.finally(() => {
+						process.exit(signal === "SIGHUP" ? 129 : 143);
+					});
 			};
 			process.on(signal, handler);
 			signalCleanupHandlers.push(() => process.off(signal, handler));
@@ -109,6 +140,29 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 	};
 
 	try {
+		if (aizenRuntime) {
+			const runtime = dependencies.createAizenRuntime({
+				agentSession: session,
+				cwd: session.sessionManager.getCwd(),
+			});
+			abortAizenRuntime = () => runtime.harness.abort();
+			if (mode === "json") {
+				const header = session.sessionManager.getHeader();
+				if (header) writeRawStdout(`${JSON.stringify(header)}\n`);
+				unsubscribe = runtime.subscribe((event) => writeRawStdout(`${JSON.stringify(event)}\n`));
+			}
+			let response: AssistantMessage | undefined;
+
+			if (initialMessage) {
+				response = await runtime.prompt(initialMessage, { images: initialImages });
+			}
+			for (const message of messages) {
+				response = await runtime.prompt(message);
+			}
+
+			return mode === "text" && response ? writeAssistantMessage(response) : 0;
+		}
+
 		if (mode === "json") {
 			const header = session.sessionManager.getHeader();
 			if (header) {
@@ -131,17 +185,7 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 			const lastMessage = state.messages[state.messages.length - 1];
 
 			if (lastMessage?.role === "assistant") {
-				const assistantMsg = lastMessage as AssistantMessage;
-				if (assistantMsg.stopReason === "error" || assistantMsg.stopReason === "aborted") {
-					console.error(assistantMsg.errorMessage || `Request ${assistantMsg.stopReason}`);
-					exitCode = 1;
-				} else {
-					for (const content of assistantMsg.content) {
-						if (content.type === "text") {
-							writeRawStdout(`${content.text}\n`);
-						}
-					}
-				}
+				exitCode = writeAssistantMessage(lastMessage as AssistantMessage);
 			}
 		}
 

@@ -138,16 +138,20 @@ export interface MutableModels extends Models {
 export interface CreateModelsOptions {
 	credentials?: CredentialStore;
 	authContext?: AuthContext;
+	/** Final per-request transform after provider auth and request options are merged. */
+	prepareRequest?: (model: Model<Api>, options: StreamOptions | undefined) => Promise<StreamOptions | undefined>;
 }
 
 class ModelsImpl implements MutableModels {
 	private providers = new Map<string, Provider>();
 	private credentials: CredentialStore;
 	private authContext: AuthContext;
+	private prepareRequest?: CreateModelsOptions["prepareRequest"];
 
 	constructor(options?: CreateModelsOptions) {
 		this.credentials = options?.credentials ?? new InMemoryCredentialStore();
 		this.authContext = options?.authContext ?? defaultAuthContext();
+		this.prepareRequest = options?.prepareRequest;
 	}
 
 	setProvider(provider: Provider): void {
@@ -243,7 +247,12 @@ class ModelsImpl implements MutableModels {
 			},
 		);
 		const auth = resolution?.auth;
-		if (!auth) return { requestModel: model, requestOptions: options };
+		if (!auth) {
+			const requestOptions = this.prepareRequest
+				? ((await this.prepareRequest(model, options)) as TOptions | undefined)
+				: options;
+			return { requestModel: model, requestOptions };
+		}
 
 		const requestModel = auth.baseUrl ? { ...model, baseUrl: auth.baseUrl } : model;
 
@@ -251,7 +260,10 @@ class ModelsImpl implements MutableModels {
 		const apiKey = options?.apiKey ?? auth.apiKey;
 		const headers = auth.headers || options?.headers ? { ...auth.headers, ...options?.headers } : undefined;
 		const env = resolution.env || options?.env ? { ...(resolution.env ?? {}), ...(options?.env ?? {}) } : undefined;
-		const requestOptions = { ...options, apiKey, headers, env } as TOptions;
+		let requestOptions: TOptions | undefined = { ...options, apiKey, headers, env } as TOptions;
+		if (this.prepareRequest) {
+			requestOptions = (await this.prepareRequest(requestModel, requestOptions)) as TOptions | undefined;
+		}
 
 		return { requestModel, requestOptions };
 	}

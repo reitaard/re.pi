@@ -34,6 +34,13 @@ describe("parseArgs", () => {
 	});
 
 	describe("--print flag", () => {
+		test("parses the experimental Aizen runtime flag", () => {
+			const result = parseArgs(["-p", "--aizen-runtime", "Inspect the project"]);
+			expect(result.print).toBe(true);
+			expect(result.aizenRuntime).toBe(true);
+			expect(result.messages).toEqual(["Inspect the project"]);
+		});
+
 		test("parses --print flag", () => {
 			const result = parseArgs(["--print"]);
 			expect(result.print).toBe(true);

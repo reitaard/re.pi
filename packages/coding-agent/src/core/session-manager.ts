@@ -66,6 +66,11 @@ export interface ModelChangeEntry extends SessionEntryBase {
 	modelId: string;
 }
 
+export interface ActiveToolsChangeEntry extends SessionEntryBase {
+	type: "active_tools_change";
+	activeToolNames: string[];
+}
+
 export interface CompactionEntry<T = unknown> extends SessionEntryBase {
 	type: "compaction";
 	summary: string;
@@ -116,6 +121,11 @@ export interface SessionInfoEntry extends SessionEntryBase {
 	name?: string;
 }
 
+export interface LeafEntry extends SessionEntryBase {
+	type: "leaf";
+	targetId: string | null;
+}
+
 /**
  * Custom message entry for extensions to inject messages into LLM context.
  * Use customType to identify your extension's entries.
@@ -141,12 +151,14 @@ export type SessionEntry =
 	| SessionMessageEntry
 	| ThinkingLevelChangeEntry
 	| ModelChangeEntry
+	| ActiveToolsChangeEntry
 	| CompactionEntry
 	| BranchSummaryEntry
 	| CustomEntry
 	| CustomMessageEntry
 	| LabelEntry
-	| SessionInfoEntry;
+	| SessionInfoEntry
+	| LeafEntry;
 
 /** Raw file entry (includes header) */
 export type FileEntry = SessionHeader | SessionEntry;
@@ -894,7 +906,7 @@ export class SessionManager {
 		for (const entry of this.fileEntries) {
 			if (entry.type === "session") continue;
 			this.byId.set(entry.id, entry);
-			this.leafId = entry.id;
+			this.leafId = entry.type === "leaf" ? entry.targetId : entry.id;
 			if (entry.type === "label") {
 				if (entry.label) {
 					this.labelsById.set(entry.targetId, entry.label);
@@ -985,8 +997,36 @@ export class SessionManager {
 	private _appendEntry(entry: SessionEntry): void {
 		this.fileEntries.push(entry);
 		this.byId.set(entry.id, entry);
-		this.leafId = entry.id;
+		this.leafId = entry.type === "leaf" ? entry.targetId : entry.id;
+		if (entry.type === "label") {
+			if (entry.label) {
+				this.labelsById.set(entry.targetId, entry.label);
+				this.labelTimestampsById.set(entry.targetId, entry.timestamp);
+			} else {
+				this.labelsById.delete(entry.targetId);
+				this.labelTimestampsById.delete(entry.targetId);
+			}
+		}
 		this._persist(entry);
+	}
+
+	/** Allocate an entry id for the AgentRuntime session adapter. */
+	createEntryId(): string {
+		return generateId(this.byId);
+	}
+
+	/** Append an already-formed AgentRuntime entry without changing its identity. */
+	appendEntry(entry: SessionEntry): void {
+		if (this.byId.has(entry.id)) {
+			throw new Error(`Entry ${entry.id} already exists`);
+		}
+		if (entry.parentId !== null && !this.byId.has(entry.parentId)) {
+			throw new Error(`Parent entry ${entry.parentId} not found`);
+		}
+		if (entry.type === "leaf" && entry.targetId !== null && !this.byId.has(entry.targetId)) {
+			throw new Error(`Entry ${entry.targetId} not found`);
+		}
+		this._appendEntry(entry);
 	}
 
 	/** Append a message as child of current leaf, then advance leaf. Returns entry id.

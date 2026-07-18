@@ -1,7 +1,22 @@
-> Updated 2026-07-18: Phase 0 and the optional named-worker harness checkpoint are
-> complete, including direct chat, searchable saved worker settings, Shiori-style
-> worker activity, distinct worker/Creator colors, and compact report cards. The next major
-> task remains the Aizen print/one-shot AgentHarness migration. Start with
+> Updated 2026-07-18: Phase 0, Phase 1A, and Phase 1B are complete. RePi now
+> snapshots Aizen's minimal runtime profile and adapts the existing JSONL
+> `SessionManager` to Pi's `SessionStorage` contract. A focused Phase 1C proof
+> runs one Aizen turn through `AgentHarness` and reopens the same persisted tree.
+> Text and JSON one-shot runs can now opt in with `recode -p --aizen-runtime`
+> or `recode --mode json --aizen-runtime`; the legacy
+> runtime remains the default rollback path. Loaded skills, prompt templates, and
+> `before_agent_start`, context, provider-payload/response, and tool interception
+> now cross that boundary. Provider headers and lifecycle events now preserve
+> their legacy timing, while the opt-in path reuses RePi's retry and compaction
+> settings. Aizen's JSON route preserves the session header and lifecycle,
+> retry, compaction, and settlement event contract. The legacy runtime remains
+> available until RPC parity and the
+> default-switch gate are complete. Aizen now also writes model-invisible,
+> structured operation, turn, and tool boundaries into the existing session
+> JSONL. On restart, unfinished work is marked interrupted and uncertain tool
+> calls are never replayed automatically. These records are the diagnostic
+> source for a future Inspector agent.
+> Start with
 > `docs/AGENT_RUNTIME_INSPECTION.md`, then use `docs/AGENTHARNESS.md` and
 > `docs/JARVIS_BUILD_PLAN.md` for the parity and stop/go gates.
 
