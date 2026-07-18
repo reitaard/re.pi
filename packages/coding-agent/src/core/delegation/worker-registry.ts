@@ -14,7 +14,9 @@ export const REPI_NAMED_WORKERS: readonly NamedWorkerDefinition[] = [
 		skillName: "librarian",
 		tools: ["read", "grep", "find", "ls"],
 		thinkingLevel: "off",
-		maxOutputTokens: 2_048,
+		// Local reasoning models may spend thousands of completion tokens before
+		// producing final text. Keep the returned result bounded separately.
+		maxOutputTokens: 16_384,
 		systemPrompt:
 			"Work like a fast technical librarian. Locate the smallest authoritative source set, cite exact files and symbols, distinguish evidence from inference, and stop broad searching once the task is supported.",
 	},
@@ -26,7 +28,9 @@ export const REPI_NAMED_WORKERS: readonly NamedWorkerDefinition[] = [
 			"Blunt, disciplined, calm, and skeptical. Values precision over politeness, avoids speculation, and focuses on the highest-impact defect first.",
 		tools: ["read", "grep", "find", "ls"],
 		thinkingLevel: "off",
-		maxOutputTokens: 2_048,
+		// The model may ignore thinking=off; do not starve the final answer after
+		// a long reasoning/tool pass. Parent-visible text is still clipped.
+		maxOutputTokens: 16_384,
 		systemPrompt:
 			"Audit only the requested boundary. Prioritize high-impact findings with exact evidence, reject speculative problems, and recommend the smallest safe correction rather than a broad rewrite.",
 	},
