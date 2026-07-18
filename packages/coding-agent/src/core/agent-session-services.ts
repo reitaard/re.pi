@@ -1,7 +1,8 @@
 import { join } from "node:path";
-import type { ThinkingLevel } from "@reitaard/repi-agent-core";
+import type { AgentTool, ThinkingLevel } from "@reitaard/repi-agent-core";
 import type { Model } from "@reitaard/repi-ai";
 import { getAgentDir } from "../config.ts";
+import { recodeWorkers, withWorkerToolPresentation } from "../recode-workers.ts";
 import { resolvePath } from "../utils/paths.ts";
 import { AuthStorage } from "./auth-storage.ts";
 import {
@@ -10,7 +11,7 @@ import {
 	REPI_NAMED_WORKERS,
 	WorkerDirectory,
 } from "./delegation/index.ts";
-import type { SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
+import type { ExtensionContext, SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
 import { ModelRegistry } from "./model-registry.ts";
 import {
 	DefaultResourceLoader,
@@ -21,9 +22,10 @@ import {
 import { type CreateAgentSessionOptions, type CreateAgentSessionResult, createAgentSession } from "./sdk.ts";
 import type { SessionManager } from "./session-manager.ts";
 import { SettingsManager } from "./settings-manager.ts";
-import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.ts";
+import { createToolDefinitionFromAgentTool, wrapToolDefinition } from "./tools/tool-definition-wrapper.ts";
 
 const DELEGATION_ENV = "REPI_DELEGATION";
+const MAYURI_WEB_TOOL_NAMES = ["web_search", "fetch_content", "get_search_content"] as const;
 
 /** Non-fatal issues collected while creating services or sessions. */
 export interface AgentSessionRuntimeDiagnostic {
@@ -81,10 +83,43 @@ function resolveCurrentModel(options: CreateAgentSessionFromServicesOptions): Mo
 	return options.services.modelRegistry.find(persisted.provider, persisted.modelId) ?? options.model;
 }
 
+function createWorkerExtensionContext(options: CreateAgentSessionFromServicesOptions): ExtensionContext {
+	return {
+		ui: {} as ExtensionContext["ui"],
+		mode: "print",
+		hasUI: false,
+		cwd: options.services.cwd,
+		sessionManager: options.sessionManager,
+		modelRegistry: options.services.modelRegistry,
+		model: resolveCurrentModel(options),
+		isIdle: () => true,
+		isProjectTrusted: () => options.services.settingsManager.isProjectTrusted(),
+		signal: undefined,
+		abort: () => undefined,
+		hasPendingMessages: () => false,
+		shutdown: () => undefined,
+		getContextUsage: () => undefined,
+		compact: () => undefined,
+		getSystemPrompt: () => "",
+	};
+}
+
+function createMayuriWebTools(options: CreateAgentSessionFromServicesOptions): AgentTool[] {
+	const definitionsByName = new Map<string, ToolDefinition>();
+	for (const extension of options.services.resourceLoader.getExtensions().extensions) {
+		for (const [name, registeredTool] of extension.tools) definitionsByName.set(name, registeredTool.definition);
+	}
+	return MAYURI_WEB_TOOL_NAMES.flatMap((name) => {
+		const definition = definitionsByName.get(name);
+		return definition ? [wrapToolDefinition(definition, () => createWorkerExtensionContext(options))] : [];
+	});
+}
+
 function getOrCreateWorkerDirectory(options: CreateAgentSessionFromServicesOptions): WorkerDirectory {
 	const runtime = {
 		getModel: () => resolveCurrentModel(options),
 		getSkills: () => options.services.resourceLoader.getSkills().skills,
+		getExternalTools: (worker: { id: string }) => (worker.id === "research" ? createMayuriWebTools(options) : []),
 		modelRegistry: options.services.modelRegistry,
 	};
 	if (options.services.workerDirectory) {
@@ -109,7 +144,7 @@ function resolveCustomTools(options: CreateAgentSessionFromServicesOptions): Too
 	const existingNames = new Set(customTools.map((tool) => tool.name));
 	for (const tool of workerTools) {
 		if (existingNames.has(tool.name)) continue;
-		customTools.push(createToolDefinitionFromAgentTool(tool));
+		customTools.push(withWorkerToolPresentation(createToolDefinitionFromAgentTool(tool), directory));
 		existingNames.add(tool.name);
 	}
 	return customTools;
@@ -164,8 +199,30 @@ export async function createAgentSessionServices(
 	const authStorage = options.authStorage ?? AuthStorage.create(join(agentDir, "auth.json"));
 	const settingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir);
 	const modelRegistry = options.modelRegistry ?? ModelRegistry.create(authStorage, join(agentDir, "models.json"));
+	const workerDirectory = isTruthyEnvFlag(process.env[DELEGATION_ENV])
+		? new WorkerDirectory({
+				cwd,
+				workers: REPI_NAMED_WORKERS,
+				getModel: () => undefined,
+				modelRegistry,
+			})
+		: undefined;
+	const configuredResourceLoaderOptions = options.resourceLoaderOptions ?? {};
+	const extensionFactories = [
+		...(configuredResourceLoaderOptions.extensionFactories ?? []),
+		...(workerDirectory
+			? [
+					{
+						name: "recode-workers",
+						factory: (pi: Parameters<typeof recodeWorkers>[0]) =>
+							recodeWorkers(pi, workerDirectory, { settingsPath: join(agentDir, "recode-workers.json") }),
+					},
+				]
+			: []),
+	];
 	const resourceLoader = new DefaultResourceLoader({
-		...(options.resourceLoaderOptions ?? {}),
+		...configuredResourceLoaderOptions,
+		extensionFactories,
 		cwd,
 		agentDir,
 		settingsManager,
@@ -192,6 +249,7 @@ export async function createAgentSessionServices(
 		settingsManager,
 		modelRegistry,
 		resourceLoader,
+		workerDirectory,
 		diagnostics,
 	};
 }

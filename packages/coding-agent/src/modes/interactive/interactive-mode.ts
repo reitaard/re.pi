@@ -682,6 +682,7 @@ export class InteractiveMode {
 			.map((cmd) => ({
 				name: cmd.invocationName,
 				description: this.prefixAutocompleteDescription(cmd.description, cmd.sourceInfo),
+				...(cmd.argumentHint && { argumentHint: cmd.argumentHint }),
 				getArgumentCompletions: cmd.getArgumentCompletions,
 			}));
 
@@ -2916,6 +2917,16 @@ export class InteractiveMode {
 					this.updateEditorBorderColor();
 					return;
 				}
+			}
+
+			// The main loop can be awaiting a long-running extension command while the
+			// editor remains usable. Execute a second extension command immediately
+			// instead of leaving it in the ordinary pending-input queue.
+			if (!this.onInputCallback && this.isExtensionCommand(text)) {
+				this.editor.addToHistory?.(text);
+				this.editor.setText("");
+				await this.session.prompt(text);
+				return;
 			}
 
 			// Queue input during compaction (extension commands execute immediately)

@@ -923,6 +923,16 @@ export class SessionManager {
 		return this.persist;
 	}
 
+	/** Persist the current session immediately, even before the first assistant message. */
+	flush(): boolean {
+		if (!this.persist || !this.sessionFile) return false;
+		if (!this.flushed) {
+			this._rewriteFile();
+			this.flushed = true;
+		}
+		return true;
+	}
+
 	getCwd(): string {
 		return this.cwd;
 	}

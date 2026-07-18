@@ -1143,6 +1143,7 @@ export interface RegisteredCommand {
 	name: string;
 	sourceInfo: SourceInfo;
 	description?: string;
+	argumentHint?: string;
 	getArgumentCompletions?: (argumentPrefix: string) => AutocompleteItem[] | null | Promise<AutocompleteItem[] | null>;
 	handler: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
 }
@@ -1278,7 +1279,7 @@ export interface ExtensionAPI {
 	): void;
 
 	/** Append a custom entry to the session for state persistence (not sent to LLM). */
-	appendEntry<T = unknown>(customType: string, data?: T): void;
+	appendEntry<T = unknown>(customType: string, data?: T, options?: AppendEntryOptions): void;
 
 	// =========================================================================
 	// Session Metadata
@@ -1510,7 +1511,12 @@ export type SendUserMessageHandler = (
 	options?: { deliverAs?: "steer" | "followUp" },
 ) => void;
 
-export type AppendEntryHandler = <T = unknown>(customType: string, data?: T) => void;
+export interface AppendEntryOptions {
+	/** Persist a lazy new session immediately after appending this entry. */
+	persistImmediately?: boolean;
+}
+
+export type AppendEntryHandler = <T = unknown>(customType: string, data?: T, options?: AppendEntryOptions) => void;
 
 export type SetSessionNameHandler = (name: string) => void;
 

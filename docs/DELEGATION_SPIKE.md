@@ -25,8 +25,9 @@ Stable ids are used for routing; display names are case-insensitive aliases.
 
 - `research` -> **Mayuri**
   - real loaded `librarian` skill
-  - curious, meticulous research personality
-  - tools: `read`, `grep`, `find`, `ls`
+  - curious, citation-driven web research personality
+  - tools: `web_search`, `fetch_content`, `get_search_content`
+  - local project inspection remains Aizen's responsibility
   - thinking requested off
   - completion budget: 16384 tokens
 - `audit` -> **Levi**
@@ -99,6 +100,10 @@ provider may queue requests according to its own concurrency setting.
 - Parent/user cancellation calls `AgentHarness.abort()`.
 - Results are typed as `completed`, `failed`, `cancelled`, or optional `timeout`.
 - Workers do not write Kioku directly.
+- Worker thinking is requested off. Hidden child reasoning and tool transcripts are
+  never rendered or copied to Aizen; only the final report crosses the boundary.
+- Results report local harness setup time separately from total run time so provider
+  latency is not mistaken for orchestration overhead.
 
 Read-only tools are not a complete process/container sandbox. Do not expose this
 checkpoint to an untrusted remote channel before the Gateway trust boundary exists.
@@ -114,6 +119,19 @@ import {
   createWorkerControlTools,
 } from "@reitaard/repi-coding-agent/workers";
 ```
+
+Hosts can start a direct named-worker chat without routing each message through
+Aizen. The host keeps the conversation id internally:
+
+```ts
+const chat = new WorkerChatController(directory);
+const opened = await chat.send("監査", firstMessage);
+const reply = await chat.send("Levi", nextMessage);
+```
+
+The `/worker` TUI exposes this as a friendly worker chat and keeps run and
+conversation ids out of the normal user-facing view. Kanji values are ordinary
+search aliases in worker definitions, not hardwired routing behavior.
 
 ## Files
 
@@ -155,3 +173,11 @@ Live test requirements:
 6. A failed worker batch does not start fresh worker conversations automatically.
 7. Aizen does not perform an explicitly assigned worker task after worker failure
    unless the user requested fallback.
+8. Direct host conversations preserve the selected worker identity and conversation
+   while keeping the technical conversation id internal.
+
+The 2026-07-18 Windows checkpoint passed 32 focused tests and one real source-CLI
+Levi start/continue flow. The live check required `-ne` because the separately
+installed `pi-web-access` extension still depends on a missing upstream package
+compatibility alias; that extension defect is not a worker-harness failure.
+The completed UI checkpoint also passed a source-CLI alias lookup using `監査`.

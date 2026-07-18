@@ -1,4 +1,15 @@
-The next task should be **Phase 0: repair the Windows harness boundary**, followed immediately by a one-shot AgentHarness migration spike.
+> Updated 2026-07-18: Phase 0 and the optional named-worker harness checkpoint are
+> complete, including direct chat, searchable saved worker settings, Shiori-style
+> worker activity, distinct worker/Creator colors, and compact report cards. The next major
+> task remains the Aizen print/one-shot AgentHarness migration. Start with
+> `docs/AGENT_RUNTIME_INSPECTION.md`, then use `docs/AGENTHARNESS.md` and
+> `docs/JARVIS_BUILD_PLAN.md` for the parity and stop/go gates.
+
+The earlier audit below is retained as historical evidence. Its Windows paths
+and statements that delegation is still future work are superseded by the live
+plans above.
+
+The next task was **Phase 0: repair the Windows harness boundary**, followed immediately by a one-shot AgentHarness migration spike.
 
 The plans are directionally correct, and the new memory/LSP work has not diverted the architecture.
 

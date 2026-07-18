@@ -2336,8 +2336,9 @@ export class AgentSession {
 						});
 					});
 				},
-				appendEntry: (customType, data) => {
+				appendEntry: (customType, data, options) => {
 					const entryId = this.sessionManager.appendCustomEntry(customType, data);
+					if (options?.persistImmediately) this.sessionManager.flush();
 					const entry = this.sessionManager.getEntry(entryId);
 					if (entry) {
 						this._emit({ type: "entry_appended", entry });

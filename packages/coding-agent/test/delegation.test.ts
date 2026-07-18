@@ -1,18 +1,12 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-	createModels,
-	fauxAssistantMessage,
-	fauxProvider,
-	type RegisterFauxProviderOptions,
-} from "@reitaard/repi-ai";
+import type { AgentTool } from "@reitaard/repi-agent-core";
+import { createModels, fauxAssistantMessage, fauxProvider, type RegisterFauxProviderOptions } from "@reitaard/repi-ai";
+import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { createDelegateTool } from "../src/core/delegation/delegate-tool.ts";
-import {
-	type NamedWorkerDefinition,
-	runNamedWorker,
-} from "../src/core/delegation/named-worker.ts";
+import { type NamedWorkerDefinition, runNamedWorker } from "../src/core/delegation/named-worker.ts";
 import { REPI_NAMED_WORKERS } from "../src/core/delegation/worker-registry.ts";
 
 let providerCount = 0;
@@ -49,11 +43,17 @@ function messageText(messages: Array<{ role: string; content: unknown }>): strin
 
 describe("named worker delegation", () => {
 	it("registers only the two stable worker ids with swappable display names", () => {
-		expect(REPI_NAMED_WORKERS.map(({ id, displayName }) => ({ id, displayName }))).toEqual([
-			{ id: "research", displayName: "Mayuri" },
-			{ id: "audit", displayName: "Levi" },
+		expect(REPI_NAMED_WORKERS.map(({ id, displayName, aliases }) => ({ id, displayName, aliases }))).toEqual([
+			{ id: "research", displayName: "Mayuri", aliases: ["研究"] },
+			{ id: "audit", displayName: "Levi", aliases: ["監査"] },
 		]);
 		expect(REPI_NAMED_WORKERS.find((candidate) => candidate.id === "research")?.skillName).toBe("librarian");
+		expect(REPI_NAMED_WORKERS.find((candidate) => candidate.id === "research")?.tools).toEqual([
+			"web_search",
+			"fetch_content",
+			"get_search_content",
+		]);
+		expect(REPI_NAMED_WORKERS.find((candidate) => candidate.id === "research")?.tools).not.toContain("read");
 		expect(REPI_NAMED_WORKERS.every((candidate) => Boolean(candidate.personality))).toBe(true);
 	});
 
@@ -165,6 +165,44 @@ describe("named worker delegation", () => {
 		expect(toolNames).toEqual(["read", "grep"]);
 	});
 
+	it("runs a web-only worker with only explicitly supplied extension tools", async () => {
+		const { registration, models } = createFaux();
+		let toolNames: string[] = [];
+		let systemPrompt = "";
+		registration.setResponses([
+			(context) => {
+				toolNames = context.tools?.map((tool) => tool.name) ?? [];
+				systemPrompt = context.systemPrompt ?? "";
+				return fauxAssistantMessage("Web research complete.");
+			},
+		]);
+		const externalTools: AgentTool[] = ["web_search", "fetch_content", "get_search_content"].map((name) => ({
+			name,
+			label: name,
+			description: `${name} test tool`,
+			parameters: Type.Object({}),
+			execute: async () => ({ content: [{ type: "text", text: "ok" }], details: undefined }),
+		}));
+
+		const result = await runNamedWorker({
+			cwd: process.cwd(),
+			model: registration.getModel(),
+			models,
+			worker: worker({
+				id: "research",
+				displayName: "Mayuri",
+				tools: ["web_search", "fetch_content", "get_search_content"],
+			}),
+			externalTools,
+			task: "Research an external technical source.",
+		});
+
+		expect(result.status).toBe("completed");
+		expect(toolNames).toEqual(["web_search", "fetch_content", "get_search_content"]);
+		expect(systemPrompt).toContain("Local workspace access is unavailable");
+		expect(systemPrompt).not.toContain(`Workspace: ${process.cwd()}`);
+	});
+
 	it("clips oversized worker output before returning it to the parent", async () => {
 		const { registration, models } = createFaux();
 		registration.setResponses([() => fauxAssistantMessage("x".repeat(500))]);
@@ -229,9 +267,18 @@ describe("named worker delegation", () => {
 			}
 		).properties.worker;
 
-		expect(workerSchema.enum).toEqual(["research", "Mayuri", "audit", "Levi"]);
-		expect(workerSchema.description).toContain("Mayuri -> research");
-		expect(workerSchema.description).toContain("Levi -> audit");
+		expect(workerSchema.enum).toEqual([
+			"research",
+			"Mayuri",
+			"研究",
+			"Mayuri (研究)",
+			"audit",
+			"Levi",
+			"監査",
+			"Levi (監査)",
+		]);
+		expect(workerSchema.description).toContain("Mayuri (研究) -> research");
+		expect(workerSchema.description).toContain("Levi (監査) -> audit");
 		expect(delegate.description).toContain("explicitly requests a worker");
 		expect(delegate.description).toContain("simple read/grep/find/ls task");
 		expect(delegate.description).toContain("do not replace the worker");
@@ -249,10 +296,7 @@ describe("named worker delegation", () => {
 			cwd: process.cwd(),
 			model: registration.getModel(),
 			models,
-			workers: [
-				worker({ id: "research", displayName: "Mayuri" }),
-				worker({ id: "audit", displayName: "Levi" }),
-			],
+			workers: [worker({ id: "research", displayName: "Mayuri" }), worker({ id: "audit", displayName: "Levi" })],
 		});
 
 		const levi = await delegate.execute("call-levi", { worker: "Levi", task: "Audit the boundary." });

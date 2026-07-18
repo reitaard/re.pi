@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, registerFauxProvider } from "@reitaard/repi-ai/compat";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	type CreateAgentSessionRuntimeFactory,
 	createAgentSessionFromServices,
@@ -10,6 +10,7 @@ import {
 	createAgentSessionServices,
 } from "../src/core/agent-session-runtime.ts";
 import { AuthStorage } from "../src/core/auth-storage.ts";
+import type { WorkerDirectory } from "../src/core/delegation/worker-directory.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
 import type {
 	ExtensionFactory,
@@ -181,6 +182,16 @@ describe("AgentSessionRuntime session lifecycle events", () => {
 		);
 		runtimeHost.setBeforeSessionInvalidate(undefined);
 		runtimeHost.setRebindSession(undefined);
+	});
+
+	it("closes worker conversations before replacing the owning runtime", async () => {
+		const { runtimeHost } = await createRuntimeHost(() => {});
+		const closeAll = vi.fn();
+		runtimeHost.services.workerDirectory = { closeAll } as unknown as WorkerDirectory;
+
+		await runtimeHost.newSession();
+
+		expect(closeAll).toHaveBeenCalledOnce();
 	});
 
 	it("emits session_before_fork and session_start and honors cancellation", async () => {

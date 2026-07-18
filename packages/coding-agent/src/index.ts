@@ -58,8 +58,8 @@ export {
 	shouldCompact,
 } from "./core/compaction/index.ts";
 export {
-	createDelegateTool,
 	type CreateDelegateToolOptions,
+	createDelegateTool,
 	type DelegateToolDetails,
 	type DelegateToolInput,
 	type NamedWorkerDefinition,
@@ -68,8 +68,8 @@ export {
 	type NamedWorkerRunStatus,
 	type NamedWorkerTask,
 	type NamedWorkerToolName,
-	runNamedWorker,
 	type RunNamedWorkerOptions,
+	runNamedWorker,
 } from "./core/delegation/index.ts";
 export { createEventBus, type EventBus, type EventBusController } from "./core/event-bus.ts";
 // Extension system

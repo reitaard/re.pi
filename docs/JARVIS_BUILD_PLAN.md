@@ -41,7 +41,7 @@ Exit criteria:
 
 ## Phase 1: Put the coding agent on AgentHarness
 
-Status: planned
+Status: in progress; responsibility map and shared harness model/auth bridge complete
 
 1. Map current `AgentSession` responsibilities to harness, application service,
    or TUI responsibility.
@@ -172,7 +172,8 @@ Exit criteria:
 
 ## Phase 5: Delegation and trust boundaries
 
-Status: deferred until Phases 1-4 are reliable
+Status: named read-only worker harness implemented early; remote trust and durable
+delegation remain deferred until Phases 1-4 are reliable
 
 - Define named roles, skills, allowed tools, workspace scope, budgets, and output
   schemas.
@@ -181,6 +182,11 @@ Status: deferred until Phases 1-4 are reliable
 - Add recursion/depth limits, cancellation propagation, and cost accounting.
 - Keep the main personal session host-authoritative unless the threat model
   changes.
+
+The current optional Mayuri/Levi checkpoint is deliberately narrower than this
+phase: local read-only tools, isolated child `AgentHarness` turns, in-memory
+conversations, no nesting, and no untrusted channel exposure. Stabilize and use it
+without expanding into the future Gateway/delegation architecture.
 
 ## Phase 6: Advanced surfaces
 
@@ -215,13 +221,20 @@ Keep the upstream license, changelog history, issue links, and attribution.
 ## Near-term checkpoint
 
 - [x] Fix portable harness compatibility tests and capability-gate symlinks.
-- [ ] Write the AgentSession-to-AgentHarness responsibility map.
+- [x] Write the AgentSession-to-AgentHarness responsibility map.
+- [x] Consolidate the private ModelRegistry-to-AgentHarness provider/auth bridge.
 - [ ] Prove a one-shot AgentHarness coding run with existing tools.
 - [x] Stabilize working coding-agent memory and LSP implementations without premature service extraction.
 - [x] Record the AgentHarness migration hold, parity gates, and ownership map in `docs/AGENTHARNESS.md`.
 - [ ] Design SQLite schemas only after the service and event boundaries are set.
 - [ ] Select the first local client/channel.
 - [x] Move publishable workspaces to the `@reitaard/repi-*` namespace.
+- [x] Prove isolated named workers and reusable in-memory worker conversations.
+- [x] Verify direct named-worker start/continue behavior through the source CLI.
+- [x] Add the `/worker` TUI roster/settings/direct-chat page without exposing
+  technical ids by default.
+- [x] Add searchable persisted worker model/thinking/token settings, session-only
+  direct-chat continuity, and identity-colored worker activity/report presentation.
 
 See [Architecture Sources](./ARCHITECTURE_SOURCES.md) for the comparison that
 drives these priorities.

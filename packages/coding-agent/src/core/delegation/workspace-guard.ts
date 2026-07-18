@@ -22,7 +22,9 @@ async function realpathOrResolved(path: string): Promise<string> {
  * Block delegated read-only file tools from escaping cwd through absolute paths,
  * parent traversal, tilde expansion, or an existing symlink target.
  */
-export function createWorkspaceToolCallGuard(cwd: string): (event: {
+export function createWorkspaceToolCallGuard(
+	cwd: string,
+): (event: {
 	toolName: string;
 	input: Record<string, unknown>;
 }) => Promise<{ block: true; reason: string } | undefined> {

@@ -2,9 +2,23 @@
 
 ## [Unreleased]
 
+### Added
+
+- Report named-worker harness setup time separately from total model-backed run time.
+- Add generic named-worker aliases, a `/worker` roster/settings/direct-chat page, and personality-aware handoff presentation that keeps technical ids out of the normal TUI.
+- Add `/levi` and `/mayuri` direct-chat shortcuts and preserve argument hints for extension commands in slash autocomplete.
+- Distinguish direct worker chat from Aizen handoffs, vary worker activity text deterministically by personality, and clear pending activity before rendering completed replies.
+- Add searchable persisted worker model/thinking/token settings, session-only Creator message lines, worker-colored shimmer activity, and width-aware result cards with lighter report text.
+- Add typed Creator and Aizen orchestration identities so direct and delegated worker transcripts carry the real initiating role from their first turn instead of a generic caller label.
+- Make Mayuri a web-only librarian backed by the loaded search and fetch tools while leaving local project search with Aizen.
+
 ### Fixed
 
 - Show accurate pending activity for incomplete custom tool calls instead of rendering misleading fallback operations.
+- Cancel and forget active named-worker conversations when their owning session runtime shuts down.
+- Keep concurrent direct-worker activity visible independently and animate worker/delegate calls with a pink star and worker-colored shimmer.
+- Keep successful worker runtime visible on result and status cards without repeating the `completed` label.
+- Persist direct named-worker chats in the active RePi session so they can be restored and continued after resuming it.
 
 ## [0.81.3] - 2026-07-17
 

@@ -2,18 +2,20 @@ import type { AgentTool } from "@reitaard/repi-agent-core";
 import type { Model, Models } from "@reitaard/repi-ai";
 import { type Static, Type } from "typebox";
 import type { ModelRegistry } from "../model-registry.ts";
-import type {
-	NamedWorkerDefinition,
-	NamedWorkerProgressEvent,
-	NamedWorkerRunResult,
-	NamedWorkerSkill,
+import {
+	formatNamedWorkerIdentity,
+	getNamedWorkerReferences,
+	type NamedWorkerDefinition,
+	type NamedWorkerProgressEvent,
+	type NamedWorkerRunResult,
+	type NamedWorkerSkill,
 } from "./named-worker.ts";
 import { WorkerDirectory } from "./worker-directory.ts";
 
 function createDelegateSchema(workers: readonly NamedWorkerDefinition[]) {
 	const workerIds = workers.map((worker) => worker.id);
-	const references = workers.flatMap((worker) => [worker.id, worker.displayName]);
-	const aliases = workers.map((worker) => `${worker.displayName} -> ${worker.id}`).join(", ");
+	const references = workers.flatMap(getNamedWorkerReferences);
+	const aliases = workers.map((worker) => `${formatNamedWorkerIdentity(worker)} -> ${worker.id}`).join(", ");
 	return Type.Object({
 		worker: Type.String({
 			description: `Worker id or display name. Prefer canonical ids: ${workerIds.join(", ")}. Aliases: ${aliases}.`,
@@ -65,7 +67,11 @@ function buildWorkerDescription(workers: readonly NamedWorkerDefinition[]): stri
 
 function formatProcessHeader(result: NamedWorkerRunResult): string {
 	const durationSeconds = (result.durationMs / 1_000).toFixed(result.durationMs < 10_000 ? 1 : 0);
-	return `[worker ${result.workerId}/${result.workerName} | run ${result.runId.slice(0, 8)} | ${result.status} | ${durationSeconds}s]`;
+	const identity = formatNamedWorkerIdentity({
+		displayName: result.workerName,
+		aliases: result.workerAliases,
+	});
+	return `[worker ${result.workerId}/${identity} | run ${result.runId.slice(0, 8)} | ${result.status} | ${durationSeconds}s]`;
 }
 
 function formatToolResult(result: NamedWorkerRunResult): string {
@@ -107,10 +113,7 @@ function resolveDirectory(options: CreateDelegateToolOptions): WorkerDirectory {
  * Persistent, directly addressable worker conversations are exposed separately
  * through worker_start/worker_message and share the same WorkerDirectory.
  */
-export function createDelegateTool(options: CreateDelegateToolOptions): AgentTool<
-	DelegateSchema,
-	DelegateToolDetails
-> {
+export function createDelegateTool(options: CreateDelegateToolOptions): AgentTool<DelegateSchema, DelegateToolDetails> {
 	const directory = resolveDirectory(options);
 	const definitions = directory.getWorkerDefinitions();
 	const availableWorkers = buildWorkerDescription(definitions);

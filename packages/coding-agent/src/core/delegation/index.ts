@@ -1,10 +1,12 @@
 export {
-	createDelegateTool,
 	type CreateDelegateToolOptions,
+	createDelegateTool,
 	type DelegateToolDetails,
 	type DelegateToolInput,
 } from "./delegate-tool.ts";
 export {
+	formatNamedWorkerIdentity,
+	getNamedWorkerReferences,
 	type NamedWorkerDefinition,
 	type NamedWorkerProgressEvent,
 	type NamedWorkerRunResult,
@@ -12,17 +14,27 @@ export {
 	type NamedWorkerSkill,
 	type NamedWorkerTask,
 	type NamedWorkerToolName,
-	runNamedWorker,
 	type RunNamedWorkerOptions,
+	runNamedWorker,
 } from "./named-worker.ts";
 export {
-	WorkerDirectory,
+	formatOrchestrationActor,
+	formatOrchestrationActorContext,
+	type OrchestrationActorIdentity,
+	type OrchestrationActorKind,
+	type OrchestrationActorRole,
+	REPI_AIZEN_IDENTITY,
+	REPI_CREATOR_IDENTITY,
+} from "./orchestration-identity.ts";
+export { WorkerChatController } from "./worker-chat.ts";
+export {
 	type WorkerConversationSnapshot,
 	type WorkerConversationStatus,
 	type WorkerConversationTurnResult,
 	type WorkerDescriptor,
+	WorkerDirectory,
 	type WorkerDirectoryOptions,
 	type WorkerDirectoryRuntimeOptions,
 } from "./worker-directory.ts";
-export { createWorkerControlTools } from "./worker-tools.ts";
 export { REPI_NAMED_WORKERS } from "./worker-registry.ts";
+export { createWorkerControlTools } from "./worker-tools.ts";

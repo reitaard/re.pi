@@ -9,10 +9,7 @@ import {
 	type RegisterFauxProviderOptions,
 } from "@reitaard/repi-ai";
 import { describe, expect, it } from "vitest";
-import {
-	type NamedWorkerDefinition,
-	runNamedWorker,
-} from "../src/core/delegation/named-worker.ts";
+import { type NamedWorkerDefinition, runNamedWorker } from "../src/core/delegation/named-worker.ts";
 import { createWorkspaceToolCallGuard } from "../src/core/delegation/workspace-guard.ts";
 
 let providerCount = 0;
@@ -200,6 +197,22 @@ describe("delegated worker isolation", () => {
 		} finally {
 			await rm(dir, { recursive: true, force: true });
 		}
+	});
+
+	it("reports harness setup separately from total worker duration", async () => {
+		const { registration, models } = createFaux();
+		registration.setResponses([() => fauxAssistantMessage("Measured result.")]);
+
+		const result = await runNamedWorker({
+			cwd: process.cwd(),
+			model: registration.getModel(),
+			models,
+			worker: worker(),
+			task: "Measure the local setup boundary.",
+		});
+
+		expect(result.harnessSetupDurationMs).toBeGreaterThanOrEqual(0);
+		expect(result.harnessSetupDurationMs).toBeLessThanOrEqual(result.durationMs);
 	});
 
 	it("blocks parent traversal before a worker can read outside cwd", async () => {

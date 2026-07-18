@@ -13,6 +13,10 @@ export interface SettingItem {
 	description?: string;
 	/** Current value to display (right side) */
 	currentValue: string;
+	/** Optional visual group heading rendered above related settings. */
+	group?: string;
+	/** Optional hidden text included by fuzzy search without adding visual label noise. */
+	searchText?: string;
 	/** If provided, Enter/Space cycles through these values */
 	values?: string[];
 	/** If provided, Enter opens this submenu. Receives current value and done callback. */
@@ -29,6 +33,7 @@ export interface SettingsListTheme {
 
 export interface SettingsListOptions {
 	enableSearch?: boolean;
+	confirmHint?: string;
 }
 
 export class SettingsList implements Component {
@@ -41,6 +46,7 @@ export class SettingsList implements Component {
 	private onCancel: () => void;
 	private searchInput?: Input;
 	private searchEnabled: boolean;
+	private confirmHint: string;
 
 	// Submenu state
 	private submenuComponent: Component | null = null;
@@ -61,6 +67,7 @@ export class SettingsList implements Component {
 		this.onChange = onChange;
 		this.onCancel = onCancel;
 		this.searchEnabled = options.enableSearch ?? false;
+		this.confirmHint = options.confirmHint ?? "Enter/Space to change";
 		if (this.searchEnabled) {
 			this.searchInput = new Input();
 		}
@@ -121,9 +128,14 @@ export class SettingsList implements Component {
 		const maxLabelWidth = Math.min(30, Math.max(...this.items.map((item) => visibleWidth(item.label))));
 
 		// Render visible items
+		let renderedGroup: string | undefined;
 		for (let i = startIndex; i < endIndex; i++) {
 			const item = displayItems[i];
 			if (!item) continue;
+			if (item.group && item.group !== renderedGroup) {
+				lines.push(truncateToWidth(`  ${item.group}`, width));
+				renderedGroup = item.group;
+			}
 
 			const isSelected = i === this.selectedIndex;
 			const prefix = isSelected ? this.theme.cursor : "  ";
@@ -230,7 +242,7 @@ export class SettingsList implements Component {
 	}
 
 	private applyFilter(query: string): void {
-		this.filteredItems = fuzzyFilter(this.items, query, (item) => item.label);
+		this.filteredItems = fuzzyFilter(this.items, query, (item) => `${item.label} ${item.searchText ?? ""}`);
 		this.selectedIndex = 0;
 	}
 
@@ -240,8 +252,8 @@ export class SettingsList implements Component {
 			truncateToWidth(
 				this.theme.hint(
 					this.searchEnabled
-						? "  Type to search · Enter/Space to change · Esc to cancel"
-						: "  Enter/Space to change · Esc to cancel",
+						? `  Type to search · ${this.confirmHint} · Esc to cancel`
+						: `  ${this.confirmHint} · Esc to cancel`,
 				),
 				width,
 			),

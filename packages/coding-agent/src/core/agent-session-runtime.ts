@@ -172,6 +172,7 @@ export class AgentSessionRuntime {
 			reason,
 			targetSessionFile,
 		});
+		this.services.workerDirectory?.closeAll();
 		this.beforeSessionInvalidate?.();
 		this.session.dispose();
 		await stopLspLifecycleForCwd(currentCwd);
@@ -396,6 +397,7 @@ export class AgentSessionRuntime {
 			type: "session_shutdown",
 			reason: "quit",
 		});
+		this.services.workerDirectory?.closeAll();
 		this.beforeSessionInvalidate?.();
 		this.session.dispose();
 		await stopLspLifecycleForCwd(currentCwd);

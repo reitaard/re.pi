@@ -1,15 +1,17 @@
 import type { AgentTool } from "@reitaard/repi-agent-core";
 import { Type } from "typebox";
+import { formatNamedWorkerIdentity, getNamedWorkerReferences } from "./named-worker.ts";
 import type {
 	WorkerConversationSnapshot,
 	WorkerConversationTurnResult,
+	WorkerDescriptor,
 	WorkerDirectory,
 } from "./worker-directory.ts";
 
 function workerReferenceSchema(directory: WorkerDirectory) {
 	const workers = directory.getWorkerDefinitions();
-	const references = workers.flatMap((worker) => [worker.id, worker.displayName]);
-	const mapping = workers.map((worker) => `${worker.id}=${worker.displayName}`).join(", ");
+	const references = workers.flatMap(getNamedWorkerReferences);
+	const mapping = workers.map((worker) => `${worker.id}=${formatNamedWorkerIdentity(worker)}`).join(", ");
 	return Type.String({
 		description: `Worker id or display name. Prefer canonical ids. Available: ${mapping}.`,
 		enum: references,
@@ -24,7 +26,11 @@ function failurePolicy(turn: WorkerConversationTurnResult): string {
 function formatTurn(turn: WorkerConversationTurnResult): string {
 	const { conversation, result } = turn;
 	const duration = (result.durationMs / 1_000).toFixed(result.durationMs < 10_000 ? 1 : 0);
-	const header = `[worker ${result.workerId}/${result.workerName} | run ${result.runId.slice(0, 8)} | ${result.status} | ${duration}s]`;
+	const identity = formatNamedWorkerIdentity({
+		displayName: result.workerName,
+		aliases: result.workerAliases,
+	});
+	const header = `[worker ${result.workerId}/${identity} | run ${result.runId.slice(0, 8)} | ${result.status} | ${duration}s]`;
 	return `conversationId: ${conversation.conversationId}\n${header}\n${result.output || result.error || `[${result.status}]`}${failurePolicy(turn)}`;
 }
 
@@ -35,7 +41,11 @@ function formatStatus(snapshot: WorkerConversationSnapshot): string {
 	const output = snapshot.lastOutput
 		? `\nlast output: ${snapshot.lastOutput.length > 600 ? `${snapshot.lastOutput.slice(0, 597)}...` : snapshot.lastOutput}`
 		: "";
-	return `conversationId: ${snapshot.conversationId}\n[worker ${snapshot.workerId}/${snapshot.workerName} | run ${snapshot.runId?.slice(0, 8) ?? "none"} | ${snapshot.status} | ${elapsed}s | turns ${snapshot.turnCount}${tool}]\ntask: ${snapshot.taskSummary}${error}${output}`;
+	const identity = formatNamedWorkerIdentity({
+		displayName: snapshot.workerName,
+		aliases: snapshot.workerAliases,
+	});
+	return `conversationId: ${snapshot.conversationId}\n[worker ${snapshot.workerId}/${identity} | run ${snapshot.runId?.slice(0, 8) ?? "none"} | ${snapshot.status} | ${elapsed}s | turns ${snapshot.turnCount}${tool}]\ntask: ${snapshot.taskSummary}${error}${output}`;
 }
 
 export function createWorkerControlTools(directory: WorkerDirectory): AgentTool<any>[] {
@@ -43,12 +53,12 @@ export function createWorkerControlTools(directory: WorkerDirectory): AgentTool<
 	const startSchema = Type.Object({
 		worker: workerReferenceSchema(directory),
 		message: Type.String({ description: "First task or message for the worker" }),
-		context: Type.Optional(Type.String({ description: "Small caller context needed for this conversation" })),
+		context: Type.Optional(Type.String({ description: "Small Aizen context needed for this conversation" })),
 	});
 	const messageSchema = Type.Object({
 		conversationId: Type.String({ description: "Full worker conversation id returned by worker_start" }),
 		message: Type.String({ description: "Next message for the same worker personality and conversation" }),
-		context: Type.Optional(Type.String({ description: "Small new caller context for this turn" })),
+		context: Type.Optional(Type.String({ description: "Small new Aizen context for this turn" })),
 	});
 	const statusSchema = Type.Object({
 		conversationId: Type.Optional(Type.String({ description: "Specific full conversation id; omit to list all" })),
@@ -57,7 +67,7 @@ export function createWorkerControlTools(directory: WorkerDirectory): AgentTool<
 		conversationId: Type.String({ description: "Full worker conversation id" }),
 	});
 
-	const listTool: AgentTool<typeof listSchema, undefined> = {
+	const listTool: AgentTool<typeof listSchema, { workers: WorkerDescriptor[] }> = {
 		name: "worker_list",
 		label: "worker_list",
 		description:
@@ -65,12 +75,13 @@ export function createWorkerControlTools(directory: WorkerDirectory): AgentTool<
 		parameters: listSchema,
 		executionMode: "parallel",
 		async execute() {
-			const lines = directory.listWorkers().map((worker) => {
+			const workers = directory.listWorkers();
+			const lines = workers.map((worker) => {
 				const personality = worker.personality ? ` personality=${worker.personality}` : "";
 				const skill = worker.skillName ? ` skill=${worker.skillName}` : "";
-				return `- id=${worker.id}; name=${worker.displayName}; role=${worker.description}; tools=${worker.tools.join(",")}${skill}${personality}`;
+				return `- id=${worker.id}; name=${formatNamedWorkerIdentity(worker)}; role=${worker.description}; tools=${worker.tools.join(",")}${skill}${personality}`;
 			});
-			return { content: [{ type: "text", text: lines.join("\n") }], details: undefined };
+			return { content: [{ type: "text", text: lines.join("\n") }], details: { workers } };
 		},
 	};
 
@@ -95,7 +106,7 @@ export function createWorkerControlTools(directory: WorkerDirectory): AgentTool<
 		name: "worker_message",
 		label: "worker_message",
 		description:
-			"Continue an existing worker conversation using the full conversationId returned by worker_start. The same named personality receives the previous caller/worker dialogue as bounded context. Never automatically retry a failed turn or replace it with parent work; wait for a new user message explicitly requesting retry or fallback.",
+			"Continue an existing worker conversation using the full conversationId returned by worker_start. The same named personality receives the previous Aizen/worker dialogue as bounded context. Never automatically retry a failed turn or replace it with parent work; wait for a new user message explicitly requesting retry or fallback.",
 		parameters: messageSchema,
 		executionMode: "parallel",
 		async execute(_toolCallId, input, signal) {

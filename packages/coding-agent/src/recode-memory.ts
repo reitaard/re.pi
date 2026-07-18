@@ -30,7 +30,10 @@ import {
 	type RecodeMemorySettingId,
 	RecodeMemorySettingsComponent,
 } from "./modes/interactive/components/recode-memory-settings.ts";
-import { createRecodeShioriIndicator } from "./modes/interactive/components/recode-shiori-indicator.ts";
+import {
+	createRecodeShioriIndicator,
+	shioriForeground,
+} from "./modes/interactive/components/recode-shiori-indicator.ts";
 import type { Theme } from "./modes/interactive/theme/theme.ts";
 
 const RECODE_KIOKU_DISPLAY_NAME = "Kioku (\u8a18\u61b6)";
@@ -204,20 +207,21 @@ export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryR
 		}
 		activeContext.ui.setStatus(
 			"recode-shiori",
-			state.reviewing ? activeContext.ui.theme.fg("success", `${RECODE_SHIORI_DISPLAY_NAME}: reviewing`) : undefined,
+			state.reviewing
+				? shioriForeground(`${RECODE_SHIORI_DISPLAY_NAME}: reviewing`, activeContext.ui.theme)
+				: undefined,
 		);
 	});
 
 	pi.registerEntryRenderer<RecodeShioriMessageEntry>(RECODE_SHIORI_MESSAGE_ENTRY, (entry, _options, theme) => {
 		const message = entry.data?.message;
 		if (!message) return undefined;
-		const color = theme.name === "light" ? "success" : "mdCodeBlockBorder";
 		const italicSuffixStart = message.search(/\(\d+ entries\)$/);
 		const renderedMessage =
 			italicSuffixStart < 0
 				? message
 				: `${message.slice(0, italicSuffixStart)}\x1b[3m${message.slice(italicSuffixStart)}\x1b[23m`;
-		return new Text(theme.fg(color, `✦ ${RECODE_SHIORI_DISPLAY_NAME}: ${renderedMessage}`), 0, 0);
+		return new Text(shioriForeground(`✦ ${RECODE_SHIORI_DISPLAY_NAME}: ${renderedMessage}`, theme), 0, 0);
 	});
 
 	const appendShioriMessage = (message: string): void => {
@@ -246,7 +250,7 @@ export async function recodeMemory(pi: ExtensionAPI, runtime = new RecodeMemoryR
 			ctx.ui.setStatus(
 				"recode-shiori",
 				runtime.isShioriReviewing()
-					? ctx.ui.theme.fg("success", `${RECODE_SHIORI_DISPLAY_NAME}: reviewing`)
+					? shioriForeground(`${RECODE_SHIORI_DISPLAY_NAME}: reviewing`, ctx.ui.theme)
 					: undefined,
 			);
 		} catch (error) {

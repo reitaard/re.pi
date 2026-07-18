@@ -1,14 +1,26 @@
 import type { LoaderIndicatorOptions } from "@reitaard/repi-tui";
 import { RECODE_SHIORI_DISPLAY_NAME } from "../../../core/recode-memory/recode-shiori.ts";
 import type { Theme } from "../theme/theme.ts";
-import { RECODE_LIGHT_LIME_PALETTE, RECODE_LIME_PALETTE } from "./recode-magic-indicator.ts";
+
+const RECODE_SHIORI_SKY_PALETTE = [
+	{ hex: "#D9F2FF", ansi256: 195 },
+	{ hex: "#A9DCF5", ansi256: 153 },
+	{ hex: "#70C8F0", ansi256: 81 },
+	{ hex: "#397FA8", ansi256: 31 },
+] as const;
+const RECODE_LIGHT_SHIORI_SKY_PALETTE = [
+	{ hex: "#0B5F85", ansi256: 24 },
+	{ hex: "#1477A4", ansi256: 31 },
+	{ hex: "#278EBB", ansi256: 31 },
+	{ hex: "#326E88", ansi256: 24 },
+] as const;
 
 const SHIORI_STAR_FRAMES = ["✦", "✧", "⋆", "✧"] as const;
 const SHIORI_SHIMMER_INTERVAL_MS = 80;
 const SHIORI_SHIMMER_RADIUS = 4;
 
 function paletteForeground(text: string, paletteIndex: number, activeTheme: Theme): string {
-	const palette = activeTheme.name === "light" ? RECODE_LIGHT_LIME_PALETTE : RECODE_LIME_PALETTE;
+	const palette = activeTheme.name === "light" ? RECODE_LIGHT_SHIORI_SKY_PALETTE : RECODE_SHIORI_SKY_PALETTE;
 	const color = palette[Math.min(palette.length - 1, Math.max(0, paletteIndex))] ?? palette[2]!;
 	const ansi =
 		activeTheme.getColorMode() === "truecolor"
@@ -17,7 +29,11 @@ function paletteForeground(text: string, paletteIndex: number, activeTheme: Them
 	return `${ansi}${text}\x1b[39m`;
 }
 
-/** Creates a star spinner with a moving lime highlight across the complete Shiori line. */
+export function shioriForeground(text: string, activeTheme: Theme): string {
+	return paletteForeground(text, 2, activeTheme);
+}
+
+/** Creates a star spinner with a moving sky-blue highlight across the complete Shiori line. */
 export function createRecodeShioriIndicator(message: string, activeTheme: Theme): LoaderIndicatorOptions {
 	const text = `${RECODE_SHIORI_DISPLAY_NAME}: ${message}`;
 	const characters = Array.from(text);

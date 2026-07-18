@@ -377,6 +377,77 @@ describe("InteractiveMode.setupAutocompleteProvider", () => {
 });
 
 describe("InteractiveMode.createBaseAutocompleteProvider", () => {
+	test("preserves extension command argument hints through slash completion", async () => {
+		type FakeInteractiveMode = {
+			session: {
+				scopedModels: [];
+				modelRegistry: { getAvailable: () => [] };
+				promptTemplates: [];
+				extensionRunner: {
+					getRegisteredCommands: () => Array<{
+						name: string;
+						invocationName: string;
+						description: string;
+						argumentHint: string;
+						sourceInfo: SourceInfo;
+					}>;
+				};
+				resourceLoader: { getSkills: () => { skills: [] } };
+			};
+			settingsManager: { getEnableSkillCommands: () => boolean };
+			skillCommands: Map<string, string>;
+			sessionManager: { getCwd: () => string };
+			fdPath: null;
+		};
+		const createBaseAutocompleteProvider = (
+			InteractiveMode as unknown as {
+				prototype: { createBaseAutocompleteProvider(this: FakeInteractiveMode): AutocompleteProvider };
+			}
+		).prototype.createBaseAutocompleteProvider;
+		const sourceInfo: SourceInfo = {
+			path: "<inline:recode-workers>",
+			source: "recode-workers",
+			scope: "temporary",
+			origin: "top-level",
+		};
+		const fakeThis = Object.create(InteractiveMode.prototype) as FakeInteractiveMode;
+		Object.defineProperties(fakeThis, {
+			session: {
+				value: {
+					scopedModels: [],
+					modelRegistry: { getAvailable: () => [] },
+					promptTemplates: [],
+					extensionRunner: {
+						getRegisteredCommands: () => [
+							{
+								name: "levi",
+								invocationName: "levi",
+								description: "Direct chat with Levi",
+								argumentHint: "<message>",
+								sourceInfo,
+							},
+						],
+					},
+					resourceLoader: { getSkills: () => ({ skills: [] }) },
+				},
+			},
+			settingsManager: { value: { getEnableSkillCommands: () => false } },
+			skillCommands: { value: new Map() },
+			sessionManager: { value: { getCwd: () => "/tmp" } },
+			fdPath: { value: null },
+		});
+
+		const provider = createBaseAutocompleteProvider.call(fakeThis);
+		const suggestions = await provider.getSuggestions(["/lev"], 0, 4, {
+			signal: new AbortController().signal,
+		});
+
+		expect(suggestions?.items[0]?.value).toBe("levi");
+		expect(suggestions?.items[0]?.description).toContain("<message>");
+		const applied = provider.applyCompletion(["/lev"], 0, 4, suggestions!.items[0]!, suggestions!.prefix);
+		expect(applied.lines[0]).toBe("/levi ");
+	});
+
 	test("matches model command arguments across provider/model order", async () => {
 		type TestModel = { id: string; provider: string; name: string };
 		type FakeInteractiveMode = {

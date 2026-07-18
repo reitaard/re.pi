@@ -6,6 +6,10 @@ This is the short, durable handoff for future agents working on RePi's
 [Architecture Sources](./ARCHITECTURE_SOURCES.md), and the detailed
 [AgentHarness lifecycle](../packages/agent/docs/agent-harness.md).
 
+The settled `Kreis` vocabulary, completed responsibility map, first shared runtime
+primitive, and home-laptop continuation point are recorded in
+[Agent Runtime Inspection](./AGENT_RUNTIME_INSPECTION.md).
+
 ## Decision
 
 Hold the migration until the first real execution path is selected and parity

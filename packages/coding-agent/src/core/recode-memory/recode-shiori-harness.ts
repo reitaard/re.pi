@@ -1,7 +1,7 @@
 import { AgentHarness, InMemorySessionStorage, Session } from "@reitaard/repi-agent-core";
 import { NodeExecutionEnv } from "@reitaard/repi-agent-core/node";
-import { type AssistantMessage, createModels, createProvider, type Model } from "@reitaard/repi-ai";
-import { type ProviderStreamOptions, stream, streamSimple } from "@reitaard/repi-ai/compat";
+import type { AssistantMessage, Model } from "@reitaard/repi-ai";
+import { createHarnessModels } from "../harness-models.ts";
 import type { ModelRegistry } from "../model-registry.ts";
 
 const SHIORI_NON_THINKING_MAX_OUTPUT_TOKENS = 1024;
@@ -169,32 +169,7 @@ export async function runRecodeShioriHarness(options: {
 			options.thinking ? SHIORI_THINKING_MAX_OUTPUT_TOKENS : SHIORI_NON_THINKING_MAX_OUTPUT_TOKENS,
 		),
 	};
-	const models = createModels();
-	models.setProvider(
-		createProvider({
-			id: requestModel.provider,
-			name: `${requestModel.provider} for Shiori`,
-			models: [requestModel],
-			auth: {
-				apiKey: {
-					name: `${requestModel.provider} credentials`,
-					resolve: async () => {
-						const resolved = await options.modelRegistry.getApiKeyAndHeaders(requestModel);
-						if (!resolved.ok) throw new Error(resolved.error);
-						return {
-							auth: { apiKey: resolved.apiKey, headers: resolved.headers },
-							env: resolved.env,
-						};
-					},
-				},
-			},
-			api: {
-				stream: (model, context, streamOptions) =>
-					stream(model, context, streamOptions as ProviderStreamOptions | undefined),
-				streamSimple: (model, context, streamOptions) => streamSimple(model, context, streamOptions),
-			},
-		}),
-	);
+	const models = createHarnessModels(requestModel, options.modelRegistry, "Shiori");
 
 	const harness = new AgentHarness({
 		env: new NodeExecutionEnv({ cwd: options.cwd }),
