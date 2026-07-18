@@ -1,6 +1,6 @@
-import { type AgentEvent, AgentHarness, Session } from "@reitaard/repi-agent-core";
+import { type AgentEvent, AgentHarness, type AgentMessage, Session } from "@reitaard/repi-agent-core";
 import { NodeExecutionEnv } from "@reitaard/repi-agent-core/node";
-import type { AssistantMessage, ImageContent, Models } from "@reitaard/repi-ai";
+import type { AssistantMessage, ImageContent, Models, TextContent, UserMessage } from "@reitaard/repi-ai";
 import { isContextOverflow, isRetryableAssistantError } from "@reitaard/repi-ai/compat";
 import { sleep } from "../utils/sleep.ts";
 import type {
@@ -11,6 +11,7 @@ import type {
 } from "./agent-session.ts";
 import { calculateContextTokens, shouldCompact } from "./compaction/index.ts";
 import { createHarnessModels } from "./harness-models.ts";
+import type { CustomMessage } from "./messages.ts";
 import { RecodeSessionStorage } from "./recode-session-storage.ts";
 
 export interface AizenRuntime {
@@ -18,6 +19,20 @@ export interface AizenRuntime {
 	profile: AizenRuntimeProfile;
 	session: Session;
 	prompt(text: string, options?: { images?: ImageContent[] }): Promise<AssistantMessage>;
+	sendCustomMessage<T = unknown>(
+		message: Pick<CustomMessage<T>, "customType" | "content" | "display" | "details">,
+		options?: { triggerTurn?: boolean; deliverAs?: "steer" | "followUp" | "nextTurn" },
+	): Promise<void>;
+	sendUserMessage(
+		content: string | (TextContent | ImageContent)[],
+		options?: { deliverAs?: "steer" | "followUp" },
+	): Promise<void>;
+	appendEntry(customType: string, data?: unknown, options?: { persistImmediately?: boolean }): Promise<void>;
+	compact(customInstructions?: string): ReturnType<AgentHarness["compact"]>;
+	abortRetry(): void;
+	isCompacting(): boolean;
+	isRunning(): boolean;
+	pendingMessageCount(): number;
 	subscribe(listener: AgentSessionEventListener): () => void;
 }
 
@@ -58,18 +73,35 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 		for (const listener of listeners) listener(event);
 	};
 	let pendingAgentEnd: Extract<AgentEvent, { type: "agent_end" }> | undefined;
-	let activeCompaction: { reason: "threshold" | "overflow"; willRetry: boolean } | undefined;
+	let activeCompaction: { reason: "manual" | "threshold" | "overflow"; willRetry: boolean } | undefined;
+	let pendingMessageCount = 0;
+	let retryAbortController: AbortController | undefined;
+	let running = false;
 	const flushAgentEnd = (willRetry: boolean): void => {
 		if (!pendingAgentEnd) return;
 		emit({ ...pendingAgentEnd, willRetry });
 		pendingAgentEnd = undefined;
 	};
 	harness.subscribe(async (event) => {
+		if (event.type === "queue_update") {
+			pendingMessageCount = event.steer.length + event.followUp.length + event.nextTurn.length;
+			emit({
+				type: "queue_update",
+				steering: event.steer.map(getMessageText),
+				followUp: [...event.followUp, ...event.nextTurn].map(getMessageText),
+			});
+			return;
+		}
 		if (event.type === "session_compact" && activeCompaction) {
 			emit({
 				type: "compaction_end",
 				reason: activeCompaction.reason,
-				result: undefined,
+				result: {
+					summary: event.compactionEntry.summary,
+					firstKeptEntryId: event.compactionEntry.firstKeptEntryId,
+					tokensBefore: event.compactionEntry.tokensBefore,
+					details: event.compactionEntry.details,
+				},
 				aborted: false,
 				willRetry: activeCompaction.willRetry,
 			});
@@ -86,10 +118,11 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 		retry: { enabled: false, maxRetries: 0, baseDelayMs: 2000 },
 	};
 
-	const prompt = async (text: string, promptOptions?: { images?: ImageContent[] }): Promise<AssistantMessage> => {
+	const runWithRecovery = async (start: () => Promise<AssistantMessage>): Promise<AssistantMessage> => {
 		let retryAttempt = 0;
+		running = true;
 		try {
-			let response = await harness.prompt(text, promptOptions);
+			let response = await start();
 			let overflowRecoveryAttempted = false;
 
 			while (response.stopReason === "error") {
@@ -129,7 +162,15 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 					delayMs,
 					errorMessage: response.errorMessage || "Unknown error",
 				});
-				await sleep(delayMs);
+				retryAbortController = new AbortController();
+				try {
+					await sleep(delayMs, retryAbortController.signal);
+				} catch {
+					if (retryAbortController.signal.aborted) break;
+					throw new Error("Retry delay failed");
+				} finally {
+					retryAbortController = undefined;
+				}
 				response = await harness.retry();
 			}
 
@@ -170,9 +211,81 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 
 			return response;
 		} finally {
+			running = false;
 			flushAgentEnd(false);
 			await hooks.settled?.();
 			emit({ type: "agent_settled" });
+		}
+	};
+	const prompt = async (text: string, promptOptions?: { images?: ImageContent[] }): Promise<AssistantMessage> =>
+		await runWithRecovery(async () => await harness.prompt(text, promptOptions));
+
+	const sendCustomMessage = async <T = unknown>(
+		message: Pick<CustomMessage<T>, "customType" | "content" | "display" | "details">,
+		messageOptions?: { triggerTurn?: boolean; deliverAs?: "steer" | "followUp" | "nextTurn" },
+	): Promise<void> => {
+		const appMessage: CustomMessage<T> = {
+			role: "custom",
+			customType: message.customType,
+			content: message.content ?? [],
+			display: message.display,
+			details: message.details,
+			timestamp: Date.now(),
+		};
+		if (messageOptions?.deliverAs === "nextTurn") {
+			await harness.nextTurnMessage(appMessage);
+		} else if (running) {
+			if (messageOptions?.deliverAs === "followUp") await harness.followUpMessage(appMessage);
+			else await harness.steerMessage(appMessage);
+		} else if (messageOptions?.triggerTurn) {
+			await runWithRecovery(async () => await harness.sendMessage(appMessage));
+		} else {
+			await harness.appendMessage(appMessage);
+			emit({ type: "message_start", message: appMessage });
+			emit({ type: "message_end", message: appMessage });
+		}
+	};
+	const sendUserMessage = async (
+		content: string | (TextContent | ImageContent)[],
+		messageOptions?: { deliverAs?: "steer" | "followUp" },
+	): Promise<void> => {
+		const parts = typeof content === "string" ? [{ type: "text" as const, text: content }] : content;
+		const userMessage: UserMessage = { role: "user", content: parts, timestamp: Date.now() };
+		if (running) {
+			if (messageOptions?.deliverAs === "followUp") await harness.followUpMessage(userMessage);
+			else await harness.steerMessage(userMessage);
+		} else {
+			await runWithRecovery(async () => await harness.sendMessage(userMessage));
+		}
+	};
+	const appendEntry = async (
+		customType: string,
+		data?: unknown,
+		entryOptions?: { persistImmediately?: boolean },
+	): Promise<void> => {
+		const entryId = await session.appendCustomEntry(customType, data);
+		if (entryOptions?.persistImmediately) options.agentSession.sessionManager.flush();
+		const entry = await session.getEntry(entryId);
+		if (entry) emit({ type: "entry_appended", entry });
+	};
+	const compactSession = async (customInstructions?: string): ReturnType<AgentHarness["compact"]> => {
+		emit({ type: "compaction_start", reason: "manual" });
+		activeCompaction = { reason: "manual", willRetry: false };
+		try {
+			return await harness.compact(customInstructions);
+		} catch (error) {
+			if (activeCompaction) {
+				emit({
+					type: "compaction_end",
+					reason: "manual",
+					result: undefined,
+					aborted: false,
+					willRetry: false,
+					errorMessage: error instanceof Error ? error.message : String(error),
+				});
+				activeCompaction = undefined;
+			}
+			throw error;
 		}
 	};
 
@@ -181,11 +294,28 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 		profile,
 		session,
 		prompt,
+		sendCustomMessage,
+		sendUserMessage,
+		appendEntry,
+		compact: compactSession,
+		abortRetry: () => retryAbortController?.abort(),
+		isCompacting: () => activeCompaction !== undefined,
+		isRunning: () => running,
+		pendingMessageCount: () => pendingMessageCount,
 		subscribe: (listener) => {
 			listeners.add(listener);
 			return () => listeners.delete(listener);
 		},
 	};
+}
+
+function getMessageText(message: AgentMessage): string {
+	if (!("content" in message)) return "";
+	if (typeof message.content === "string") return message.content;
+	return message.content
+		.filter((content) => content.type === "text")
+		.map((content) => content.text ?? "")
+		.join("\n");
 }
 
 function isAgentLifecycleEvent(event: { type: string }): event is AgentEvent {

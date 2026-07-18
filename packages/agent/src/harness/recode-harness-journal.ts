@@ -7,7 +7,14 @@ import { AgentHarnessError, toError } from "./types.ts";
 
 export const RECODE_HARNESS_JOURNAL_CUSTOM_TYPE = "recode.agent_harness.journal";
 
-export type RecodeHarnessOperation = "prompt" | "retry" | "skill" | "prompt_template" | "compaction" | "branch_summary";
+export type RecodeHarnessOperation =
+	| "prompt"
+	| "message"
+	| "retry"
+	| "skill"
+	| "prompt_template"
+	| "compaction"
+	| "branch_summary";
 
 export type RecodeHarnessOperationOutcome = "success" | "error" | "aborted" | "cancelled";
 

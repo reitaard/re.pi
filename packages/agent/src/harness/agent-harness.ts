@@ -181,9 +181,9 @@ export class AgentHarness<
 	private resources: AgentHarnessResources<TSkill, TPromptTemplate>;
 	private tools = new Map<string, TTool>();
 	private activeToolNames: string[];
-	private steerQueue: UserMessage[] = [];
+	private steerQueue: AgentMessage[] = [];
 	private steeringQueueMode: QueueMode;
-	private followUpQueue: UserMessage[] = [];
+	private followUpQueue: AgentMessage[] = [];
 	private followUpQueueMode: QueueMode;
 	private nextTurnQueue: AgentMessage[] = [];
 	private handlers = new Map<string, Set<AgentHarnessHandler>>();
@@ -568,11 +568,11 @@ export class AgentHarness<
 
 	private async executeTurn(
 		turnState: AgentHarnessTurnState<TSkill, TPromptTemplate, TTool>,
-		text: string,
+		input: string | AgentMessage,
 		options?: { images?: ImageContent[] },
 	): Promise<AssistantMessage> {
 		let activeTurnState = turnState;
-		let messages: AgentMessage[] = [createUserMessage(text, options?.images)];
+		let messages: AgentMessage[] = [typeof input === "string" ? createUserMessage(input, options?.images) : input];
 		if (this.nextTurnQueue.length > 0) {
 			const queuedMessages = this.nextTurnQueue.splice(0);
 			try {
@@ -583,13 +583,16 @@ export class AgentHarness<
 			}
 			messages = [...queuedMessages, messages[0]!];
 		}
-		const beforeResult = await this.emitHook({
-			type: "before_agent_start",
-			prompt: text,
-			images: options?.images,
-			systemPrompt: turnState.systemPrompt,
-			resources: turnState.resources,
-		});
+		const beforeResult =
+			typeof input === "string"
+				? await this.emitHook({
+						type: "before_agent_start",
+						prompt: input,
+						images: options?.images,
+						systemPrompt: turnState.systemPrompt,
+						resources: turnState.resources,
+					})
+				: undefined;
 		if (beforeResult?.messages) messages = [...messages, ...beforeResult.messages];
 
 		const abortController = new AbortController();
@@ -697,6 +700,26 @@ export class AgentHarness<
 		}
 	}
 
+	/** Run an application-authored message through the same durable agent loop. */
+	async sendMessage(message: AgentMessage): Promise<AssistantMessage> {
+		if (this.phase !== "idle") throw new AgentHarnessError("busy", "AgentHarness is busy");
+		this.phase = "turn";
+		const finishRunPromise = this.startRunPromise();
+		try {
+			return await this.runJournaledOperation(
+				"message",
+				async () => await this.executeTurn(await this.createTurnState(), message),
+				(result) =>
+					result.stopReason === "error" ? "error" : result.stopReason === "aborted" ? "aborted" : "success",
+			);
+		} catch (error) {
+			this.phase = "idle";
+			throw normalizeHarnessError(error, "unknown");
+		} finally {
+			finishRunPromise();
+		}
+	}
+
 	/** Retry the latest failed assistant turn without duplicating its user prompt. */
 	async retry(options?: {
 		compact?: { instructions?: string; settings?: CompactionSettings };
@@ -782,19 +805,31 @@ export class AgentHarness<
 	}
 
 	async steer(text: string, options?: { images?: ImageContent[] }): Promise<void> {
+		await this.steerMessage(createUserMessage(text, options?.images));
+	}
+
+	async steerMessage(message: AgentMessage): Promise<void> {
 		if (this.phase === "idle") throw new AgentHarnessError("invalid_state", "Cannot steer while idle");
-		this.steerQueue.push(createUserMessage(text, options?.images));
+		this.steerQueue.push(message);
 		await this.emitQueueUpdate();
 	}
 
 	async followUp(text: string, options?: { images?: ImageContent[] }): Promise<void> {
+		await this.followUpMessage(createUserMessage(text, options?.images));
+	}
+
+	async followUpMessage(message: AgentMessage): Promise<void> {
 		if (this.phase === "idle") throw new AgentHarnessError("invalid_state", "Cannot follow up while idle");
-		this.followUpQueue.push(createUserMessage(text, options?.images));
+		this.followUpQueue.push(message);
 		await this.emitQueueUpdate();
 	}
 
 	async nextTurn(text: string, options?: { images?: ImageContent[] }): Promise<void> {
-		this.nextTurnQueue.push(createUserMessage(text, options?.images));
+		await this.nextTurnMessage(createUserMessage(text, options?.images));
+	}
+
+	async nextTurnMessage(message: AgentMessage): Promise<void> {
+		this.nextTurnQueue.push(message);
 		await this.emitQueueUpdate();
 	}
 

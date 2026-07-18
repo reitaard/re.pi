@@ -14,6 +14,7 @@ import { AgentSession } from "../src/core/agent-session.ts";
 import type { AgentSessionRuntime } from "../src/core/agent-session-runtime.ts";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { ModelRegistry } from "../src/core/model-registry.ts";
+import type { createAizenRuntime } from "../src/core/recode-aizen-runtime.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
 import { SettingsManager } from "../src/core/settings-manager.ts";
 import { runRpcMode } from "../src/modes/rpc/rpc-mode.ts";
@@ -220,7 +221,7 @@ describe("RPC prompt response semantics", () => {
 					command: "prompt",
 					success: false,
 					error: expect.stringContaining(
-						"No API key found for fake-provider.\n\nUse /login to log into a provider via OAuth or API key. See:",
+						"No API key found for fake-provider.\n\nUse /login for a hosted provider, or /open-provider for a custom/local OpenAI-compatible endpoint. See:",
 					),
 				});
 			});
@@ -282,6 +283,128 @@ describe("RPC prompt response semantics", () => {
 
 			await sleep(150);
 		} finally {
+			await cleanup();
+		}
+	});
+
+	it("routes accepted prompts, events, and abort through the opted-in Aizen runtime", async () => {
+		rpcIo.outputLines = [];
+		rpcIo.lineHandler = undefined;
+		const { runtimeHost, cleanup } = createRuntimeHost({ withAuth: true, responseDelayMs: 0 });
+		let eventListener: ((event: { type: string }) => void) | undefined;
+		let releasePrompt: (() => void) | undefined;
+		const promptGate = new Promise<void>((resolve) => {
+			releasePrompt = resolve;
+		});
+		const abort = vi.fn(async () => ({ status: "idle" as const }));
+		let running = false;
+		const prompt = vi.fn(async (_text: string, _options?: { images?: unknown[] }) => {
+			running = true;
+			eventListener?.({ type: "agent_start" });
+			await promptGate;
+			running = false;
+			eventListener?.({ type: "agent_settled" });
+			return createAssistantMessage("Aizen RPC ready");
+		});
+		vi.spyOn(runtimeHost.session.extensionRunner, "emitInput").mockResolvedValue({
+			action: "transform",
+			text: "Hello from transform",
+		});
+		const createRuntime = vi.fn(() => ({
+			harness: {
+				abort,
+				followUp: vi.fn(async () => {}),
+				getFollowUpMode: () => "one-at-a-time" as const,
+				getSteeringMode: () => "one-at-a-time" as const,
+				getThinkingLevel: () => "off" as const,
+				setFollowUpMode: vi.fn(async () => {}),
+				setSteeringMode: vi.fn(async () => {}),
+				setThinkingLevel: vi.fn(async () => {}),
+				steer: vi.fn(async () => {}),
+				subscribe: vi.fn(() => () => {}),
+			},
+			profile: {
+				model: runtimeHost.session.model,
+				resources: {
+					skills: [
+						{
+							name: "rpc-check",
+							description: "RPC skill expansion",
+							content: "Follow the RPC skill instructions.",
+							filePath: "/skills/rpc-check/SKILL.md",
+						},
+					],
+				},
+			},
+			session: {},
+			prompt,
+			compact: vi.fn(),
+			abortRetry: vi.fn(),
+			isCompacting: () => true,
+			isRunning: () => running,
+			pendingMessageCount: () => 2,
+			subscribe: vi.fn((listener: (event: { type: string }) => void) => {
+				eventListener = listener;
+				return () => {
+					eventListener = undefined;
+				};
+			}),
+		}));
+
+		void runRpcMode(
+			runtimeHost,
+			{ aizenRuntime: true },
+			{ createAizenRuntime: createRuntime as unknown as typeof createAizenRuntime },
+		);
+		await vi.waitFor(() => expect(rpcIo.lineHandler).toBeDefined());
+		const lineHandler = rpcIo.lineHandler as unknown as (line: string) => void;
+
+		try {
+			lineHandler(JSON.stringify({ id: "aizen-prompt", type: "prompt", message: "Hello" }));
+			await vi.waitFor(() => {
+				expect(getPromptResponses(rpcIo.outputLines, "aizen-prompt")).toContainEqual(
+					expect.objectContaining({ success: true }),
+				);
+			});
+			expect(prompt).toHaveBeenCalledWith("Hello from transform", { images: undefined });
+
+			lineHandler(JSON.stringify({ id: "aizen-state", type: "get_state" }));
+			await vi.waitFor(() => {
+				expect(parseOutputLines(rpcIo.outputLines)).toContainEqual(
+					expect.objectContaining({
+						id: "aizen-state",
+						success: true,
+						data: expect.objectContaining({ isCompacting: true, pendingMessageCount: 2 }),
+					}),
+				);
+			});
+
+			lineHandler(JSON.stringify({ id: "aizen-switch", type: "switch_session", sessionPath: "other.jsonl" }));
+			await vi.waitFor(() => {
+				expect(parseOutputLines(rpcIo.outputLines)).toContainEqual(
+					expect.objectContaining({
+						id: "aizen-switch",
+						success: false,
+						error: expect.stringContaining("abort the active run first"),
+					}),
+				);
+			});
+			expect(runtimeHost.switchSession).not.toHaveBeenCalled();
+
+			lineHandler(JSON.stringify({ id: "aizen-abort", type: "abort" }));
+			await vi.waitFor(() => expect(abort).toHaveBeenCalledOnce());
+			releasePrompt?.();
+			await vi.waitFor(() => {
+				expect(parseOutputLines(rpcIo.outputLines)).toContainEqual({ type: "agent_settled" });
+			});
+
+			vi.mocked(runtimeHost.session.extensionRunner.emitInput).mockResolvedValue({ action: "continue" });
+			lineHandler(JSON.stringify({ id: "aizen-skill", type: "prompt", message: "/skill:rpc-check extra" }));
+			await vi.waitFor(() => expect(prompt).toHaveBeenCalledTimes(2));
+			expect(prompt.mock.calls[1]?.[0]).toContain("Follow the RPC skill instructions.");
+			expect(prompt.mock.calls[1]?.[0]).toContain("extra");
+		} finally {
+			releasePrompt?.();
 			await cleanup();
 		}
 	});

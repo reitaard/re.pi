@@ -12,7 +12,9 @@
  */
 
 import * as crypto from "node:crypto";
+import { formatPromptTemplateInvocation, formatSkillInvocation, parseCommandArgs } from "@reitaard/repi-agent-core";
 import type { AgentSessionRuntime } from "../../core/agent-session-runtime.ts";
+import { formatNoApiKeyFoundMessage } from "../../core/auth-guidance.ts";
 import type {
 	ExtensionUIContext,
 	ExtensionUIDialogOptions,
@@ -25,6 +27,7 @@ import {
 	waitForRawStdoutBackpressure,
 	writeRawStdout,
 } from "../../core/output-guard.ts";
+import { type AizenRuntime, createAizenRuntime } from "../../core/recode-aizen-runtime.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { type Theme, theme } from "../interactive/theme/theme.ts";
 import { attachJsonlLineReader, serializeJsonLine } from "./jsonl.ts";
@@ -50,11 +53,46 @@ export type {
  * Run in RPC mode.
  * Listens for JSON commands on stdin, outputs events and responses on stdout.
  */
-export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<never> {
+export interface RpcModeOptions {
+	aizenRuntime?: boolean;
+}
+
+interface RpcModeDependencies {
+	createAizenRuntime: typeof createAizenRuntime;
+}
+
+const defaultDependencies: RpcModeDependencies = { createAizenRuntime };
+
+function expandAizenCommand(text: string, runtime: AizenRuntime): string {
+	if (!text.startsWith("/")) return text;
+	const spaceIndex = text.indexOf(" ");
+	const name = spaceIndex === -1 ? text.slice(1) : text.slice(1, spaceIndex);
+	const args = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1).trim();
+	if (name.startsWith("skill:")) {
+		const skill = runtime.profile.resources.skills?.find((candidate) => candidate.name === name.slice(6));
+		return skill ? formatSkillInvocation(skill, args || undefined) : text;
+	}
+	const template = runtime.profile.resources.promptTemplates?.find((candidate) => candidate.name === name);
+	return template ? formatPromptTemplateInvocation(template, parseCommandArgs(args)) : text;
+}
+
+export async function runRpcMode(
+	runtimeHost: AgentSessionRuntime,
+	options: RpcModeOptions = {},
+	dependencies: RpcModeDependencies = defaultDependencies,
+): Promise<never> {
 	takeOverStdout();
 	let session = runtimeHost.session;
 	let unsubscribe: (() => void) | undefined;
+	let unsubscribeAizen: (() => void) | undefined;
 	let unsubscribeBackpressure: (() => void) | undefined;
+	let aizen: AizenRuntime | undefined;
+	let aizenRebuildPending = false;
+	const assertAizenSessionIdle = (): void => {
+		if (aizen?.isRunning()) {
+			throw new Error("Cannot replace the session while Aizen is processing; abort the active run first");
+		}
+	};
 
 	const output = (obj: RpcResponse | RpcExtensionUIRequest | object) => {
 		writeRawStdout(serializeJsonLine(obj));
@@ -313,19 +351,52 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 		await rebindSession();
 	});
 
+	const bindAizenRuntime = (): void => {
+		unsubscribeAizen?.();
+		unsubscribeBackpressure?.();
+		aizen = dependencies.createAizenRuntime({ agentSession: session, cwd: session.sessionManager.getCwd() });
+		unsubscribeAizen = aizen.subscribe((event) => {
+			output(event);
+			if (event.type === "agent_settled") {
+				if (aizenRebuildPending) void rebuildAizenRuntime();
+				void checkShutdownRequested();
+			}
+		});
+		unsubscribeBackpressure = aizen.harness.subscribe(async () => {
+			await waitForRawStdoutBackpressure();
+		});
+	};
+
 	const rebindSession = async (): Promise<void> => {
 		session = runtimeHost.session;
+		unsubscribe?.();
+		unsubscribeAizen?.();
+		unsubscribeBackpressure?.();
+		if (options.aizenRuntime) {
+			bindAizenRuntime();
+		} else {
+			aizen = undefined;
+			unsubscribeAizen = undefined;
+			unsubscribeBackpressure = session.agent.subscribe(async () => {
+				await waitForRawStdoutBackpressure();
+			});
+		}
 		await session.bindExtensions({
 			uiContext: createExtensionUIContext(),
 			mode: "rpc",
 			commandContextActions: {
 				waitForIdle: () => session.waitForIdle(),
-				newSession: async (options) => runtimeHost.newSession(options),
+				newSession: async (options) => {
+					assertAizenSessionIdle();
+					return runtimeHost.newSession(options);
+				},
 				fork: async (entryId, forkOptions) => {
+					assertAizenSessionIdle();
 					const result = await runtimeHost.fork(entryId, forkOptions);
 					return { cancelled: result.cancelled };
 				},
 				navigateTree: async (targetId, options) => {
+					assertAizenSessionIdle();
 					const result = await session.navigateTree(targetId, {
 						summarize: options?.summarize,
 						customInstructions: options?.customInstructions,
@@ -335,9 +406,11 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 					return { cancelled: result.cancelled };
 				},
 				switchSession: async (sessionPath, options) => {
+					assertAizenSessionIdle();
 					return runtimeHost.switchSession(sessionPath, options);
 				},
 				reload: async () => {
+					assertAizenSessionIdle();
 					await session.reload();
 				},
 			},
@@ -347,19 +420,62 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			onError: (err) => {
 				output({ type: "extension_error", extensionPath: err.extensionPath, event: err.event, error: err.error });
 			},
+			runtimeActions: options.aizenRuntime
+				? {
+						sendMessage: (message, sendOptions) => {
+							const active = aizen;
+							if (!active) return;
+							void active.sendCustomMessage(message, sendOptions).catch((cause) =>
+								output({
+									type: "extension_error",
+									extensionPath: "<runtime>",
+									event: "send_message",
+									error: cause instanceof Error ? cause.message : String(cause),
+								}),
+							);
+						},
+						sendUserMessage: (content, sendOptions) => {
+							const active = aizen;
+							if (!active) return;
+							void active.sendUserMessage(content, sendOptions).catch((cause) =>
+								output({
+									type: "extension_error",
+									extensionPath: "<runtime>",
+									event: "send_user_message",
+									error: cause instanceof Error ? cause.message : String(cause),
+								}),
+							);
+						},
+						appendEntry: (customType, data, entryOptions) => {
+							void aizen?.appendEntry(customType, data, entryOptions).catch((cause) =>
+								output({
+									type: "extension_error",
+									extensionPath: "<runtime>",
+									event: "append_entry",
+									error: cause instanceof Error ? cause.message : String(cause),
+								}),
+							);
+						},
+					}
+				: undefined,
 		});
 
-		unsubscribe?.();
-		unsubscribeBackpressure?.();
 		unsubscribe = session.subscribe((event) => {
 			output(event);
 			if (event.type === "agent_settled") {
 				void checkShutdownRequested();
 			}
 		});
-		unsubscribeBackpressure = session.agent.subscribe(async () => {
-			await waitForRawStdoutBackpressure();
-		});
+	};
+
+	const rebuildAizenRuntime = async (): Promise<void> => {
+		if (!options.aizenRuntime) return;
+		if (aizen?.isRunning()) {
+			aizenRebuildPending = true;
+			return;
+		}
+		aizenRebuildPending = false;
+		bindAizenRuntime();
 	};
 
 	const registerSignalHandlers = (): void => {
@@ -391,6 +507,50 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			// =================================================================
 
 			case "prompt": {
+				if (aizen) {
+					if (command.message.startsWith("/")) {
+						const commandName = command.message.slice(1).split(/\s/, 1)[0] ?? "";
+						if (session.extensionRunner.getCommand(commandName)) {
+							await session.prompt(command.message, { source: "rpc" });
+							return success(id, "prompt");
+						}
+					}
+					const inputResult = await session.extensionRunner.emitInput(
+						command.message,
+						command.images,
+						"rpc",
+						command.streamingBehavior,
+					);
+					if (inputResult.action === "handled") return success(id, "prompt");
+					let message = inputResult.action === "transform" ? inputResult.text : command.message;
+					const images =
+						inputResult.action === "transform" ? (inputResult.images ?? command.images) : command.images;
+					message = expandAizenCommand(message, aizen);
+					if (aizen.isRunning()) {
+						if (!command.streamingBehavior) {
+							return error(id, "prompt", "Aizen is already processing; choose steer or followUp");
+						}
+						if (command.streamingBehavior === "followUp") {
+							await aizen.harness.followUp(message, { images });
+						} else {
+							await aizen.harness.steer(message, { images });
+						}
+						return success(id, "prompt");
+					}
+
+					if (!session.modelRegistry.hasConfiguredAuth(aizen.profile.model)) {
+						return error(id, "prompt", formatNoApiKeyFoundMessage(aizen.profile.model.provider));
+					}
+					const activeAizen = aizen;
+					void activeAizen
+						.prompt(message, { images })
+						.catch((promptError: unknown) => {
+							console.error(promptError instanceof Error ? promptError.message : String(promptError));
+						})
+						.finally(() => void checkShutdownRequested());
+					return success(id, "prompt");
+				}
+
 				// Start prompt handling immediately, but emit the authoritative response only after
 				// prompt preflight succeeds. Queued and immediately handled prompts also count as success.
 				let preflightSucceeded = false;
@@ -415,26 +575,39 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			}
 
 			case "steer": {
+				if (aizen) {
+					await aizen.harness.steer(expandAizenCommand(command.message, aizen), { images: command.images });
+					return success(id, "steer");
+				}
 				await session.steer(command.message, command.images);
 				return success(id, "steer");
 			}
 
 			case "follow_up": {
+				if (aizen) {
+					await aizen.harness.followUp(expandAizenCommand(command.message, aizen), {
+						images: command.images,
+					});
+					return success(id, "follow_up");
+				}
 				await session.followUp(command.message, command.images);
 				return success(id, "follow_up");
 			}
 
 			case "abort": {
+				if (aizen) {
+					aizen.abortRetry();
+					await aizen.harness.abort();
+					return success(id, "abort");
+				}
 				await session.abort();
 				return success(id, "abort");
 			}
 
 			case "new_session": {
+				assertAizenSessionIdle();
 				const options = command.parentSession ? { parentSession: command.parentSession } : undefined;
 				const result = await runtimeHost.newSession(options);
-				if (!result.cancelled) {
-					await rebindSession();
-				}
 				return success(id, "new_session", result);
 			}
 
@@ -444,18 +617,20 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 
 			case "get_state": {
 				const state: RpcSessionState = {
-					model: session.model,
-					thinkingLevel: session.thinkingLevel,
-					isStreaming: session.isStreaming,
-					isCompacting: session.isCompacting,
-					steeringMode: session.steeringMode,
-					followUpMode: session.followUpMode,
+					model: aizen?.profile.model ?? session.model,
+					thinkingLevel: aizen?.harness.getThinkingLevel() ?? session.thinkingLevel,
+					isStreaming: aizen ? aizen.isRunning() : session.isStreaming,
+					isCompacting: aizen?.isCompacting() ?? session.isCompacting,
+					steeringMode: aizen?.harness.getSteeringMode() ?? session.steeringMode,
+					followUpMode: aizen?.harness.getFollowUpMode() ?? session.followUpMode,
 					sessionFile: session.sessionFile,
 					sessionId: session.sessionId,
 					sessionName: session.sessionName,
 					autoCompactionEnabled: session.autoCompactionEnabled,
-					messageCount: session.messages.length,
-					pendingMessageCount: session.pendingMessageCount,
+					messageCount: aizen
+						? session.sessionManager.buildSessionContext().messages.length
+						: session.messages.length,
+					pendingMessageCount: aizen?.pendingMessageCount() ?? session.pendingMessageCount,
 				};
 				return success(id, "get_state", state);
 			}
@@ -471,6 +646,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 					return error(id, "set_model", `Model not found: ${command.provider}/${command.modelId}`);
 				}
 				await session.setModel(model);
+				await rebuildAizenRuntime();
 				return success(id, "set_model", model);
 			}
 
@@ -479,6 +655,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 				if (!result) {
 					return success(id, "cycle_model", null);
 				}
+				await rebuildAizenRuntime();
 				return success(id, "cycle_model", result);
 			}
 
@@ -493,6 +670,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 
 			case "set_thinking_level": {
 				session.setThinkingLevel(command.level);
+				await aizen?.harness.setThinkingLevel(command.level);
 				return success(id, "set_thinking_level");
 			}
 
@@ -501,6 +679,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 				if (!level) {
 					return success(id, "cycle_thinking_level", null);
 				}
+				await aizen?.harness.setThinkingLevel(level);
 				return success(id, "cycle_thinking_level", { level });
 			}
 
@@ -510,11 +689,13 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 
 			case "set_steering_mode": {
 				session.setSteeringMode(command.mode);
+				await aizen?.harness.setSteeringMode(command.mode);
 				return success(id, "set_steering_mode");
 			}
 
 			case "set_follow_up_mode": {
 				session.setFollowUpMode(command.mode);
+				await aizen?.harness.setFollowUpMode(command.mode);
 				return success(id, "set_follow_up_mode");
 			}
 
@@ -523,12 +704,15 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			// =================================================================
 
 			case "compact": {
-				const result = await session.compact(command.customInstructions);
+				const result = aizen
+					? await aizen.compact(command.customInstructions)
+					: await session.compact(command.customInstructions);
 				return success(id, "compact", result);
 			}
 
 			case "set_auto_compaction": {
 				session.setAutoCompactionEnabled(command.enabled);
+				await rebuildAizenRuntime();
 				return success(id, "set_auto_compaction");
 			}
 
@@ -538,11 +722,13 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 
 			case "set_auto_retry": {
 				session.setAutoRetryEnabled(command.enabled);
+				await rebuildAizenRuntime();
 				return success(id, "set_auto_retry");
 			}
 
 			case "abort_retry": {
-				session.abortRetry();
+				if (aizen) aizen.abortRetry();
+				else session.abortRetry();
 				return success(id, "abort_retry");
 			}
 
@@ -577,30 +763,24 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			}
 
 			case "switch_session": {
+				assertAizenSessionIdle();
 				const result = await runtimeHost.switchSession(command.sessionPath);
-				if (!result.cancelled) {
-					await rebindSession();
-				}
 				return success(id, "switch_session", result);
 			}
 
 			case "fork": {
+				assertAizenSessionIdle();
 				const result = await runtimeHost.fork(command.entryId);
-				if (!result.cancelled) {
-					await rebindSession();
-				}
 				return success(id, "fork", { text: result.selectedText, cancelled: result.cancelled });
 			}
 
 			case "clone": {
+				assertAizenSessionIdle();
 				const leafId = session.sessionManager.getLeafId();
 				if (!leafId) {
 					return error(id, "clone", "Cannot clone session: no current entry selected");
 				}
 				const result = await runtimeHost.fork(leafId, { position: "at" });
-				if (!result.cancelled) {
-					await rebindSession();
-				}
 				return success(id, "clone", { cancelled: result.cancelled });
 			}
 
@@ -628,7 +808,14 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			}
 
 			case "get_last_assistant_text": {
-				const text = session.getLastAssistantText();
+				const text = aizen
+					? ([...session.sessionManager.buildSessionContext().messages]
+							.reverse()
+							.find((message) => message.role === "assistant")
+							?.content.filter((content) => content.type === "text")
+							.map((content) => content.text)
+							.join("\n") ?? null)
+					: session.getLastAssistantText();
 				return success(id, "get_last_assistant_text", { text });
 			}
 
@@ -646,7 +833,9 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			// =================================================================
 
 			case "get_messages": {
-				return success(id, "get_messages", { messages: session.messages });
+				return success(id, "get_messages", {
+					messages: aizen ? session.sessionManager.buildSessionContext().messages : session.messages,
+				});
 			}
 
 			// =================================================================
@@ -708,7 +897,10 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			cleanup();
 		}
 		unsubscribe?.();
+		unsubscribeAizen?.();
 		unsubscribeBackpressure?.();
+		aizen?.abortRetry();
+		await aizen?.harness.abort();
 		await runtimeHost.dispose();
 		detachInput();
 		process.stdin.pause();

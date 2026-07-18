@@ -82,6 +82,7 @@ import { exportSessionToHtml, type ToolHtmlRenderer } from "./export-html/index.
 import { createToolHtmlRenderer } from "./export-html/tool-renderer.ts";
 import {
 	type ContextUsage,
+	type ExtensionActions,
 	type ExtensionCommandContextActions,
 	type ExtensionErrorListener,
 	type ExtensionMode,
@@ -224,6 +225,8 @@ export interface ExtensionBindings {
 	abortHandler?: () => void;
 	shutdownHandler?: ShutdownHandler;
 	onError?: ExtensionErrorListener;
+	/** Optional runtime-owned message/persistence actions (for Aizen/RPC). */
+	runtimeActions?: Partial<Pick<ExtensionActions, "sendMessage" | "sendUserMessage" | "appendEntry">>;
 }
 
 /** Options for AgentSession.prompt() */
@@ -378,6 +381,7 @@ export class AgentSession {
 	private _extensionShutdownHandler?: ShutdownHandler;
 	private _extensionErrorListener?: ExtensionErrorListener;
 	private _extensionErrorUnsubscriber?: () => void;
+	private _extensionRuntimeActions?: ExtensionBindings["runtimeActions"];
 
 	// Model registry for API key resolution
 	private _modelRegistry: ModelRegistry;
@@ -2310,6 +2314,7 @@ export class AgentSession {
 	}
 
 	async bindExtensions(bindings: ExtensionBindings): Promise<void> {
+		this._extensionRuntimeActions = bindings.runtimeActions;
 		if (bindings.uiContext !== undefined) {
 			this._extensionUIContext = bindings.uiContext;
 		}
@@ -2440,6 +2445,10 @@ export class AgentSession {
 		runner.bindCore(
 			{
 				sendMessage: (message, options) => {
+					if (this._extensionRuntimeActions?.sendMessage) {
+						this._extensionRuntimeActions.sendMessage(message, options);
+						return;
+					}
 					this.sendCustomMessage(message, options).catch((err) => {
 						runner.emitError({
 							extensionPath: "<runtime>",
@@ -2449,6 +2458,10 @@ export class AgentSession {
 					});
 				},
 				sendUserMessage: (content, options) => {
+					if (this._extensionRuntimeActions?.sendUserMessage) {
+						this._extensionRuntimeActions.sendUserMessage(content, options);
+						return;
+					}
 					this.sendUserMessage(content, options).catch((err) => {
 						runner.emitError({
 							extensionPath: "<runtime>",
@@ -2458,6 +2471,10 @@ export class AgentSession {
 					});
 				},
 				appendEntry: (customType, data, options) => {
+					if (this._extensionRuntimeActions?.appendEntry) {
+						this._extensionRuntimeActions.appendEntry(customType, data, options);
+						return;
+					}
 					const entryId = this.sessionManager.appendCustomEntry(customType, data);
 					if (options?.persistImmediately) this.sessionManager.flush();
 					const entry = this.sessionManager.getEntry(entryId);

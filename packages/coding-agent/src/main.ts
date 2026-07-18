@@ -537,8 +537,8 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	let appMode = resolveAppMode(parsed, process.stdin.isTTY, process.stdout.isTTY);
-	if (parsed.aizenRuntime && appMode !== "print" && appMode !== "json") {
-		console.error(chalk.red("Error: --aizen-runtime currently requires print (-p) or JSON mode"));
+	if (parsed.aizenRuntime && appMode === "interactive") {
+		console.error(chalk.red("Error: --aizen-runtime currently requires print, JSON, or RPC mode"));
 		process.exit(1);
 	}
 	const shouldTakeOverStdout = appMode !== "interactive" && !isPlainRuntimeMetadataCommand(parsed);
@@ -814,7 +814,7 @@ export async function main(args: string[], options?: MainOptions) {
 
 	if (appMode === "rpc") {
 		printTimings();
-		await runRpcMode(runtime);
+		await runRpcMode(runtime, { aizenRuntime: parsed.aizenRuntime });
 	} else if (appMode === "interactive") {
 		const interactiveMode = new InteractiveMode(runtime, {
 			migratedProviders,
