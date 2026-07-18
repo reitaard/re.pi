@@ -16,11 +16,16 @@ function workerReferenceSchema(directory: WorkerDirectory) {
 	});
 }
 
+function failurePolicy(turn: WorkerConversationTurnResult): string {
+	if (turn.result.status === "completed") return "";
+	return "\nAUTOMATIC_RETRY_BLOCKED: Report this worker failure and its conversationId. Do not call worker_start or worker_message again for the same task until a new user message explicitly asks to retry.";
+}
+
 function formatTurn(turn: WorkerConversationTurnResult): string {
 	const { conversation, result } = turn;
 	const duration = (result.durationMs / 1_000).toFixed(result.durationMs < 10_000 ? 1 : 0);
 	const header = `[worker ${result.workerId}/${result.workerName} | run ${result.runId.slice(0, 8)} | ${result.status} | ${duration}s]`;
-	return `conversationId: ${conversation.conversationId}\n${header}\n${result.output || result.error || `[${result.status}]`}`;
+	return `conversationId: ${conversation.conversationId}\n${header}\n${result.output || result.error || `[${result.status}]`}${failurePolicy(turn)}`;
 }
 
 function formatStatus(snapshot: WorkerConversationSnapshot): string {
@@ -73,12 +78,16 @@ export function createWorkerControlTools(directory: WorkerDirectory): AgentTool<
 		name: "worker_start",
 		label: "worker_start",
 		description:
-			"Open a named worker conversation and send its first message. The result includes a full conversationId that must be reused verbatim with worker_message/status/cancel/close. The conversation preserves bounded dialogue context and may run in parallel with other worker_start calls. When the user explicitly chose this worker, report worker failure instead of silently doing the assigned task yourself unless fallback was requested.",
+			"Open a named worker conversation and send its first message. The result includes a full conversationId that must be reused verbatim with worker_message/status/cancel/close. The conversation preserves bounded dialogue context and may run in parallel with other worker_start calls. Never automatically retry a failed worker or replace it with parent work; wait for a new user message explicitly requesting retry or fallback.",
 		parameters: startSchema,
 		executionMode: "parallel",
 		async execute(_toolCallId, input, signal) {
 			const turn = await directory.startConversation(input.worker, input.message, input.context, signal);
-			return { content: [{ type: "text", text: formatTurn(turn) }], details: turn };
+			return {
+				content: [{ type: "text", text: formatTurn(turn) }],
+				details: turn,
+				terminate: turn.result.status !== "completed",
+			};
 		},
 	};
 
@@ -86,12 +95,16 @@ export function createWorkerControlTools(directory: WorkerDirectory): AgentTool<
 		name: "worker_message",
 		label: "worker_message",
 		description:
-			"Continue an existing worker conversation using the full conversationId returned by worker_start. The same named personality receives the previous caller/worker dialogue as bounded context. Report worker failure instead of replacing that worker with parent work unless fallback was requested.",
+			"Continue an existing worker conversation using the full conversationId returned by worker_start. The same named personality receives the previous caller/worker dialogue as bounded context. Never automatically retry a failed turn or replace it with parent work; wait for a new user message explicitly requesting retry or fallback.",
 		parameters: messageSchema,
 		executionMode: "parallel",
 		async execute(_toolCallId, input, signal) {
 			const turn = await directory.messageConversation(input.conversationId, input.message, input.context, signal);
-			return { content: [{ type: "text", text: formatTurn(turn) }], details: turn };
+			return {
+				content: [{ type: "text", text: formatTurn(turn) }],
+				details: turn,
+				terminate: turn.result.status !== "completed",
+			};
 		},
 	};
 
@@ -99,7 +112,7 @@ export function createWorkerControlTools(directory: WorkerDirectory): AgentTool<
 		name: "worker_status",
 		label: "worker_status",
 		description:
-			"Show live or recent worker conversation state, including each full conversationId, worker identity, run id, status, elapsed time, turn count, current/last tool, and bounded last result. Hidden reasoning and child tool transcripts are never exposed.",
+			"Show live or recent worker conversation state, including each full conversationId, worker identity, run id, status, elapsed time, turn count, current/last tool, and bounded last result. Hidden reasoning and child tool transcripts are never exposed. Status is observational and must not trigger an automatic retry.",
 		parameters: statusSchema,
 		executionMode: "parallel",
 		async execute(_toolCallId, input) {
