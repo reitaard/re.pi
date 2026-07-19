@@ -1,16 +1,16 @@
 const PI_PACKAGE_PREFIXES = ["@earendil-works", "@mariozechner"] as const;
 
-const ROOT_ALIASES = new Map<string, string>([
+const PACKAGE_ALIASES = new Map<string, string>([
+	// The pi-ai root intentionally uses the compat entrypoint because third-party
+	// extensions still rely on the historical global stream()/complete() API.
 	["pi-ai", "@reitaard/repi-ai/compat"],
+	["pi-ai/compat", "@reitaard/repi-ai/compat"],
+	["pi-ai/oauth", "@reitaard/repi-ai/oauth"],
 	["pi-agent-core", "@reitaard/repi-agent-core"],
+	["pi-agent-core/node", "@reitaard/repi-agent-core/node"],
 	["pi-coding-agent", "@reitaard/repi-coding-agent"],
-	["pi-tui", "@reitaard/repi-tui"],
-]);
-
-const TARGET_PREFIXES = new Map<string, string>([
-	["pi-ai", "@reitaard/repi-ai"],
-	["pi-agent-core", "@reitaard/repi-agent-core"],
-	["pi-coding-agent", "@reitaard/repi-coding-agent"],
+	["pi-coding-agent/workers", "@reitaard/repi-coding-agent/workers"],
+	["pi-coding-agent/rpc-entry", "@reitaard/repi-coding-agent/rpc-entry"],
 	["pi-tui", "@reitaard/repi-tui"],
 ]);
 
@@ -20,27 +20,12 @@ type CompatibilityGlobal = typeof globalThis & {
 	[INSTALL_MARKER]?: boolean;
 };
 
-/**
- * Map upstream Pi package scopes onto the Recode runtime.
- *
- * The pi-ai root intentionally maps to the compat entrypoint because third-party
- * extensions still use the historical global stream()/complete() API. Explicit
- * subpaths preserve their suffix, so pi-ai/oauth and future public subpaths route
- * to the equivalent Recode export.
- */
+/** Map supported upstream Pi package specifiers onto Recode's public runtime. */
 export function mapPiPackageSpecifier(specifier: string): string {
 	for (const scope of PI_PACKAGE_PREFIXES) {
 		const prefix = `${scope}/`;
 		if (!specifier.startsWith(prefix)) continue;
-
-		const remainder = specifier.slice(prefix.length);
-		const slashIndex = remainder.indexOf("/");
-		const packageName = slashIndex === -1 ? remainder : remainder.slice(0, slashIndex);
-		const subpath = slashIndex === -1 ? "" : remainder.slice(slashIndex + 1);
-		const targetRoot = TARGET_PREFIXES.get(packageName);
-		if (!targetRoot) return specifier;
-		if (!subpath) return ROOT_ALIASES.get(packageName) ?? targetRoot;
-		return `${targetRoot}/${subpath}`;
+		return PACKAGE_ALIASES.get(specifier.slice(prefix.length)) ?? specifier;
 	}
 	return specifier;
 }
@@ -49,6 +34,10 @@ export function mapPiPackageSpecifier(specifier: string): string {
  * Install synchronous Node module-resolution hooks before Recode imports its
  * application graph. The hooks affect ESM import(), require(), and createRequire(),
  * which covers jiti-loaded TypeScript extensions.
+ *
+ * Targets are resolved from this host module before hooks are registered. Returning
+ * those absolute URLs is essential: resolving a renamed bare package from an
+ * extension would otherwise search ~/.pi/agent/npm instead of Recode's runtime.
  *
  * Bun uses the extension loader's virtual-module path instead and does not install
  * Node hooks here.
@@ -61,10 +50,19 @@ export async function installPiPackageCompatibilityHooks(): Promise<void> {
 	compatibilityGlobal[INSTALL_MARKER] = true;
 
 	try {
+		const resolvedTargets = new Map<string, string>();
+		for (const target of new Set(PACKAGE_ALIASES.values())) {
+			resolvedTargets.set(target, import.meta.resolve(target));
+		}
+
 		const { registerHooks } = await import("node:module");
 		registerHooks({
 			resolve(specifier, context, nextResolve) {
-				return nextResolve(mapPiPackageSpecifier(specifier), context);
+				const mapped = mapPiPackageSpecifier(specifier);
+				if (mapped === specifier) return nextResolve(specifier, context);
+				const url = resolvedTargets.get(mapped);
+				if (!url) return nextResolve(mapped, context);
+				return { url, shortCircuit: true };
 			},
 		});
 	} catch (error) {
