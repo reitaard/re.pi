@@ -11,6 +11,7 @@ import { RecodeMemoryRuntime } from "./core/recode-memory/recode-memory-runtime.
 import { main } from "./main.ts";
 import { recodeMemory } from "./recode-memory.ts";
 import { recodeOpenProvider } from "./recode-open-provider.ts";
+import { runRecodeTelegramGateway } from "./recode-telegram-gateway.ts";
 
 process.title = APP_NAME;
 process.env.PI_CODING_AGENT = "true";
@@ -22,9 +23,18 @@ configureHttpDispatcher();
 
 const memoryRuntime = new RecodeMemoryRuntime();
 
-void main(process.argv.slice(2), {
-	extensionFactories: [
-		{ name: "recode-open-provider", factory: recodeOpenProvider },
-		{ name: "recode-memory", factory: (pi) => recodeMemory(pi, memoryRuntime) },
-	],
-}).finally(() => memoryRuntime.close());
+const args = process.argv.slice(2);
+
+void (
+	args[0] === "telegram"
+		? runRecodeTelegramGateway().catch((error: unknown) => {
+				console.error(error instanceof Error ? `Error: ${error.message}` : `Error: ${String(error)}`);
+				process.exitCode = 1;
+			})
+		: main(args, {
+				extensionFactories: [
+					{ name: "recode-open-provider", factory: recodeOpenProvider },
+					{ name: "recode-memory", factory: (pi) => recodeMemory(pi, memoryRuntime) },
+				],
+			})
+).finally(() => memoryRuntime.close());

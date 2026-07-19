@@ -4,6 +4,7 @@
 
 ### Added
 
+- Add a Recode-owned Telegram gateway with private-user authorization, stable Aizen sessions, queued turns, long polling, streaming previews, and basic session controls.
 - Report named-worker harness setup time separately from total model-backed run time.
 - Add generic named-worker aliases, a `/worker` roster/settings/direct-chat page, and personality-aware handoff presentation that keeps technical ids out of the normal TUI.
 - Add `/levi` and `/mayuri` direct-chat shortcuts and preserve argument hints for extension commands in slash autocomplete.
