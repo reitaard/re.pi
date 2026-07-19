@@ -145,8 +145,10 @@ export function parseArgs(args: string[]): Args {
 				result.messages.push(next);
 				i++;
 			}
-		} else if (arg === "--aizen-runtime") {
+		} else if (arg === "--aizen") {
 			result.aizenRuntime = true;
+		} else if (arg === "--legacy") {
+			result.aizenRuntime = false;
 		} else if (arg === "--export" && i + 1 < args.length) {
 			result.export = args[++i];
 		} else if ((arg === "--extension" || arg === "-e") && i + 1 < args.length) {
@@ -245,7 +247,8 @@ ${chalk.bold("Options:")}
   --append-system-prompt <text>  Append text or file contents to the system prompt (can be used multiple times)
   --mode <mode>                  Output mode: text (default), json, or rpc
   --print, -p                    Non-interactive mode: process prompt and exit
-  --aizen-runtime               Experimental: route interactive, print, JSON, or RPC through Aizen's AgentRuntime
+  --aizen                       Explicitly use Aizen (already the default)
+  --legacy                      Temporarily use the legacy path
   --continue, -c                 Continue previous session
   --resume, -r                   Select a session to resume
   --session <path|id>            Use specific session file or partial UUID

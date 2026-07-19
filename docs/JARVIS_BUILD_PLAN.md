@@ -9,7 +9,7 @@ extracting new service interfaces.
 
 ## Current decisions
 
-- RePi is a personal, single-user, local-first assistant.
+- Recode is a personal, single-user, local-first assistant.
 - The main agent may have full host authority initially.
 - Authentication is still required before any remote or channel exposure.
 - Sandboxing is deferred until named agents, untrusted channels, or delegated
@@ -30,21 +30,21 @@ Status: complete
   symbolic links.
 - Normalize shell working-directory paths without depending on one shell's
   display format.
-- Keep local binary builds and the `repi` launcher reproducible.
+- Keep local binary builds and the `recode` launcher reproducible.
 
 Exit criteria:
 
 - The focused harness suite passes on development checkouts, except for clearly
   documented platform capability skips.
-- `repi --version`, `repi --help`, one-shot mode, and interactive startup work
+- `recode --version`, `recode --help`, one-shot mode, and interactive startup work
   outside the repository.
 
 ## Phase 1: Put the coding agent on AgentHarness
 
-Status: in progress; responsibility map, shared model/auth bridge, ordered JSONL
-storage, opt-in text/JSON one-shot resource, lifecycle, retry, compaction, and
+Status: default-on checkpoint; responsibility map, shared model/auth bridge,
+ordered JSONL storage, text/JSON/RPC/interactive lifecycle, retry, compaction,
 settlement parity, and the first structured operation/turn/tool recovery journal
-are complete
+are complete. The legacy runtime remains only as a temporary rollback path.
 
 1. Map current `AgentSession` responsibilities to harness, application service,
    or TUI responsibility.

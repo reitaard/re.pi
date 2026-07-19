@@ -746,6 +746,7 @@ export async function main(args: string[], options?: MainOptions) {
 	time("createAgentSessionRuntime");
 	const { services, session, modelFallbackMessage } = runtime;
 	const { settingsManager, modelRegistry, resourceLoader } = services;
+	const aizenRuntime = parsed.aizenRuntime ?? settingsManager.getAizenRuntime();
 	applyHttpProxySettings(settingsManager.getGlobalSettings().httpProxy);
 	configureHttpDispatcher(settingsManager.getHttpIdleTimeoutMs());
 
@@ -810,10 +811,10 @@ export async function main(args: string[], options?: MainOptions) {
 
 	if (appMode === "rpc") {
 		printTimings();
-		await runRpcMode(runtime, { aizenRuntime: parsed.aizenRuntime });
+		await runRpcMode(runtime, { aizenRuntime });
 	} else if (appMode === "interactive") {
 		const interactiveMode = new InteractiveMode(runtime, {
-			aizenRuntime: parsed.aizenRuntime,
+			aizenRuntime,
 			migratedProviders,
 			modelFallbackMessage,
 			autoTrustOnReloadCwd,
@@ -846,7 +847,7 @@ export async function main(args: string[], options?: MainOptions) {
 		printTimings();
 		const exitCode = await runPrintMode(runtime, {
 			mode: toPrintOutputMode(appMode),
-			aizenRuntime: parsed.aizenRuntime,
+			aizenRuntime,
 			messages: parsed.messages,
 			initialMessage,
 			initialImages,

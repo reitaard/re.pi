@@ -33,8 +33,7 @@
 				"@mariozechner/clipboard": "0.3.9"
 			},
 			"bin": {
-				"recode": "dist/cli.js",
-				"repi": "dist/cli.js"
+				"recode": "dist/cli.js"
 			},
 			"engines": {
 				"node": ">=22.19.0"

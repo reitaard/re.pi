@@ -1,17 +1,16 @@
-> Updated 2026-07-18: Phase 0, Phase 1A, and Phase 1B are complete. RePi now
+> Updated 2026-07-19: Phase 0 and the production AgentHarness migration checkpoints are complete. Recode now
 > snapshots Aizen's minimal runtime profile and adapts the existing JSONL
 > `SessionManager` to Pi's `SessionStorage` contract. A focused Phase 1C proof
 > runs one Aizen turn through `AgentHarness` and reopens the same persisted tree.
-> Text and JSON one-shot runs can now opt in with `recode -p --aizen-runtime`
-> or `recode --mode json --aizen-runtime`; the legacy
-> runtime remains the default rollback path. Loaded skills, prompt templates, and
+> Text, JSON, RPC, and interactive runs use Aizen Runtime by default. The
+> temporary `--legacy` flag and settings toggle remain as the rollback
+> path for this release. Loaded skills, prompt templates, and
 > `before_agent_start`, context, provider-payload/response, and tool interception
 > now cross that boundary. Provider headers and lifecycle events now preserve
 > their legacy timing, while the opt-in path reuses RePi's retry and compaction
 > settings. Aizen's JSON route preserves the session header and lifecycle,
 > retry, compaction, and settlement event contract. The legacy runtime remains
-> available until RPC parity and the
-> default-switch gate are complete. Aizen now also writes model-invisible,
+> available until the final duplicated-lifecycle removal gate. Aizen also writes model-invisible,
 > structured operation, turn, and tool boundaries into the existing session
 > JSONL. On restart, unfinished work is marked interrupted and uncertain tool
 > calls are never replayed automatically. These records are the diagnostic

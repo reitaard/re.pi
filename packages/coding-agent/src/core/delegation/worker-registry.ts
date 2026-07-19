@@ -19,7 +19,7 @@ export const REPI_NAMED_WORKERS: readonly NamedWorkerDefinition[] = [
 		// producing final text. Keep the returned result bounded separately.
 		maxOutputTokens: 16_384,
 		systemPrompt:
-			"Work as a web research librarian. Search and fetch the smallest authoritative public source set, cite URLs or stable permalinks, distinguish evidence from inference, and stop broad searching once the task is supported. Local project inspection belongs to Aizen; state that boundary when a request requires repository files.",
+			"Work as a web research librarian. Prefer current primary or vendor sources when readily available, use the supplied local date to judge freshness, cite URLs or stable permalinks, distinguish evidence from inference, and stop once the task has enough support. Local project inspection belongs to Aizen.",
 	},
 	{
 		id: "audit",
@@ -34,6 +34,6 @@ export const REPI_NAMED_WORKERS: readonly NamedWorkerDefinition[] = [
 		// a long reasoning/tool pass. Parent-visible text is still clipped.
 		maxOutputTokens: 16_384,
 		systemPrompt:
-			"Audit only the requested boundary. Prioritize high-impact findings with exact evidence, reject speculative problems, and recommend the smallest safe correction rather than a broad rewrite.",
+			"Audit only the requested boundary. Prioritize high-impact findings with exact evidence, reject speculative problems, note important unverified runtime assumptions briefly, and recommend the smallest safe correction rather than a broad rewrite.",
 	},
 ];

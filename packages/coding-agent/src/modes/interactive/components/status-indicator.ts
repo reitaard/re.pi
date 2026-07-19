@@ -141,8 +141,12 @@ export class SettledStatus implements Component {
 			failed: "error",
 			cancelled: "warning",
 		};
-		const text = theme.fg(colors[this.outcome], `${labels[this.outcome]} ${this.elapsedRuntime}`);
-		return [truncateToWidth(text, width, ""), ""];
+		const left = theme.fg(colors[this.outcome], labels[this.outcome]);
+		const right = theme.fg(colors[this.outcome], this.elapsedRuntime);
+		const availableLeftWidth = Math.max(0, width - visibleWidth(right) - 1);
+		const clippedLeft = truncateToWidth(left, availableLeftWidth, "");
+		const gap = Math.max(1, width - visibleWidth(clippedLeft) - visibleWidth(right));
+		return ["", `${clippedLeft}${" ".repeat(gap)}${right}`];
 	}
 }
 

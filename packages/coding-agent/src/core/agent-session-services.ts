@@ -22,6 +22,7 @@ import {
 import { type CreateAgentSessionOptions, type CreateAgentSessionResult, createAgentSession } from "./sdk.ts";
 import type { SessionManager } from "./session-manager.ts";
 import { SettingsManager } from "./settings-manager.ts";
+import { createPackageManageToolDefinition } from "./tools/package-manage.ts";
 import { createToolDefinitionFromAgentTool, wrapToolDefinition } from "./tools/tool-definition-wrapper.ts";
 
 const DELEGATION_ENV = "REPI_DELEGATION";
@@ -137,6 +138,13 @@ function getOrCreateWorkerDirectory(options: CreateAgentSessionFromServicesOptio
 
 function resolveCustomTools(options: CreateAgentSessionFromServicesOptions): ToolDefinition[] | undefined {
 	const customTools = [...(options.customTools ?? [])];
+	customTools.push(
+		createPackageManageToolDefinition({
+			cwd: options.services.cwd,
+			agentDir: options.services.agentDir,
+			settingsManager: options.services.settingsManager,
+		}),
+	);
 	if (!isTruthyEnvFlag(process.env[DELEGATION_ENV])) return customTools.length > 0 ? customTools : undefined;
 
 	const directory = getOrCreateWorkerDirectory(options);

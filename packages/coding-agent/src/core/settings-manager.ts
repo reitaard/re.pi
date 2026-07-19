@@ -100,6 +100,7 @@ export interface Settings {
 	branchSummary?: BranchSummarySettings;
 	retry?: RetrySettings;
 	hideThinkingBlock?: boolean;
+	aizenRuntime?: boolean;
 	showCacheMissNotices?: boolean; // default: false - show transcript notices for significant prompt-cache misses
 	externalEditor?: string; // Command for Ctrl+G external editor; takes precedence over VISUAL/EDITOR
 	shellPath?: string; // Custom shell path (e.g., for Cygwin users on Windows); supports leading ~ expansion
@@ -893,6 +894,10 @@ export class SettingsManager {
 		return this.settings.hideThinkingBlock ?? true;
 	}
 
+	getAizenRuntime(): boolean {
+		return this.settings.aizenRuntime ?? true;
+	}
+
 	getShowCacheMissNotices(): boolean {
 		return this.settings.showCacheMissNotices ?? false;
 	}
@@ -912,6 +917,12 @@ export class SettingsManager {
 	setHideThinkingBlock(hide: boolean): void {
 		this.globalSettings.hideThinkingBlock = hide;
 		this.markModified("hideThinkingBlock");
+		this.save();
+	}
+
+	setAizenRuntime(enabled: boolean): void {
+		this.globalSettings.aizenRuntime = enabled;
+		this.markModified("aizenRuntime");
 		this.save();
 	}
 

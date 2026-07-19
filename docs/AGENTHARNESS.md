@@ -33,7 +33,10 @@ damage.
 - `packages/coding-agent/src/core/agent-session-runtime.ts` owns session
   replacement and recreates cwd-bound services across new, resume, fork, import,
   and shutdown flows.
-- One-shot, RPC, and interactive modes still run through `AgentSession`.
+- `AgentSession` remains the coding-agent adapter, while one-shot, RPC, and
+  interactive turns now route through Aizen Runtime and `AgentHarness` by
+  default. A settings toggle and `--legacy` preserve a short-lived
+  rollback path.
 
 ### AgentHarness
 
@@ -42,9 +45,10 @@ damage.
 - It already owns turn snapshots, operation phases, queue draining, abort,
   session persistence, pending-write ordering, save points, compaction, tree
   navigation, tools/resources, provider streaming, and typed failures.
-- It is not yet the coding-agent application runtime.
-- Auto-compaction decisions, retry policy, generic extension hooks, complete
-  reentrancy coverage, and semi-durable recovery remain unfinished.
+- Aizen Runtime now supplies the coding-agent lifecycle, retry, compaction,
+  settlement, and structured recovery-journal boundary.
+- Removing the legacy duplicated lifecycle remains gated on one release of
+  default-on runtime use and focused regression evidence.
 
 ### Memory
 

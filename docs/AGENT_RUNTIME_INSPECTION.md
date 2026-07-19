@@ -330,7 +330,7 @@ journal in the existing RePi JSONL. `createAizenRuntime()` is a non-production
 proof that composes those boundaries with Pi's `AgentHarness`, `Session`, and
 `NodeExecutionEnv`; a faux-provider turn survives a real session reopen.
 
-Text and JSON print modes now expose the explicit `--aizen-runtime` checkpoint. They route
+Text and JSON print modes now expose the explicit `--aizen` checkpoint. They route
 the prepared Aizen profile through Pi's `AgentHarness`, writes replies through
 the existing raw-output guard, persists through `RecodeSessionStorage`, and
 abort the harness on termination. JSON mode preserves the existing session-header-first
