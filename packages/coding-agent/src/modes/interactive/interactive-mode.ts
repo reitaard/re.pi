@@ -7,7 +7,12 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { AgentMessage } from "@reitaard/repi-agent-core";
+import {
+	type AgentMessage,
+	formatPromptTemplateInvocation,
+	formatSkillInvocation,
+	parseCommandArgs,
+} from "@reitaard/repi-agent-core";
 import {
 	type AssistantMessage,
 	getProviders,
@@ -85,6 +90,7 @@ import { createCompactionSummaryMessage } from "../../core/messages.ts";
 import { defaultModelPerProvider, findExactModelReferenceMatch, resolveModelScope } from "../../core/model-resolver.ts";
 import { DefaultPackageManager } from "../../core/package-manager.ts";
 import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "../../core/provider-display-names.ts";
+import { type AizenRuntime, createAizenRuntime } from "../../core/recode-aizen-runtime.ts";
 import { getRecodeSessionReference } from "../../core/recode-session-identity.ts";
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
@@ -149,6 +155,7 @@ import {
 	CompactionStatusIndicator,
 	IdleStatus,
 	RetryStatusIndicator,
+	type SettledOutcome,
 	type StatusIndicator,
 	WorkingStatusIndicator,
 } from "./components/status-indicator.ts";
@@ -336,6 +343,8 @@ function formatLoginProviderCompletionDescription(provider: LoginProviderComplet
  * Options for InteractiveMode initialization.
  */
 export interface InteractiveModeOptions {
+	/** Route interactive turns through Aizen's AgentHarness runtime. */
+	aizenRuntime?: boolean;
 	/** Providers that were migrated to auth.json (shows warning) */
 	migratedProviders?: string[];
 	/** Warning message if session model couldn't be restored */
@@ -354,6 +363,7 @@ export interface InteractiveModeOptions {
 
 export class InteractiveMode {
 	private runtimeHost: AgentSessionRuntime;
+	private aizenRuntime: AizenRuntime | undefined;
 	private ui: TUI;
 	private loadedResourcesContainer: Container;
 	private mcpStartupStatus: string | undefined;
@@ -397,9 +407,12 @@ export class InteractiveMode {
 	// Streaming message tracking
 	private streamingComponent: AssistantMessageComponent | undefined = undefined;
 	private streamingMessage: AssistantMessage | undefined = undefined;
+	private pendingSettledOutcome: SettledOutcome = "completed";
 
 	// Tool execution tracking: toolCallId -> component
 	private pendingTools = new Map<string, ToolExecutionComponent>();
+	private runtimeSteeringMessages: string[] = [];
+	private runtimeFollowUpMessages: string[] = [];
 
 	// Tool output expansion state
 	private toolOutputExpanded = false;
@@ -476,6 +489,93 @@ export class InteractiveMode {
 	}
 	private get settingsManager() {
 		return this.session.settingsManager;
+	}
+	private get isAgentRunning(): boolean {
+		return this.aizenRuntime?.isRunning() ?? this.session.isStreaming;
+	}
+	private get isRuntimeCompacting(): boolean {
+		return this.aizenRuntime?.isCompacting() ?? this.session.isCompacting;
+	}
+	private get runtimePendingMessageCount(): number {
+		return this.aizenRuntime?.pendingMessageCount() ?? this.session.pendingMessageCount;
+	}
+
+	private expandAizenCommand(text: string): string {
+		const runtime = this.aizenRuntime;
+		if (!runtime || !text.startsWith("/")) return text;
+		const spaceIndex = text.indexOf(" ");
+		const name = spaceIndex === -1 ? text.slice(1) : text.slice(1, spaceIndex);
+		const args = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1).trim();
+		if (name.startsWith("skill:")) {
+			const skill = runtime.profile.resources.skills?.find((candidate) => candidate.name === name.slice(6));
+			return skill ? formatSkillInvocation(skill, args || undefined) : text;
+		}
+		const template = runtime.profile.resources.promptTemplates?.find((candidate) => candidate.name === name);
+		return template ? formatPromptTemplateInvocation(template, parseCommandArgs(args)) : text;
+	}
+
+	private async promptRuntime(
+		text: string,
+		options?: { images?: ImageContent[]; streamingBehavior?: "steer" | "followUp" },
+	): Promise<void> {
+		const runtime = this.aizenRuntime;
+		if (!runtime) {
+			await this.session.prompt(text, options);
+			return;
+		}
+
+		if (text.startsWith("/")) {
+			const commandName = text.slice(1).split(/\s/, 1)[0] ?? "";
+			if (this.session.extensionRunner.getCommand(commandName)) {
+				await this.session.prompt(text);
+				return;
+			}
+		}
+
+		const inputResult = await this.session.extensionRunner.emitInput(
+			text,
+			options?.images,
+			"interactive",
+			options?.streamingBehavior,
+		);
+		if (inputResult.action === "handled") return;
+		const inputText = inputResult.action === "transform" ? inputResult.text : text;
+		const images = inputResult.action === "transform" ? (inputResult.images ?? options?.images) : options?.images;
+		const expandedText = this.expandAizenCommand(inputText);
+
+		if (runtime.isRunning()) {
+			if (!options?.streamingBehavior) throw new Error("Aizen is already processing; choose steer or follow-up");
+			const content = images?.length ? [{ type: "text" as const, text: expandedText }, ...images] : expandedText;
+			await runtime.sendUserMessage(content, { deliverAs: options.streamingBehavior });
+			return;
+		}
+		await runtime.prompt(expandedText, { images });
+	}
+
+	private async abortRuntime(): Promise<void> {
+		if (this.aizenRuntime) {
+			this.aizenRuntime.abortRetry();
+			await this.aizenRuntime.abort();
+			return;
+		}
+		await this.session.abort();
+	}
+
+	private async compactRuntime(customInstructions?: string): Promise<Awaited<ReturnType<AgentSession["compact"]>>> {
+		return (
+			this.aizenRuntime
+				? await this.aizenRuntime.compact(customInstructions)
+				: await this.session.compact(customInstructions)
+		) as Awaited<ReturnType<AgentSession["compact"]>>;
+	}
+
+	private rebuildAizenRuntime(): void {
+		if (!this.options.aizenRuntime) return;
+		this.unsubscribe?.();
+		this.runtimeSteeringMessages = [];
+		this.runtimeFollowUpMessages = [];
+		this.aizenRuntime = createAizenRuntime({ agentSession: this.session, cwd: this.sessionManager.getCwd() });
+		this.subscribeToAgent();
 	}
 
 	constructor(runtimeHost: AgentSessionRuntime, options: InteractiveModeOptions = {}) {
@@ -957,7 +1057,7 @@ export class InteractiveMode {
 		// Process initial messages
 		if (initialMessage) {
 			try {
-				await this.session.prompt(initialMessage, { images: initialImages });
+				await this.promptRuntime(initialMessage, { images: initialImages });
 			} catch (error: unknown) {
 				const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
 				this.showError(errorMessage);
@@ -967,7 +1067,7 @@ export class InteractiveMode {
 		if (initialMessages) {
 			for (const message of initialMessages) {
 				try {
-					await this.session.prompt(message);
+					await this.promptRuntime(message);
 				} catch (error: unknown) {
 					const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
 					this.showError(errorMessage);
@@ -979,7 +1079,7 @@ export class InteractiveMode {
 		while (true) {
 			const userInput = await this.getUserInput();
 			try {
-				await this.session.prompt(userInput);
+				await this.promptRuntime(userInput);
 			} catch (error: unknown) {
 				const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
 				this.showError(errorMessage);
@@ -1755,7 +1855,7 @@ export class InteractiveMode {
 				this.restoreQueuedMessagesToEditor({ abort: true });
 			},
 			commandContextActions: {
-				waitForIdle: () => this.session.waitForIdle(),
+				waitForIdle: () => this.aizenRuntime?.waitForIdle() ?? this.session.waitForIdle(),
 				newSession: async (options) => {
 					this.clearStatusIndicator();
 					try {
@@ -1805,13 +1905,32 @@ export class InteractiveMode {
 			},
 			shutdownHandler: () => {
 				this.shutdownRequested = true;
-				if (this.session.isIdle) {
+				if (!this.isAgentRunning && !this.isRuntimeCompacting) {
 					void this.shutdown();
 				}
 			},
 			onError: (error) => {
 				this.showExtensionError(error.extensionPath, error.error, error.stack);
 			},
+			runtimeActions: this.aizenRuntime
+				? {
+						sendMessage: (message, options) => {
+							void this.aizenRuntime
+								?.sendCustomMessage(message, options)
+								.catch((error) => this.showError(error instanceof Error ? error.message : String(error)));
+						},
+						sendUserMessage: (content, options) => {
+							void this.aizenRuntime
+								?.sendUserMessage(content, options)
+								.catch((error) => this.showError(error instanceof Error ? error.message : String(error)));
+						},
+						appendEntry: (customType, data, options) => {
+							void this.aizenRuntime
+								?.appendEntry(customType, data, options)
+								.catch((error) => this.showError(error instanceof Error ? error.message : String(error)));
+						},
+					}
+				: undefined,
 		});
 
 		setRegisteredThemes(this.session.resourceLoader.getThemes().themes);
@@ -1849,6 +1968,9 @@ export class InteractiveMode {
 	private async rebindCurrentSession(options: { renderBeforeBind?: boolean } = {}): Promise<void> {
 		this.unsubscribe?.();
 		this.unsubscribe = undefined;
+		this.aizenRuntime = this.options.aizenRuntime
+			? createAizenRuntime({ agentSession: this.session, cwd: this.sessionManager.getCwd() })
+			: undefined;
 		this.applyRuntimeSettings();
 		if (options.renderBeforeBind) {
 			this.renderCurrentSessionState();
@@ -1905,13 +2027,13 @@ export class InteractiveMode {
 			sessionManager: this.sessionManager,
 			modelRegistry: this.session.modelRegistry,
 			model: this.session.model,
-			isIdle: () => this.session.isIdle,
+			isIdle: () => !this.isAgentRunning && !this.isRuntimeCompacting,
 			isProjectTrusted: () => this.settingsManager.isProjectTrusted(),
 			signal: this.session.agent.signal,
 			abort: () => {
 				this.restoreQueuedMessagesToEditor({ abort: true });
 			},
-			hasPendingMessages: () => this.session.pendingMessageCount > 0,
+			hasPendingMessages: () => this.runtimePendingMessageCount > 0,
 			shutdown: () => {
 				this.shutdownRequested = true;
 			},
@@ -1919,7 +2041,7 @@ export class InteractiveMode {
 			compact: (options) => {
 				void (async () => {
 					try {
-						const result = await this.session.compact(options?.customInstructions);
+						const result = await this.compactRuntime(options?.customInstructions);
 						options?.onComplete?.(result);
 					} catch (error) {
 						const err = error instanceof Error ? error : new Error(String(error));
@@ -1985,7 +2107,7 @@ export class InteractiveMode {
 			this.ui.requestRender();
 			return;
 		}
-		if (this.session.isStreaming && this.activeStatusIndicator?.kind !== "working") {
+		if (this.isAgentRunning && this.activeStatusIndicator?.kind !== "working") {
 			this.showStatusIndicator(
 				new WorkingStatusIndicator(
 					this.ui,
@@ -2672,7 +2794,7 @@ export class InteractiveMode {
 		// Set up handlers on defaultEditor - they use this.editor for text access
 		// so they work correctly regardless of which editor is active
 		this.defaultEditor.onEscape = () => {
-			if (this.session.isStreaming) {
+			if (this.isAgentRunning) {
 				this.restoreQueuedMessagesToEditor({ abort: true });
 			} else if (this.session.isBashRunning) {
 				this.session.abortBash();
@@ -2930,7 +3052,7 @@ export class InteractiveMode {
 			}
 
 			// Queue input during compaction (extension commands execute immediately)
-			if (this.session.isCompacting) {
+			if (this.isRuntimeCompacting) {
 				if (this.isExtensionCommand(text)) {
 					this.editor.addToHistory?.(text);
 					this.editor.setText("");
@@ -2943,10 +3065,10 @@ export class InteractiveMode {
 
 			// If streaming, use prompt() with steer behavior
 			// This handles extension commands (execute immediately), prompt template expansion, and queueing
-			if (this.session.isStreaming) {
+			if (this.isAgentRunning) {
 				this.editor.addToHistory?.(text);
 				this.editor.setText("");
-				await this.session.prompt(text, { streamingBehavior: "steer" });
+				await this.promptRuntime(text, { streamingBehavior: "steer" });
 				this.updatePendingMessagesDisplay();
 				this.ui.requestRender();
 				return;
@@ -2966,7 +3088,7 @@ export class InteractiveMode {
 	}
 
 	private subscribeToAgent(): void {
-		this.unsubscribe = this.session.subscribe(async (event) => {
+		this.unsubscribe = (this.aizenRuntime ?? this.session).subscribe(async (event) => {
 			await this.handleEvent(event);
 		});
 	}
@@ -2980,6 +3102,7 @@ export class InteractiveMode {
 
 		switch (event.type) {
 			case "agent_start":
+				this.pendingSettledOutcome = "completed";
 				this.pendingTools.clear();
 				if (this.settingsManager.getShowTerminalProgress()) {
 					this.ui.terminal.setProgress(true);
@@ -3005,6 +3128,10 @@ export class InteractiveMode {
 				break;
 
 			case "queue_update":
+				if (this.aizenRuntime) {
+					this.runtimeSteeringMessages = [...event.steering];
+					this.runtimeFollowUpMessages = [...event.followUp];
+				}
 				this.updatePendingMessagesDisplay();
 				this.ui.requestRender();
 				break;
@@ -3099,6 +3226,7 @@ export class InteractiveMode {
 					this.streamingMessage = event.message;
 					let errorMessage: string | undefined;
 					if (this.streamingMessage.stopReason === "aborted") {
+						this.pendingSettledOutcome = "cancelled";
 						const retryAttempt = this.session.retryAttempt;
 						errorMessage =
 							retryAttempt > 0
@@ -3109,6 +3237,7 @@ export class InteractiveMode {
 					this.streamingComponent.updateContent(this.streamingMessage);
 
 					if (this.streamingMessage.stopReason === "aborted" || this.streamingMessage.stopReason === "error") {
+						if (this.streamingMessage.stopReason === "error") this.pendingSettledOutcome = "failed";
 						if (!errorMessage) {
 							errorMessage = this.streamingMessage.errorMessage || "Error";
 						}
@@ -3180,7 +3309,6 @@ export class InteractiveMode {
 				if (this.settingsManager.getShowTerminalProgress()) {
 					this.ui.terminal.setProgress(false);
 				}
-				this.clearStatusIndicator("working");
 				if (this.streamingComponent) {
 					this.chatContainer.removeChild(this.streamingComponent);
 					this.streamingComponent = undefined;
@@ -3192,6 +3320,14 @@ export class InteractiveMode {
 				break;
 
 			case "agent_settled":
+				if (this.activeStatusIndicator instanceof WorkingStatusIndicator) {
+					const settled = this.activeStatusIndicator.settle(this.pendingSettledOutcome);
+					this.activeStatusIndicator.dispose();
+					this.activeStatusIndicator = undefined;
+					this.statusContainer.clear();
+					this.statusContainer.addChild(settled);
+					this.ui.requestRender();
+				}
 				await this.checkShutdownRequested();
 				break;
 
@@ -3828,7 +3964,7 @@ export class InteractiveMode {
 		if (!text) return;
 
 		// Queue input during compaction (extension commands execute immediately)
-		if (this.session.isCompacting) {
+		if (this.isRuntimeCompacting) {
 			if (this.isExtensionCommand(text)) {
 				this.editor.addToHistory?.(text);
 				this.editor.setText("");
@@ -3841,10 +3977,10 @@ export class InteractiveMode {
 
 		// Alt+Enter queues a follow-up message (waits until agent finishes)
 		// This handles extension commands (execute immediately), prompt template expansion, and queueing
-		if (this.session.isStreaming) {
+		if (this.isAgentRunning) {
 			this.editor.addToHistory?.(text);
 			this.editor.setText("");
-			await this.session.prompt(text, { streamingBehavior: "followUp" });
+			await this.promptRuntime(text, { streamingBehavior: "followUp" });
 			this.updatePendingMessagesDisplay();
 			this.ui.requestRender();
 		}
@@ -3878,6 +4014,7 @@ export class InteractiveMode {
 		if (newLevel === undefined) {
 			this.showStatus("Current model does not support thinking");
 		} else {
+			void this.aizenRuntime?.harness.setThinkingLevel(newLevel);
 			this.footer.invalidate();
 			this.updateEditorBorderColor();
 			const label = formatRecodeThinkingLevel(newLevel, this.session.getAvailableThinkingLevels());
@@ -3892,6 +4029,7 @@ export class InteractiveMode {
 				const msg = this.session.scopedModels.length > 0 ? "Only one model in scope" : "Only one model available";
 				this.showStatus(msg);
 			} else {
+				this.rebuildAizenRuntime();
 				this.footer.invalidate();
 				this.updateEditorBorderColor();
 				const thinkingLabel = formatRecodeThinkingLevel(
@@ -4075,11 +4213,11 @@ export class InteractiveMode {
 	private getAllQueuedMessages(): { steering: string[]; followUp: string[] } {
 		return {
 			steering: [
-				...this.session.getSteeringMessages(),
+				...(this.aizenRuntime ? this.runtimeSteeringMessages : this.session.getSteeringMessages()),
 				...this.compactionQueuedMessages.filter((msg) => msg.mode === "steer").map((msg) => msg.text),
 			],
 			followUp: [
-				...this.session.getFollowUpMessages(),
+				...(this.aizenRuntime ? this.runtimeFollowUpMessages : this.session.getFollowUpMessages()),
 				...this.compactionQueuedMessages.filter((msg) => msg.mode === "followUp").map((msg) => msg.text),
 			],
 		};
@@ -4090,7 +4228,14 @@ export class InteractiveMode {
 	 * Clears both session queue and compaction queue.
 	 */
 	private clearAllQueues(): { steering: string[]; followUp: string[] } {
-		const { steering, followUp } = this.session.clearQueue();
+		const { steering, followUp } = this.aizenRuntime
+			? { steering: this.runtimeSteeringMessages, followUp: this.runtimeFollowUpMessages }
+			: this.session.clearQueue();
+		if (this.aizenRuntime) {
+			this.runtimeSteeringMessages = [];
+			this.runtimeFollowUpMessages = [];
+			void this.aizenRuntime.clearQueuedMessages();
+		}
 		const compactionSteering = this.compactionQueuedMessages
 			.filter((msg) => msg.mode === "steer")
 			.map((msg) => msg.text);
@@ -4129,7 +4274,7 @@ export class InteractiveMode {
 		if (allQueued.length === 0) {
 			this.updatePendingMessagesDisplay();
 			if (options?.abort) {
-				this.agent.abort();
+				void this.abortRuntime();
 			}
 			return 0;
 		}
@@ -4139,7 +4284,7 @@ export class InteractiveMode {
 		this.editor.setText(combinedText);
 		this.updatePendingMessagesDisplay();
 		if (options?.abort) {
-			this.agent.abort();
+			void this.abortRuntime();
 		}
 		return allQueued.length;
 	}
@@ -4187,11 +4332,11 @@ export class InteractiveMode {
 				// When retry is pending, queue messages for the retry turn
 				for (const message of queuedMessages) {
 					if (this.isExtensionCommand(message.text)) {
-						await this.session.prompt(message.text);
+						await this.promptRuntime(message.text);
 					} else if (message.mode === "followUp") {
-						await this.session.followUp(message.text);
+						await this.promptRuntime(message.text, { streamingBehavior: "followUp" });
 					} else {
-						await this.session.steer(message.text);
+						await this.promptRuntime(message.text, { streamingBehavior: "steer" });
 					}
 				}
 				this.updatePendingMessagesDisplay();
@@ -4203,7 +4348,7 @@ export class InteractiveMode {
 			if (firstPromptIndex === -1) {
 				// All extension commands - execute them all
 				for (const message of queuedMessages) {
-					await this.session.prompt(message.text);
+					await this.promptRuntime(message.text);
 				}
 				return;
 			}
@@ -4214,22 +4359,22 @@ export class InteractiveMode {
 			const rest = queuedMessages.slice(firstPromptIndex + 1);
 
 			for (const message of preCommands) {
-				await this.session.prompt(message.text);
+				await this.promptRuntime(message.text);
 			}
 
 			// Send first prompt (starts streaming)
-			const promptPromise = this.session.prompt(firstPrompt.text).catch((error) => {
+			const promptPromise = this.promptRuntime(firstPrompt.text).catch((error) => {
 				restoreQueue(error);
 			});
 
 			// Queue remaining messages
 			for (const message of rest) {
 				if (this.isExtensionCommand(message.text)) {
-					await this.session.prompt(message.text);
+					await this.promptRuntime(message.text);
 				} else if (message.mode === "followUp") {
-					await this.session.followUp(message.text);
+					await this.promptRuntime(message.text, { streamingBehavior: "followUp" });
 				} else {
-					await this.session.steer(message.text);
+					await this.promptRuntime(message.text, { streamingBehavior: "steer" });
 				}
 			}
 			this.updatePendingMessagesDisplay();
@@ -4337,9 +4482,11 @@ export class InteractiveMode {
 					},
 					onSteeringModeChange: (mode) => {
 						this.session.setSteeringMode(mode);
+						void this.aizenRuntime?.harness.setSteeringMode(mode);
 					},
 					onFollowUpModeChange: (mode) => {
 						this.session.setFollowUpMode(mode);
+						void this.aizenRuntime?.harness.setFollowUpMode(mode);
 					},
 					onTransportChange: (transport) => {
 						this.settingsManager.setTransport(transport);
@@ -4352,6 +4499,7 @@ export class InteractiveMode {
 					},
 					onThinkingLevelChange: (level) => {
 						this.session.setThinkingLevel(level);
+						void this.aizenRuntime?.harness.setThinkingLevel(level);
 						this.footer.invalidate();
 						this.updateEditorBorderColor();
 					},
@@ -4407,7 +4555,7 @@ export class InteractiveMode {
 					onOutputPadChange: (padding) => {
 						this.settingsManager.setOutputPad(padding);
 						this.outputPad = padding;
-						if (this.streamingComponent || this.session.isStreaming) {
+						if (this.streamingComponent || this.isAgentRunning) {
 							for (const child of this.chatContainer.children) {
 								if (child instanceof AssistantMessageComponent || child instanceof UserMessageComponent) {
 									child.setOutputPad(padding);
@@ -4461,6 +4609,7 @@ export class InteractiveMode {
 		if (model) {
 			try {
 				await this.session.setModel(model);
+				this.rebuildAizenRuntime();
 				this.footer.invalidate();
 				this.updateEditorBorderColor();
 				this.showStatus(`Model: ${model.id}`);
@@ -4594,6 +4743,7 @@ export class InteractiveMode {
 				async (model) => {
 					try {
 						await this.session.setModel(model);
+						this.rebuildAizenRuntime();
 						this.footer.invalidate();
 						this.updateEditorBorderColor();
 						done();
@@ -5233,6 +5383,7 @@ export class InteractiveMode {
 				} else {
 					try {
 						await this.session.setModel(selectedModel);
+						this.rebuildAizenRuntime();
 					} catch (error: unknown) {
 						selectedModel = undefined;
 						const errorMessage = error instanceof Error ? error.message : String(error);
@@ -5531,7 +5682,7 @@ export class InteractiveMode {
 			return;
 		}
 
-		if (this.session.isStreaming || this.session.isCompacting) {
+		if (this.isAgentRunning || this.isRuntimeCompacting) {
 			this.showWarning("Wait for the current operation to finish before changing LSP settings.");
 			return;
 		}
@@ -5567,11 +5718,11 @@ export class InteractiveMode {
 	}
 
 	private async handleReloadCommand(): Promise<void> {
-		if (this.session.isStreaming) {
+		if (this.isAgentRunning) {
 			this.showWarning("Wait for the current response to finish before reloading.");
 			return;
 		}
-		if (this.session.isCompacting) {
+		if (this.isRuntimeCompacting) {
 			this.showWarning("Wait for compaction to finish before reloading.");
 			return;
 		}
@@ -5620,6 +5771,7 @@ export class InteractiveMode {
 
 		try {
 			await this.session.reload({ beforeSessionStart: restoreChatBeforeSessionStart });
+			this.rebuildAizenRuntime();
 			restoreChatBeforeSessionStart();
 			configureHttpDispatcher(this.settingsManager.getHttpIdleTimeoutMs());
 			this.keybindings.reload();
@@ -6217,7 +6369,7 @@ export class InteractiveMode {
 			// Create UI component for display
 			this.bashComponent = new BashExecutionComponent(command, this.ui, excludeFromContext);
 			this.bashComponent.setExpanded(this.toolOutputExpanded);
-			if (this.session.isStreaming) {
+			if (this.isAgentRunning) {
 				this.pendingMessagesContainer.addChild(this.bashComponent);
 				this.pendingBashComponents.push(this.bashComponent);
 			} else {
@@ -6243,7 +6395,7 @@ export class InteractiveMode {
 		}
 
 		// Normal execution path (possibly with custom operations)
-		const isDeferred = this.session.isStreaming;
+		const isDeferred = this.isAgentRunning;
 		this.bashComponent = new BashExecutionComponent(command, this.ui, excludeFromContext);
 		this.bashComponent.setExpanded(this.toolOutputExpanded);
 
@@ -6292,7 +6444,7 @@ export class InteractiveMode {
 		this.clearStatusIndicator();
 
 		try {
-			await this.session.compact(customInstructions);
+			await this.compactRuntime(customInstructions);
 		} catch {
 			// Ignore, will be emitted as an event
 		}

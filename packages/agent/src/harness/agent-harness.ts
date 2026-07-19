@@ -1156,6 +1156,19 @@ export class AgentHarness<
 		this.streamOptions = cloneStreamOptions(streamOptions);
 	}
 
+	async clearQueuedMessages(): Promise<{ steer: AgentMessage[]; followUp: AgentMessage[]; nextTurn: AgentMessage[] }> {
+		const cleared = {
+			steer: [...this.steerQueue],
+			followUp: [...this.followUpQueue],
+			nextTurn: [...this.nextTurnQueue],
+		};
+		this.steerQueue = [];
+		this.followUpQueue = [];
+		this.nextTurnQueue = [];
+		await this.emitQueueUpdate();
+		return cleared;
+	}
+
 	async abort(): Promise<AbortResult> {
 		const clearedSteer = [...this.steerQueue];
 		const clearedFollowUp = [...this.followUpQueue];

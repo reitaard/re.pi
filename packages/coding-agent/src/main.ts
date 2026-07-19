@@ -537,10 +537,6 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	let appMode = resolveAppMode(parsed, process.stdin.isTTY, process.stdout.isTTY);
-	if (parsed.aizenRuntime && appMode === "interactive") {
-		console.error(chalk.red("Error: --aizen-runtime currently requires print, JSON, or RPC mode"));
-		process.exit(1);
-	}
 	const shouldTakeOverStdout = appMode !== "interactive" && !isPlainRuntimeMetadataCommand(parsed);
 	if (shouldTakeOverStdout) {
 		takeOverStdout();
@@ -817,6 +813,7 @@ export async function main(args: string[], options?: MainOptions) {
 		await runRpcMode(runtime, { aizenRuntime: parsed.aizenRuntime });
 	} else if (appMode === "interactive") {
 		const interactiveMode = new InteractiveMode(runtime, {
+			aizenRuntime: parsed.aizenRuntime,
 			migratedProviders,
 			modelFallbackMessage,
 			autoTrustOnReloadCwd,

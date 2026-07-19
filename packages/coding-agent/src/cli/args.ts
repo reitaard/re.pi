@@ -245,7 +245,7 @@ ${chalk.bold("Options:")}
   --append-system-prompt <text>  Append text or file contents to the system prompt (can be used multiple times)
   --mode <mode>                  Output mode: text (default), json, or rpc
   --print, -p                    Non-interactive mode: process prompt and exit
-  --aizen-runtime               Experimental: run print, JSON, or RPC mode through Aizen's AgentRuntime
+  --aizen-runtime               Experimental: route interactive, print, JSON, or RPC through Aizen's AgentRuntime
   --continue, -c                 Continue previous session
   --resume, -r                   Select a session to resume
   --session <path|id>            Use specific session file or partial UUID

@@ -30,6 +30,9 @@ export interface AizenRuntime {
 	appendEntry(customType: string, data?: unknown, options?: { persistImmediately?: boolean }): Promise<void>;
 	compact(customInstructions?: string): ReturnType<AgentHarness["compact"]>;
 	abortRetry(): void;
+	abort(): ReturnType<AgentHarness["abort"]>;
+	waitForIdle(): Promise<void>;
+	clearQueuedMessages(): ReturnType<AgentHarness["clearQueuedMessages"]>;
 	isCompacting(): boolean;
 	isRunning(): boolean;
 	pendingMessageCount(): number;
@@ -299,6 +302,9 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 		appendEntry,
 		compact: compactSession,
 		abortRetry: () => retryAbortController?.abort(),
+		abort: () => harness.abort(),
+		waitForIdle: () => harness.waitForIdle(),
+		clearQueuedMessages: () => harness.clearQueuedMessages(),
 		isCompacting: () => activeCompaction !== undefined,
 		isRunning: () => running,
 		pendingMessageCount: () => pendingMessageCount,

@@ -94,6 +94,11 @@ export class WorkingStatusIndicator extends StatusIndicator {
 		super.dispose();
 	}
 
+	settle(outcome: SettledOutcome): SettledStatus {
+		this.stopElapsedTimer();
+		return new SettledStatus(outcome, this.elapsedRuntime);
+	}
+
 	private startElapsedTimer(): void {
 		this.stopElapsedTimer();
 		const updateElapsed = () => {
@@ -109,6 +114,35 @@ export class WorkingStatusIndicator extends StatusIndicator {
 			clearInterval(this.elapsedIntervalId);
 			this.elapsedIntervalId = undefined;
 		}
+	}
+}
+
+export type SettledOutcome = "completed" | "failed" | "cancelled";
+
+export class SettledStatus implements Component {
+	private readonly outcome: SettledOutcome;
+	private readonly elapsedRuntime: string;
+
+	constructor(outcome: SettledOutcome, elapsedRuntime: string) {
+		this.outcome = outcome;
+		this.elapsedRuntime = elapsedRuntime;
+	}
+
+	invalidate(): void {}
+
+	render(width: number): string[] {
+		const labels: Record<SettledOutcome, string> = {
+			completed: "✓ Completed",
+			failed: "✗ Failed",
+			cancelled: "○ Cancelled",
+		};
+		const colors: Record<SettledOutcome, "success" | "error" | "warning"> = {
+			completed: "success",
+			failed: "error",
+			cancelled: "warning",
+		};
+		const text = theme.fg(colors[this.outcome], `${labels[this.outcome]} ${this.elapsedRuntime}`);
+		return [truncateToWidth(text, width, ""), ""];
 	}
 }
 

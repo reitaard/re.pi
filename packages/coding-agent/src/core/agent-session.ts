@@ -1863,7 +1863,7 @@ export class AgentSession {
 		const settings = this.settingsManager.getCompactionSettings();
 		const key = `${this.sessionManager.getLeafId() ?? "empty"}:${JSON.stringify(settings)}`;
 		if (this._compactionAvailabilityCache?.key === key) return this._compactionAvailabilityCache.available;
-		const available = prepareCompaction(this.sessionManager.getBranch(), settings) !== null;
+		const available = prepareCompaction(this.sessionManager.getBranch(), settings) !== undefined;
 		this._compactionAvailabilityCache = { key, available };
 		return available;
 	}
