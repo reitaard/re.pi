@@ -99,26 +99,31 @@ async function tryRunRecodeLmStudioNative(options: {
 		headers.Authorization = `Bearer ${resolved.apiKey}`;
 	}
 
+	const requestBody: Record<string, unknown> = {
+		model: options.model.id,
+		system_prompt: options.systemPrompt,
+		input: options.prompt,
+		max_output_tokens: options.thinking ? SHIORI_THINKING_MAX_OUTPUT_TOKENS : SHIORI_NON_THINKING_MAX_OUTPUT_TOKENS,
+		// Memory extraction benefits from stable formatting more than creative
+		// variation. Keep thinking runs at the model's normal sampling level.
+		temperature: options.thinking ? 0.6 : 0.2,
+		top_p: options.thinking ? 0.95 : 0.8,
+		top_k: 20,
+		min_p: 0,
+		store: false,
+		stream: false,
+	};
+
+	// Some LM Studio models reject the request when the reasoning field exists,
+	// even when its value is "off". Only send it for reasoning-capable models.
+	if (options.model.reasoning) {
+		requestBody.reasoning = options.thinking ? "on" : "off";
+	}
+
 	const response = await fetch(url, {
 		method: "POST",
 		headers,
-		body: JSON.stringify({
-			model: options.model.id,
-			system_prompt: options.systemPrompt,
-			input: options.prompt,
-			reasoning: options.thinking ? "on" : "off",
-			max_output_tokens: options.thinking
-				? SHIORI_THINKING_MAX_OUTPUT_TOKENS
-				: SHIORI_NON_THINKING_MAX_OUTPUT_TOKENS,
-			// Memory extraction benefits from stable formatting more than creative
-			// variation. Keep thinking runs at the model's normal sampling level.
-			temperature: options.thinking ? 0.6 : 0.2,
-			top_p: options.thinking ? 0.95 : 0.8,
-			top_k: 20,
-			min_p: 0,
-			store: false,
-			stream: false,
-		}),
+		body: JSON.stringify(requestBody),
 	});
 	if (response.status === 404 || response.status === 405) return undefined;
 	if (!response.ok) {

@@ -319,6 +319,38 @@ FILE
 ${content}`;
 }
 
+async function runRecodeShioriCandidates(
+	options: Parameters<typeof runRecodeShioriHarness>[0],
+): Promise<RecodeShioriMemoryCandidate[]> {
+	const output = await runRecodeShioriHarness(options);
+
+	try {
+		return parseRecodeShioriCandidates(output);
+	} catch (error) {
+		if (!(error instanceof Error) || error.message !== "Shiori returned invalid JSON") {
+			throw error;
+		}
+	}
+
+	const repairedOutput = await runRecodeShioriHarness({
+		...options,
+		thinking: false,
+		systemPrompt: `${options.systemPrompt}
+You are repairing malformed structured output. Return one valid JSON object only.`,
+		prompt: `The previous response was invalid JSON.
+
+Return exactly one valid object matching this shape:
+{"memories":[{"text":"concise durable statement","tags":["searchable-tag"],"scope":"project|global","kind":"preference|decision|workflow|correction|fact|lesson","confidence":0.0,"evidenceEntryIds":["entry-id"]}]}
+
+Do not add Markdown or explanations. Preserve only valid memories from the previous response.
+
+INVALID RESPONSE
+${output}`,
+	});
+
+	return parseRecodeShioriCandidates(repairedOutput);
+}
+
 async function chooseRouting(
 	routing: RecodeShioriRouting,
 	candidate: RecodeShioriMemoryCandidate,
@@ -379,7 +411,7 @@ export async function executeRecodeShioriFileReview(options: {
 	const pendingWrites: RecodeShioriMemoryCandidate[] = [];
 	let skippedDuplicates = 0;
 	for (const chunk of chunks) {
-		const output = await runRecodeShioriHarness({
+		const candidates = await runRecodeShioriCandidates({
 			cwd: options.cwd,
 			model,
 			modelRegistry: options.modelRegistry,
@@ -387,7 +419,7 @@ export async function executeRecodeShioriFileReview(options: {
 			systemPrompt: buildRecodeShioriSystemPrompt(startedAt),
 			prompt: fileReviewPrompt(options.sourcePath, chunk),
 		});
-		for (const candidate of parseRecodeShioriCandidates(output)) {
+		for (const candidate of candidates) {
 			const candidateKey = normalizeText(candidate.text);
 			if (seenCandidates.has(candidateKey)) {
 				skippedDuplicates += 1;
@@ -457,7 +489,7 @@ export async function executeRecodeShiori(options: {
 	const seenCandidates = new Set<string>();
 	const pendingWrites: RecodeShioriMemoryCandidate[] = [];
 	for (const chunk of review.chunks) {
-		const output = await runRecodeShioriHarness({
+		const candidates = await runRecodeShioriCandidates({
 			cwd: options.cwd,
 			model,
 			modelRegistry: options.modelRegistry,
@@ -465,7 +497,6 @@ export async function executeRecodeShiori(options: {
 			systemPrompt: buildRecodeShioriSystemPrompt(startedAt),
 			prompt: reviewPrompt(chunk.transcript),
 		});
-		const candidates = parseRecodeShioriCandidates(output);
 		for (const candidate of candidates) {
 			const candidateKey = normalizeText(candidate.text);
 			if (seenCandidates.has(candidateKey)) {
