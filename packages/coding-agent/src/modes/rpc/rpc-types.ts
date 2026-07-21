@@ -25,6 +25,22 @@ export type RpcCommand =
 	| { id?: string; type: "abort" }
 	| { id?: string; type: "new_session"; parentSession?: string }
 
+	// External systems
+	| {
+			id?: string;
+			type: "external_event";
+			source: string;
+			event: string;
+			jobId?: string;
+			severity?: "debug" | "info" | "warning" | "error";
+			summary?: string;
+			details?: unknown;
+			persist?: boolean;
+			modelVisible?: boolean;
+			triggerTurn?: boolean;
+			deliverAs?: "steer" | "followUp" | "nextTurn";
+	  }
+
 	// State
 	| { id?: string; type: "get_state" }
 
@@ -118,6 +134,17 @@ export type RpcResponse =
 	| { id?: string; type: "response"; command: "follow_up"; success: true }
 	| { id?: string; type: "response"; command: "abort"; success: true }
 	| { id?: string; type: "response"; command: "new_session"; success: true; data: { cancelled: boolean } }
+	| {
+			id?: string;
+			type: "response";
+			command: "external_event";
+			success: true;
+			data: {
+				persisted: boolean;
+				modelVisible: boolean;
+				triggerRequested: boolean;
+			};
+	  }
 
 	// State
 	| { id?: string; type: "response"; command: "get_state"; success: true; data: RpcSessionState }

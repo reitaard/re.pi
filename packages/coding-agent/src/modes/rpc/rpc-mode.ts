@@ -611,6 +611,83 @@ export async function runRpcMode(
 				return success(id, "new_session", result);
 			}
 
+			case "external_event": {
+				if (!aizen) {
+					return error(id, "external_event", "external_event requires the Aizen runtime");
+				}
+
+				const source = command.source.trim();
+				const eventName = command.event.trim();
+				const summary = command.summary?.trim();
+
+				if (!/^[A-Za-z0-9._-]{1,64}$/.test(source)) {
+					return error(id, "external_event", "source must match [A-Za-z0-9._-] and be 1-64 characters");
+				}
+				if (!/^[A-Za-z0-9._-]{1,128}$/.test(eventName)) {
+					return error(id, "external_event", "event must match [A-Za-z0-9._-] and be 1-128 characters");
+				}
+				if (command.jobId && command.jobId.length > 256) {
+					return error(id, "external_event", "jobId must be at most 256 characters");
+				}
+				if (summary && summary.length > 4000) {
+					return error(id, "external_event", "summary must be at most 4000 characters");
+				}
+				if (command.triggerTurn && command.deliverAs === "nextTurn") {
+					return error(id, "external_event", "triggerTurn cannot be combined with deliverAs=nextTurn");
+				}
+
+				const shouldPersist = command.persist !== false;
+				const shouldDeliver = command.modelVisible === true || command.triggerTurn === true;
+
+				if (!shouldPersist && !shouldDeliver) {
+					return error(
+						id,
+						"external_event",
+						"external_event must persist, become model-visible, or trigger a turn",
+					);
+				}
+
+				const payload = {
+					schemaVersion: 1,
+					source,
+					event: eventName,
+					jobId: command.jobId,
+					severity: command.severity ?? "info",
+					summary,
+					details: command.details,
+					receivedAt: new Date().toISOString(),
+				};
+
+				const customType = `recode.external.${source}`;
+
+				if (shouldPersist) {
+					await aizen.appendEntry(customType, payload, {
+						persistImmediately: true,
+					});
+				}
+
+				if (shouldDeliver) {
+					await aizen.sendCustomMessage(
+						{
+							customType,
+							content: summary || `External ${source} event: ${eventName}`,
+							display: false,
+							details: payload,
+						},
+						{
+							triggerTurn: command.triggerTurn === true,
+							deliverAs: command.deliverAs ?? "followUp",
+						},
+					);
+				}
+
+				return success(id, "external_event", {
+					persisted: shouldPersist,
+					modelVisible: shouldDeliver,
+					triggerRequested: command.triggerTurn === true,
+				});
+			}
+
 			// =================================================================
 			// State
 			// =================================================================

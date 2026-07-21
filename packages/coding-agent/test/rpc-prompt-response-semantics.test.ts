@@ -230,6 +230,37 @@ describe("RPC prompt response semantics", () => {
 		}
 	});
 
+	it("rejects external events when the Aizen runtime is disabled", async () => {
+		const { lineHandler, cleanup } = await startRpcMode({
+			withAuth: true,
+			responseDelayMs: 0,
+		});
+
+		try {
+			lineHandler(
+				JSON.stringify({
+					id: "external-disabled",
+					type: "external_event",
+					source: "music",
+					event: "job_started",
+				}),
+			);
+
+			await vi.waitFor(() => {
+				expect(parseOutputLines(rpcIo.outputLines)).toContainEqual(
+					expect.objectContaining({
+						id: "external-disabled",
+						command: "external_event",
+						success: false,
+						error: expect.stringContaining("requires the Aizen runtime"),
+					}),
+				);
+			});
+		} finally {
+			await cleanup();
+		}
+	});
+
 	it("emits one success response when prompt preflight succeeds", async () => {
 		const { lineHandler, cleanup } = await startRpcMode({ withAuth: true, responseDelayMs: 0 });
 
@@ -297,6 +328,8 @@ describe("RPC prompt response semantics", () => {
 			releasePrompt = resolve;
 		});
 		const abort = vi.fn(async () => ({ status: "idle" as const }));
+		const appendEntry = vi.fn(async () => {});
+		const sendCustomMessage = vi.fn(async () => {});
 		let running = false;
 		const prompt = vi.fn(async (_text: string, _options?: { images?: unknown[] }) => {
 			running = true;
@@ -338,6 +371,9 @@ describe("RPC prompt response semantics", () => {
 			},
 			session: {},
 			prompt,
+			sendCustomMessage,
+			sendUserMessage: vi.fn(async () => {}),
+			appendEntry,
 			compact: vi.fn(),
 			abortRetry: vi.fn(),
 			isCompacting: () => true,
@@ -367,6 +403,75 @@ describe("RPC prompt response semantics", () => {
 				);
 			});
 			expect(prompt).toHaveBeenCalledWith("Hello from transform", { images: undefined });
+
+			lineHandler(
+				JSON.stringify({
+					id: "aizen-event-routine",
+					type: "external_event",
+					source: "music",
+					event: "cookie_selected",
+					jobId: "job-1",
+					severity: "info",
+					summary: "Cookie selected",
+					details: { cookieId: "cookies_010.txt" },
+				}),
+			);
+			await vi.waitFor(() => {
+				expect(parseOutputLines(rpcIo.outputLines)).toContainEqual(
+					expect.objectContaining({
+						id: "aizen-event-routine",
+						command: "external_event",
+						success: true,
+						data: {
+							persisted: true,
+							modelVisible: false,
+							triggerRequested: false,
+						},
+					}),
+				);
+			});
+			expect(appendEntry).toHaveBeenCalledWith(
+				"recode.external.music",
+				expect.objectContaining({
+					source: "music",
+					event: "cookie_selected",
+					jobId: "job-1",
+				}),
+				{ persistImmediately: true },
+			);
+			expect(sendCustomMessage).not.toHaveBeenCalled();
+
+			lineHandler(
+				JSON.stringify({
+					id: "aizen-event-visible",
+					type: "external_event",
+					source: "music",
+					event: "job_failed",
+					jobId: "job-1",
+					severity: "error",
+					summary: "Download failed",
+					details: { failureClass: "PO_TOKEN_FAILED" },
+					modelVisible: true,
+					deliverAs: "followUp",
+				}),
+			);
+			await vi.waitFor(() => {
+				expect(sendCustomMessage).toHaveBeenCalledWith(
+					expect.objectContaining({
+						customType: "recode.external.music",
+						content: "Download failed",
+						display: false,
+						details: expect.objectContaining({
+							event: "job_failed",
+							severity: "error",
+						}),
+					}),
+					{
+						triggerTurn: false,
+						deliverAs: "followUp",
+					},
+				);
+			});
 
 			lineHandler(JSON.stringify({ id: "aizen-state", type: "get_state" }));
 			await vi.waitFor(() => {
