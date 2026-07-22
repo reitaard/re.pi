@@ -1,0 +1,16 @@
+#!/data/data/com.termux/files/usr/bin/sh
+
+set -eu
+
+RECODE_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+
+npm install \
+    --prefix "$RECODE_DIR/app" \
+    --omit=dev \
+    --omit=optional \
+    --ignore-scripts \
+    --no-audit \
+    --no-fund \
+    "$RECODE_DIR"/packages/*.tgz
+
+printf '%s\n' "Recode installed. Run: $RECODE_DIR/recode"

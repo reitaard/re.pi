@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Build re.pi binaries for Windows and Linux locally.
+# Build Recode binaries for Windows and Linux plus a Termux Node release.
 # Mirrors .github/workflows/build-binaries.yml
 #
 # Usage:
@@ -15,14 +15,16 @@
 #
 # Output:
 #   packages/coding-agent/binaries/
-#     repi-linux-x64.tar.gz
-#     repi-linux-arm64.tar.gz
-#     repi-windows-x64.zip
-#     repi-windows-arm64.zip
+#     recode-linux-x64.tar.gz
+#     recode-linux-arm64.tar.gz
+#     recode-windows-x64.zip
+#     recode-windows-arm64.zip
+#     recode-termux-node.tar.gz
 
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+REPO_ROOT="$(pwd)"
 
 SKIP_INSTALL=false
 SKIP_DEPS=false
@@ -142,9 +144,9 @@ for platform in "${PLATFORMS[@]}"; do
     # explicit build entrypoints. The runtime can still use new URL(...), but the
     # worker must be present in the compiled executable.
     if [[ "$platform" == windows-* ]]; then
-        bun build --compile --target=bun-$platform ./dist/bun/cli.js ./src/utils/image-resize-worker.ts --outfile "$OUTPUT_DIR/$platform/repi.exe"
+        bun build --compile --target=bun-$platform ./dist/bun/cli.js ./src/utils/image-resize-worker.ts --outfile "$OUTPUT_DIR/$platform/recode.exe"
     else
-        bun build --compile --target=bun-$platform ./dist/bun/cli.js ./src/utils/image-resize-worker.ts --outfile "$OUTPUT_DIR/$platform/repi"
+        bun build --compile --target=bun-$platform ./dist/bun/cli.js ./src/utils/image-resize-worker.ts --outfile "$OUTPUT_DIR/$platform/recode"
     fi
 done
 
@@ -216,12 +218,12 @@ cd "$OUTPUT_DIR"
 for platform in "${PLATFORMS[@]}"; do
     if [[ "$platform" == windows-* ]]; then
         # Windows (zip)
-        echo "Creating repi-$platform.zip..."
-        (cd "$platform" && zip -r ../repi-$platform.zip .)
+        echo "Creating recode-$platform.zip..."
+        (cd "$platform" && zip -r ../recode-$platform.zip .)
     else
         # Unix platforms (tar.gz) - use wrapper directory for mise compatibility
-        echo "Creating repi-$platform.tar.gz..."
-        mv "$platform" repi && tar -czf repi-$platform.tar.gz repi && mv repi "$platform"
+        echo "Creating recode-$platform.tar.gz..."
+        mv "$platform" recode && tar -czf recode-$platform.tar.gz recode && mv recode "$platform"
     fi
 done
 
@@ -230,11 +232,15 @@ echo "==> Extracting archives for testing..."
 for platform in "${PLATFORMS[@]}"; do
     rm -rf "$platform"
     if [[ "$platform" == windows-* ]]; then
-        mkdir -p "$platform" && (cd "$platform" && unzip -q ../repi-$platform.zip)
+        mkdir -p "$platform" && (cd "$platform" && unzip -q ../recode-$platform.zip)
     else
-        tar -xzf repi-$platform.tar.gz && mv repi "$platform"
+        tar -xzf recode-$platform.tar.gz && mv recode "$platform"
     fi
 done
+
+if [[ -z "$PLATFORM" ]]; then
+    bash "$REPO_ROOT/scripts/build-termux-release.sh" "$OUTPUT_DIR/recode-termux-node.tar.gz"
+fi
 
 echo ""
 echo "==> Build complete!"
@@ -244,8 +250,8 @@ echo ""
 echo "Extracted directories for testing:"
 for platform in "${PLATFORMS[@]}"; do
     if [[ "$platform" == windows-* ]]; then
-        echo "  $OUTPUT_DIR/$platform/repi.exe"
+        echo "  $OUTPUT_DIR/$platform/recode.exe"
     else
-        echo "  $OUTPUT_DIR/$platform/repi"
+        echo "  $OUTPUT_DIR/$platform/recode"
     fi
 done

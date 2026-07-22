@@ -4,6 +4,7 @@
 
 ### Added
 
+- Add a Termux-compatible Recode Node archive and checksummed source archive to GitHub releases.
 - Add independent compaction model and thinking controls, including cancellable Aizen manual and automatic compaction.
 - Add a Recode-owned Telegram gateway with private-user authorization, stable Aizen sessions, queued turns, long polling, streaming previews, and basic session controls.
 - Add a typed, channel-neutral Recode Gateway boundary for session routing, queued Aizen execution, cancellation, and adapter-owned delivery.
@@ -18,6 +19,7 @@
 
 ### Changed
 
+- Publish standalone archives under the `recode` name and require release-note preview approval before creating a GitHub release.
 - Make `recode` the primary CLI command, retain `repi` as a compatibility alias, and give the default coding agent the authoritative Aizen/RePi identity.
 - Add a minimal application-owned Aizen runtime profile that locks the current model, thinking, prompt, tools, and queue modes before AgentRuntime migration.
 - Pass loaded skills, prompt templates, and existing turn, context, provider, and tool interception through Aizen's opt-in AgentRuntime path.

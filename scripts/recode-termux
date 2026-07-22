@@ -1,0 +1,6 @@
+#!/data/data/com.termux/files/usr/bin/sh
+
+set -eu
+
+RECODE_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+exec node "$RECODE_DIR/app/node_modules/@reitaard/repi-coding-agent/dist/cli.js" "$@"
