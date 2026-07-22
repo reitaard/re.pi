@@ -91,7 +91,7 @@ import { defaultModelPerProvider, findExactModelReferenceMatch, resolveModelScop
 import { DefaultPackageManager } from "../../core/package-manager.ts";
 import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "../../core/provider-display-names.ts";
 import { type AizenRuntime, createAizenRuntime } from "../../core/recode-aizen-runtime.ts";
-import { RecodeSessionControlClient } from "../../core/recode-session-control.ts";
+import { RecodeSessionControlClient, watchRecodeSessionControl } from "../../core/recode-session-control.ts";
 import { getRecodeSessionReference } from "../../core/recode-session-identity.ts";
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
@@ -366,8 +366,10 @@ export class InteractiveMode {
 	private runtimeHost: AgentSessionRuntime;
 	private aizenRuntime: AizenRuntime | undefined;
 	private remoteSessionControl: RecodeSessionControlClient | undefined;
+	private remoteSessionWatcher: { close(): void } | undefined;
 	private remoteSessionActive = false;
 	private remoteAttachmentGeneration = 0;
+	private remoteAttachmentPending = false;
 	private ui: TUI;
 	private loadedResourcesContainer: Container;
 	private mcpStartupStatus: string | undefined;
@@ -1987,7 +1989,7 @@ export class InteractiveMode {
 	}
 
 	private async rebindCurrentSession(options: { renderBeforeBind?: boolean } = {}): Promise<void> {
-		this.detachRemoteSession();
+		this.stopRemoteSessionMonitoring();
 		this.unsubscribe?.();
 		this.unsubscribe = undefined;
 		this.aizenRuntime = this.options.aizenRuntime
@@ -2005,49 +2007,77 @@ export class InteractiveMode {
 		await this.updateAvailableProviderCount();
 		this.updateEditorBorderColor();
 		this.updateTerminalTitle();
-		await this.attachToRemoteSession();
+		await this.startRemoteSessionMonitoring();
 	}
 
-	private async attachToRemoteSession(): Promise<void> {
+	private async startRemoteSessionMonitoring(): Promise<void> {
+		this.stopRemoteSessionMonitoring();
 		const generation = ++this.remoteAttachmentGeneration;
-		const client = await RecodeSessionControlClient.connect(getAgentDir(), this.session.sessionId, (message) => {
-			if (generation !== this.remoteAttachmentGeneration) return;
-			if (message.type === "state" && message.state.active) {
-				this.remoteSessionActive = true;
-				if (!(this.activeStatusIndicator instanceof WorkingStatusIndicator)) {
-					this.showStatusIndicator(
-						new WorkingStatusIndicator(this.ui, this.defaultWorkingMessage, undefined, message.state.startedAt),
-					);
-				}
-				if (message.state.generating && this.activeStatusIndicator instanceof WorkingStatusIndicator) {
-					this.activeStatusIndicator.setGenerating();
-				}
-				this.ui.requestRender();
-				return;
-			}
-			if (message.type === "settled" && this.remoteSessionActive) {
-				this.remoteSessionActive = false;
-				void this.refreshAfterRemoteSettlement(generation);
-			}
+		this.remoteSessionWatcher = watchRecodeSessionControl(getAgentDir(), this.session.sessionId, () => {
+			void this.attachToRemoteSession(generation);
 		});
-		if (generation !== this.remoteAttachmentGeneration) {
-			client?.close();
+		await this.attachToRemoteSession(generation);
+	}
+
+	private async attachToRemoteSession(generation: number): Promise<void> {
+		if (generation !== this.remoteAttachmentGeneration || this.remoteAttachmentPending || this.remoteSessionControl) {
 			return;
 		}
-		this.remoteSessionControl = client;
+		this.remoteAttachmentPending = true;
+		try {
+			const client = await RecodeSessionControlClient.connect(getAgentDir(), this.session.sessionId, (message) => {
+				if (generation !== this.remoteAttachmentGeneration) return;
+				if (message.type === "state" && message.state.active) {
+					this.remoteSessionActive = true;
+					if (!(this.activeStatusIndicator instanceof WorkingStatusIndicator)) {
+						this.showStatusIndicator(
+							new WorkingStatusIndicator(
+								this.ui,
+								this.defaultWorkingMessage,
+								undefined,
+								message.state.startedAt,
+							),
+						);
+					}
+					if (message.state.generating && this.activeStatusIndicator instanceof WorkingStatusIndicator) {
+						this.activeStatusIndicator.setGenerating();
+					}
+					this.ui.requestRender();
+					return;
+				}
+				if (message.type === "settled" && this.remoteSessionActive) {
+					this.remoteSessionActive = false;
+					void this.refreshAfterRemoteSettlement(generation);
+				}
+			});
+			if (generation !== this.remoteAttachmentGeneration) {
+				client?.close();
+				return;
+			}
+			this.remoteSessionControl = client;
+		} finally {
+			this.remoteAttachmentPending = false;
+		}
 	}
 
-	private detachRemoteSession(): void {
-		this.remoteAttachmentGeneration++;
+	private disconnectRemoteSession(): void {
 		this.remoteSessionActive = false;
 		this.remoteSessionControl?.close();
 		this.remoteSessionControl = undefined;
 	}
 
+	private stopRemoteSessionMonitoring(): void {
+		this.remoteAttachmentGeneration++;
+		this.remoteAttachmentPending = false;
+		this.remoteSessionWatcher?.close();
+		this.remoteSessionWatcher = undefined;
+		this.disconnectRemoteSession();
+	}
+
 	private async refreshAfterRemoteSettlement(generation: number): Promise<void> {
 		if (generation !== this.remoteAttachmentGeneration) return;
 		const sessionFile = this.session.sessionFile;
-		this.detachRemoteSession();
+		this.disconnectRemoteSession();
 		if (!sessionFile) {
 			this.clearStatusIndicator("working");
 			return;
@@ -5832,8 +5862,7 @@ export class InteractiveMode {
 			return;
 		}
 
-		const wasRemotelyAttached = this.remoteSessionActive;
-		if (wasRemotelyAttached) this.detachRemoteSession();
+		this.stopRemoteSessionMonitoring();
 		this.resetExtensionUI();
 
 		const reloadBox = new Container();
@@ -5922,13 +5951,13 @@ export class InteractiveMode {
 			);
 			dismissReloadBox(this.editor as Component);
 			reloadBoxDismissed = true;
-			if (wasRemotelyAttached) await this.attachToRemoteSession();
+			await this.startRemoteSessionMonitoring();
 		} catch (error) {
 			if (!reloadBoxDismissed) {
 				dismissReloadBox(previousEditor as Component);
 			}
 			this.showError(`Reload failed: ${error instanceof Error ? error.message : String(error)}`);
-			if (wasRemotelyAttached) await this.attachToRemoteSession();
+			await this.startRemoteSessionMonitoring();
 		}
 	}
 
@@ -6561,7 +6590,7 @@ export class InteractiveMode {
 	}
 
 	stop(): void {
-		this.detachRemoteSession();
+		this.stopRemoteSessionMonitoring();
 		if (this.settingsManager.getShowTerminalProgress()) {
 			this.ui.terminal.setProgress(false);
 		}

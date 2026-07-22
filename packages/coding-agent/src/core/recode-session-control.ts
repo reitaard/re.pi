@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, watch, writeFileSync } from "node:fs";
 import { createConnection, createServer, type Server, type Socket } from "node:net";
 import { join } from "node:path";
 
@@ -37,6 +37,21 @@ function controlPaths(agentDir: string, sessionId: string): { directory: string;
 		endpoint: process.platform === "win32" ? `\\\\.\\pipe\\recode-${key}` : join(directory, `${key}.sock`),
 		record: join(directory, `${key}.json`),
 	};
+}
+
+export function watchRecodeSessionControl(
+	agentDir: string,
+	sessionId: string,
+	onChange: () => void,
+): { close(): void } {
+	const paths = controlPaths(agentDir, sessionId);
+	mkdirSync(paths.directory, { recursive: true, mode: 0o700 });
+	const recordName = paths.record.slice(paths.directory.length + 1);
+	const watcher = watch(paths.directory, (_event, filename) => {
+		if (filename && filename.toString() === recordName) onChange();
+	});
+	watcher.on("error", () => undefined);
+	return watcher;
 }
 
 function send(socket: Socket, message: ControlMessage): void {
