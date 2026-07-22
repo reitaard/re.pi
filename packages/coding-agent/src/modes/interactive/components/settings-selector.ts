@@ -51,6 +51,10 @@ const DEFAULT_PROJECT_TRUST_BY_LABEL = new Map(
 
 export interface SettingsConfig {
 	autoCompact: boolean;
+	compactionModel: string;
+	availableCompactionModels: SelectItem[];
+	compactionThinkingLevel: ThinkingLevel;
+	availableCompactionThinkingLevels: ThinkingLevel[];
 	showImages: boolean;
 	imageWidthCells: number;
 	autoResizeImages: boolean;
@@ -85,6 +89,8 @@ export interface SettingsConfig {
 
 export interface SettingsCallbacks {
 	onAutoCompactChange: (enabled: boolean) => void;
+	onCompactionModelChange: (model: string) => void;
+	onCompactionThinkingLevelChange: (level: ThinkingLevel) => void;
 	onShowImagesChange: (enabled: boolean) => void;
 	onImageWidthCellsChange: (width: number) => void;
 	onAutoResizeImagesChange: (enabled: boolean) => void;
@@ -488,6 +494,46 @@ export class SettingsSelectorComponent extends Container {
 				description: "Automatically compact context when it gets too large",
 				currentValue: config.autoCompact ? "true" : "false",
 				values: ["true", "false"],
+			},
+			{
+				id: "compaction-model",
+				label: "Compaction model",
+				description: "Model used for manual and automatic context compaction",
+				currentValue: config.compactionModel,
+				submenu: (currentValue, done) =>
+					new SelectSubmenu(
+						"Compaction Model",
+						"Choose Current model or pin compaction to a different available model.",
+						config.availableCompactionModels,
+						currentValue,
+						(value) => {
+							callbacks.onCompactionModelChange(value);
+							done(value);
+						},
+						() => done(),
+					),
+			},
+			{
+				id: "compaction-thinking",
+				label: "Compaction thinking",
+				description: "Reasoning depth used only for context compaction",
+				currentValue: config.compactionThinkingLevel,
+				submenu: (currentValue, done) =>
+					new SelectSubmenu(
+						"Compaction Thinking",
+						"Choose reasoning depth for compaction. Non-reasoning models always use off.",
+						config.availableCompactionThinkingLevels.map((level) => ({
+							value: level,
+							label: level,
+							description: THINKING_DESCRIPTIONS[level],
+						})),
+						currentValue,
+						(value) => {
+							callbacks.onCompactionThinkingLevelChange(value as ThinkingLevel);
+							done(value);
+						},
+						() => done(),
+					),
 			},
 			{
 				id: "steering-mode",

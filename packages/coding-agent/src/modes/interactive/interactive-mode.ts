@@ -569,6 +569,14 @@ export class InteractiveMode {
 		) as Awaited<ReturnType<AgentSession["compact"]>>;
 	}
 
+	private abortCompactionRuntime(): void {
+		if (this.aizenRuntime) {
+			void this.aizenRuntime.abortCompaction();
+			return;
+		}
+		this.session.abortCompaction();
+	}
+
 	private rebuildAizenRuntime(): void {
 		if (!this.options.aizenRuntime) return;
 		this.unsubscribe?.();
@@ -3338,7 +3346,7 @@ export class InteractiveMode {
 				// Keep editor active; submissions are queued during compaction.
 				this.autoCompactionEscapeHandler = this.defaultEditor.onEscape;
 				this.defaultEditor.onEscape = () => {
-					this.session.abortCompaction();
+					this.abortCompactionRuntime();
 				};
 				this.showStatusIndicator(new CompactionStatusIndicator(this.ui, event.reason));
 				this.ui.requestRender();
@@ -4419,6 +4427,27 @@ export class InteractiveMode {
 			const selector = new SettingsSelectorComponent(
 				{
 					autoCompact: this.session.autoCompactionEnabled,
+					compactionModel: this.settingsManager.getCompactionModel(),
+					availableCompactionModels: [
+						{
+							value: "current",
+							label: "Current model",
+							description: "Follow the active chat model",
+						},
+						...this.session.modelRegistry
+							.getAvailable()
+							.sort((left, right) =>
+								`${left.provider}/${left.id}`.localeCompare(`${right.provider}/${right.id}`),
+							)
+							.map((model) => ({
+								value: `${model.provider}/${model.id}`,
+								label: model.id,
+								description:
+									model.name && model.name !== model.id ? `${model.provider} · ${model.name}` : model.provider,
+							})),
+					],
+					compactionThinkingLevel: this.settingsManager.getCompactionThinkingLevel(),
+					availableCompactionThinkingLevels: ["off", "minimal", "low", "medium", "high", "xhigh", "max"],
 					showImages: this.settingsManager.getShowImages(),
 					imageWidthCells: this.settingsManager.getImageWidthCells(),
 					autoResizeImages: this.settingsManager.getImageAutoResize(),
@@ -4454,6 +4483,15 @@ export class InteractiveMode {
 					onAutoCompactChange: (enabled) => {
 						this.session.setAutoCompactionEnabled(enabled);
 						this.footer.setAutoCompactEnabled(enabled);
+						this.rebuildAizenRuntime();
+					},
+					onCompactionModelChange: (model) => {
+						this.settingsManager.setCompactionModel(model);
+						this.rebuildAizenRuntime();
+					},
+					onCompactionThinkingLevelChange: (level) => {
+						this.settingsManager.setCompactionThinkingLevel(level);
+						this.rebuildAizenRuntime();
 					},
 					onShowImagesChange: (enabled) => {
 						this.settingsManager.setShowImages(enabled);

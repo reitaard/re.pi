@@ -30,6 +30,7 @@ export interface AizenRuntime {
 	appendEntry(customType: string, data?: unknown, options?: { persistImmediately?: boolean }): Promise<void>;
 	compact(customInstructions?: string): ReturnType<AgentHarness["compact"]>;
 	abortRetry(): void;
+	abortCompaction(): ReturnType<AgentHarness["abortCompaction"]>;
 	abort(): ReturnType<AgentHarness["abort"]>;
 	waitForIdle(): Promise<void>;
 	clearQueuedMessages(): ReturnType<AgentHarness["clearQueuedMessages"]>;
@@ -46,6 +47,27 @@ export interface CreateAizenRuntimeOptions {
 	models?: Models;
 }
 
+function isCompactionAbort(error: unknown): boolean {
+	const seen = new Set<unknown>();
+	let current = error;
+	while (current && !seen.has(current)) {
+		seen.add(current);
+		if (current instanceof Error) {
+			if (
+				current.name === "AbortError" ||
+				current.message === "Compaction cancelled" ||
+				(current as Error & { code?: string }).code === "aborted"
+			) {
+				return true;
+			}
+			current = current.cause;
+			continue;
+		}
+		break;
+	}
+	return false;
+}
+
 /** Build one Aizen runtime from RePi-owned configuration and session state. */
 export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRuntime {
 	const profile = options.agentSession.createAizenRuntimeProfile();
@@ -54,7 +76,7 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 	const models =
 		options.models ??
 		createHarnessModels(
-			profile.model,
+			[profile.model, profile.compactionModel],
 			options.agentSession.modelRegistry,
 			"Aizen runtime",
 			hooks.beforeProviderHeaders,
@@ -121,6 +143,11 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 		retry: { enabled: false, maxRetries: 0, baseDelayMs: 2000 },
 	};
 
+	const compactionExecution = {
+		model: profile.compactionModel,
+		thinkingLevel: profile.compactionThinkingLevel,
+	};
+
 	const runWithRecovery = async (start: () => Promise<AssistantMessage>): Promise<AssistantMessage> => {
 		let retryAttempt = 0;
 		running = true;
@@ -136,16 +163,19 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 					emit({ type: "compaction_start", reason: "overflow" });
 					activeCompaction = { reason: "overflow", willRetry: true };
 					try {
-						response = await harness.retry({ compact: { settings: recovery.compaction } });
+						response = await harness.retry({
+							compact: { settings: recovery.compaction, execution: compactionExecution },
+						});
 					} catch (error) {
 						if (activeCompaction) {
+							const aborted = isCompactionAbort(error);
 							emit({
 								type: "compaction_end",
 								reason: "overflow",
 								result: undefined,
-								aborted: false,
+								aborted,
 								willRetry: false,
-								errorMessage: error instanceof Error ? error.message : String(error),
+								errorMessage: aborted ? undefined : error instanceof Error ? error.message : String(error),
 							});
 							activeCompaction = undefined;
 						}
@@ -196,16 +226,17 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 				emit({ type: "compaction_start", reason: "threshold" });
 				activeCompaction = { reason: "threshold", willRetry: false };
 				try {
-					await harness.compact(undefined, recovery.compaction);
+					await harness.compact(undefined, recovery.compaction, compactionExecution);
 				} catch (error) {
 					if (activeCompaction) {
+						const aborted = isCompactionAbort(error);
 						emit({
 							type: "compaction_end",
 							reason: "threshold",
 							result: undefined,
-							aborted: false,
+							aborted,
 							willRetry: false,
-							errorMessage: error instanceof Error ? error.message : String(error),
+							errorMessage: aborted ? undefined : error instanceof Error ? error.message : String(error),
 						});
 						activeCompaction = undefined;
 					}
@@ -275,16 +306,17 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 		emit({ type: "compaction_start", reason: "manual" });
 		activeCompaction = { reason: "manual", willRetry: false };
 		try {
-			return await harness.compact(customInstructions);
+			return await harness.compact(customInstructions, recovery.compaction, compactionExecution);
 		} catch (error) {
 			if (activeCompaction) {
+				const aborted = isCompactionAbort(error);
 				emit({
 					type: "compaction_end",
 					reason: "manual",
 					result: undefined,
-					aborted: false,
+					aborted,
 					willRetry: false,
-					errorMessage: error instanceof Error ? error.message : String(error),
+					errorMessage: aborted ? undefined : error instanceof Error ? error.message : String(error),
 				});
 				activeCompaction = undefined;
 			}
@@ -302,6 +334,7 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 		appendEntry,
 		compact: compactSession,
 		abortRetry: () => retryAbortController?.abort(),
+		abortCompaction: () => harness.abortCompaction(),
 		abort: () => harness.abort(),
 		waitForIdle: () => harness.waitForIdle(),
 		clearQueuedMessages: () => harness.clearQueuedMessages(),

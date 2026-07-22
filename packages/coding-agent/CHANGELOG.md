@@ -4,7 +4,10 @@
 
 ### Added
 
+- Add independent compaction model and thinking controls, including cancellable Aizen manual and automatic compaction.
 - Add a Recode-owned Telegram gateway with private-user authorization, stable Aizen sessions, queued turns, long polling, streaming previews, and basic session controls.
+- Add a typed, channel-neutral Recode Gateway boundary for session routing, queued Aizen execution, cancellation, and adapter-owned delivery.
+- Add SQLite-backed Telegram job idempotency and recovery, durable route sessions, owner-only group access, and topic-scoped sessions.
 - Report named-worker harness setup time separately from total model-backed run time.
 - Add generic named-worker aliases, a `/worker` roster/settings/direct-chat page, and personality-aware handoff presentation that keeps technical ids out of the normal TUI.
 - Add `/levi` and `/mayuri` direct-chat shortcuts and preserve argument hints for extension commands in slash autocomplete.
