@@ -2,6 +2,7 @@ import { type AgentEvent, AgentHarness, type AgentMessage, Session } from "@reit
 import { NodeExecutionEnv } from "@reitaard/repi-agent-core/node";
 import type { AssistantMessage, ImageContent, Models, TextContent, UserMessage } from "@reitaard/repi-ai";
 import { isContextOverflow, isRetryableAssistantError } from "@reitaard/repi-ai/compat";
+import { getAgentDir } from "../config.ts";
 import { sleep } from "../utils/sleep.ts";
 import type {
 	AgentSession,
@@ -12,6 +13,7 @@ import type {
 import { calculateContextTokens, shouldCompact } from "./compaction/index.ts";
 import { createHarnessModels } from "./harness-models.ts";
 import type { CustomMessage } from "./messages.ts";
+import { RecodeSessionControlHost } from "./recode-session-control.ts";
 import { RecodeSessionStorage } from "./recode-session-storage.ts";
 
 export interface AizenRuntime {
@@ -102,6 +104,12 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 	let pendingMessageCount = 0;
 	let retryAbortController: AbortController | undefined;
 	let running = false;
+	const sessionControl = new RecodeSessionControlHost(
+		getAgentDir(),
+		options.agentSession.sessionId,
+		options.agentSession.sessionFile,
+		() => harness.abort(),
+	);
 	const flushAgentEnd = (willRetry: boolean): void => {
 		if (!pendingAgentEnd) return;
 		emit({ ...pendingAgentEnd, willRetry });
@@ -134,6 +142,9 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 			return;
 		}
 		if (!isAgentLifecycleEvent(event)) return;
+		if (event.type === "message_update" && event.message.role === "assistant") {
+			sessionControl.setGenerating();
+		}
 		await hooks.lifecycle?.(event);
 		if (event.type === "agent_end") pendingAgentEnd = event;
 		else emit(event);
@@ -150,6 +161,7 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 
 	const runWithRecovery = async (start: () => Promise<AssistantMessage>): Promise<AssistantMessage> => {
 		let retryAttempt = 0;
+		await sessionControl.start();
 		running = true;
 		try {
 			let response = await start();
@@ -249,6 +261,7 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 			flushAgentEnd(false);
 			await hooks.settled?.();
 			emit({ type: "agent_settled" });
+			await sessionControl.stop().catch(() => undefined);
 		}
 	};
 	const prompt = async (text: string, promptOptions?: { images?: ImageContent[] }): Promise<AssistantMessage> =>

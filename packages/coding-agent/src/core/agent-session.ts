@@ -57,6 +57,7 @@ import {
 	resetApiProviders,
 	streamSimple,
 } from "@reitaard/repi-ai/compat";
+import { getAgentDir } from "../config.ts";
 import { loadLspConfig } from "../lsp/config.ts";
 import { startLspLifecycle } from "../lsp/lifecycle.ts";
 import { createLspWritethrough } from "../lsp/writethrough.ts";
@@ -111,6 +112,7 @@ import { emitSessionShutdownEvent } from "./extensions/runner.ts";
 import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
 import type { ModelRegistry } from "./model-registry.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
+import { RecodeSessionControlHost } from "./recode-session-control.ts";
 import { getRecodeSessionReference } from "./recode-session-identity.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
 import type { BranchSummaryEntry, CompactionEntry, SessionEntry, SessionManager } from "./session-manager.ts";
@@ -398,6 +400,7 @@ export class AgentSession {
 	private _baseSystemPrompt = "";
 	private _baseSystemPromptOptions!: BuildSystemPromptOptions;
 	private _systemPromptOverride?: string;
+	private _sessionControl?: RecodeSessionControlHost;
 
 	constructor(config: AgentSessionConfig) {
 		this.agent = config.agent;
@@ -597,6 +600,8 @@ export class AgentSession {
 			await this._extensionRunner.emit({ type: "agent_settled" });
 			this._emit({ type: "agent_settled" });
 		} finally {
+			await this._sessionControl?.stop().catch(() => undefined);
+			this._sessionControl = undefined;
 			this._resolveIdleWaitIfIdle();
 		}
 	}
@@ -606,6 +611,18 @@ export class AgentSession {
 
 	/** Internal handler for agent events - shared by subscribe and reconnect */
 	private _handleAgentEvent = async (event: AgentEvent): Promise<void> => {
+		if (event.type === "agent_start") {
+			this._sessionControl = new RecodeSessionControlHost(
+				getAgentDir(),
+				this.sessionId,
+				this.sessionFile,
+				async () => this.agent.abort(),
+			);
+			await this._sessionControl.start();
+		} else if (event.type === "message_update" && event.message.role === "assistant") {
+			this._sessionControl?.setGenerating();
+		}
+
 		// When a user message starts, check if it's from either queue and remove it BEFORE emitting
 		// This ensures the UI sees the updated queue state
 		if (event.type === "message_start" && event.message.role === "user") {
@@ -866,6 +883,8 @@ export class AgentSession {
 		} catch {
 			// Dispose must succeed even if an abort hook throws.
 		}
+		void this._sessionControl?.stop().catch(() => undefined);
+		this._sessionControl = undefined;
 
 		this._extensionRunner.invalidate(
 			"This extension ctx is stale after session replacement or reload. Do not use a captured pi or command ctx after ctx.newSession(), ctx.fork(), ctx.switchSession(), or ctx.reload(). For newSession, fork, and switchSession, move post-replacement work into withSession and use the ctx passed to withSession. For reload, do not use the old ctx after await ctx.reload().",
@@ -2774,6 +2793,15 @@ export class AgentSession {
 			await this._extensionRunner.emit({ type: "session_start", reason: "reload" });
 			await this.extendResourcesFromExtensions("reload");
 		}
+	}
+
+	/** Refresh the persisted transcript without changing the active session identity. */
+	reloadTranscriptFromDisk(): boolean {
+		const sessionFile = this.sessionManager.getSessionFile();
+		if (!sessionFile) return false;
+		this.sessionManager.setSessionFile(sessionFile);
+		this.agent.state.messages = this.sessionManager.buildSessionContext().messages;
+		return true;
 	}
 
 	// =========================================================================
