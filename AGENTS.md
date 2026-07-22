@@ -2,7 +2,6 @@
 
 ## Conversational Style
 
-- Keep answers short and concise
 - No emojis in commits, issues, PR comments, or code
 - No fluff or cheerful filler text (e.g., "Thanks @user" not "Thanks so much @user!")
 - Technical prose only, be direct
@@ -25,13 +24,13 @@
 
 ## Commands
 
-- After code changes (not docs): `npm run check` (full output, no tail). Fix all errors, warnings, and infos before committing. Does not run tests.
-- Never run `npm run build` or `npm test` unless requested by the user.
-- Never run the full vitest suite directly: it includes e2e tests that activate when endpoint/auth env vars are present. For all non-e2e tests, run `./test.sh` from the repo root. Otherwise run specific tests from the package root: `node ../../node_modules/vitest/dist/cli.js --run test/specific.test.ts`.
-- If you create or modify a test file, run it and iterate on test or implementation until it passes.
+- After code changes (not docs), run `npm run check` with full output and fix every error, warning, and info. It does not run tests.
+- Never run `npm run build` or the unrestricted `npm test` unless requested.
+- Run non-e2e tests through `./test.sh` from the repo root. For a focused test, run `node ../../node_modules/vitest/dist/cli.js --run test/specific.test.ts` from its package.
+- If you create or modify a test, run it and iterate until it passes.
 - For `packages/coding-agent/test/suite/`, use `test/suite/harness.ts` + the faux provider. No real provider APIs, keys, or paid tokens.
 - Put issue-specific regressions under `packages/coding-agent/test/suite/regressions/` named `<issue-number>-<short-slug>.test.ts`.
-- For ad-hoc scripts, `write` them to a temp file (e.g. `/tmp`), run, edit if needed, remove when done. Don't embed multi-line scripts in `bash` commands.
+- Put ad-hoc scripts in a temporary file, run them, then remove them. Do not embed multiline scripts in shell commands.
 - Never commit unless the user asks.
 
 ## Dependency and Install Security
@@ -44,19 +43,28 @@
 
 ## Git
 
-Multiple pi sessions may be running in this cwd at the same time, each modifying different files. Git operations that touch unstaged, staged, or untracked files outside your own changes will stomp on other sessions' work. Follow these rules:
+Multiple Recode sessions may run simultaneously. Preserve changes outside your task.
 
-Committing:
+### Committing
 
-- Only commit files YOU changed in THIS session.
-- Stage explicit paths (`git add <path1> <path2>`); never `git add -A` / `git add .`.
-- Before committing, run `git status` and verify you are only staging your files.
-- `packages/ai/src/models.generated.ts` may always be included alongside your files.
-- Message format: `{feat,fix,docs}[(ai,tui,agent,coding-agent)]: <commit message> (optionally multiple lines)`. Message is informative and concise.
+- Commit only files changed for the current task.
+- Stage explicit paths; never use `git add -A` or `git add .`.
+- Check `git status` before committing.
+- Generated `packages/ai/src/models.generated.ts` may accompany its generator change.
+- Use `{feat,fix,docs}[(ai,tui,agent,coding-agent)]: <message>`.
 
-Never run (destroys other agents' work or bypasses checks):
+### Prohibited Operations
 
-- `git reset --hard`, `git checkout .`, `git clean -fd`, `git stash`, `git add -A`, `git add .`, `git commit --no-verify`.
+Never run these (destroys other agents' work or bypasses checks):
+
+| Operation | Risk |
+|-----------|------|
+| `git reset --hard`, `git checkout .` | Loses all uncommitted changes |
+| `git clean -fd` | Removes untracked files |
+| `git stash` | Hides other sessions' work |
+| `git add -A`, `git add .` | Stages unintended files |
+| `git commit --no-verify` | Skips validation |
+| Force push | Overwrites remote history |
 
 If rebase conflicts occur:
 
@@ -88,16 +96,16 @@ When closing issues via commit:
 
 - Include `fixes #<number>` or `closes #<number>` in the message so merging auto-closes the issue. For multiple issues, repeat the keyword per issue (`closes #1, closes #2`); a shared keyword (`closes #1, #2`) only closes the first.
 
-## Testing pi Interactive Mode with tmux
+## Testing Recode Interactive Mode with tmux
 
-Run the TUI in a controlled terminal (from the repo root):
+Run the TUI in a controlled terminal:
 
 ```bash
 tmux new-session -d -s pi-test -x 80 -y 24
 tmux send-keys -t pi-test "./pi-test.sh" Enter
 sleep 3 && tmux capture-pane -t pi-test -p     # capture after startup
 tmux send-keys -t pi-test "your prompt here" Enter
-tmux send-keys -t pi-test Escape               # special keys (also C-o for ctrl+o, etc.)
+tmux send-keys -t pi-test Escape               # special keys (also C-o for ctrl+o)
 tmux kill-session -t pi-test
 ```
 
@@ -121,34 +129,35 @@ Attribution:
 
 **Lockstep versioning**: all packages share one version; every release updates all together. `patch` = fixes + additions, `minor` = breaking changes. No major releases.
 
-1. **Update CHANGELOGs**: ask the user whether they ran the `/cl` prompt on the latest commit on `main`. If not, they must run `/cl` first to audit and update each package's `[Unreleased]` section before releasing.
+1. **Update CHANGELOGs**: ask whether `/cl` was run on the latest `main`. If not, run it before releasing.
 
-2. **Local smoke test**: build an unpublished release and smoke test from outside the repo (so it can't resolve workspace files):
+2. **Local smoke test**: build an unpublished release and test it outside the repo so workspace packages cannot mask missing dependencies:
+
    ```bash
    npm run release:local -- --out /tmp/pi-local-release --force
    cd /tmp
 
-   # Node package install smoke tests
+   # Node package tests
    /tmp/pi-local-release/node/pi --help
    /tmp/pi-local-release/node/pi --version
    /tmp/pi-local-release/node/pi --list-models
    /tmp/pi-local-release/node/pi -p "Say exactly: ok"
-   /tmp/pi-local-release/node/pi
 
-   # Bun binary smoke tests
+   # Bun binary tests
    /tmp/pi-local-release/bun/pi --help
    /tmp/pi-local-release/bun/pi --version
    /tmp/pi-local-release/bun/pi --list-models
    /tmp/pi-local-release/bun/pi -p "Say exactly: ok"
-   /tmp/pi-local-release/bun/pi
    ```
    Verify both Node and Bun startup, model/account listing, interactive startup, and at least one real prompt with the intended default provider. The bare commands `/tmp/pi-local-release/node/pi` and `/tmp/pi-local-release/bun/pi` start interactive mode; run each in tmux, submit a prompt, and wait for the model reply before considering the interactive smoke test passed. Failures are release blockers unless the user explicitly accepts the risk.
 
 3. **Run the release script**:
+
    ```bash
-   PI_ALLOW_LOCKFILE_CHANGE=1 npm_config_min_release_age=0 npm run release:patch    # fixes + additions
-   PI_ALLOW_LOCKFILE_CHANGE=1 npm_config_min_release_age=0 npm run release:minor    # breaking changes
+   PI_ALLOW_LOCKFILE_CHANGE=1 npm_config_min_release_age=0 npm run release:patch  # fixes + additions
+   PI_ALLOW_LOCKFILE_CHANGE=1 npm_config_min_release_age=0 npm run release:minor  # breaking changes
    ```
+
    Use `npm_config_min_release_age=0` only for the release command. The repo's normal npm age gate can otherwise block the release lockfile refresh when the current workspace package version was published recently. Review any lockfile or shrinkwrap diffs the release creates before push.
 
    The release script bumps all package versions, updates changelogs, regenerates release artifacts, runs `npm run check`, commits `Release vX.Y.Z`, tags `vX.Y.Z`, adds fresh `## [Unreleased]` changelog sections, commits `Add [Unreleased] section for next cycle`, then pushes `main` and the tag. Do not rerun the release script after a tag was pushed.
@@ -159,4 +168,4 @@ Attribution:
 
 ## User Override
 
-If the user's instructions conflict with any rule in this document, ask for explicit confirmation before overriding. Only then execute their instructions.
+If a user instruction conflicts with these rules, ask for explicit confirmation before overriding it.

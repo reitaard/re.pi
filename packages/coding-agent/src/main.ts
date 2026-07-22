@@ -144,11 +144,12 @@ type ResolvedSession =
 	| { type: "path"; path: string } // Direct file path
 	| { type: "local"; path: string } // Found in current project
 	| { type: "global"; path: string; cwd: string } // Found in different project
+	| { type: "ambiguous"; arg: string; count: number }
 	| { type: "not_found"; arg: string }; // Not found anywhere
 
 /**
  * Resolve a session argument to a file path.
- * If it looks like a path, use as-is. Otherwise try to match as session ID prefix.
+ * If it looks like a path, use as-is. Otherwise match an ID, ID prefix, or custom name.
  */
 async function findLocalSessionByExactId(
 	sessionId: string,
@@ -174,6 +175,9 @@ async function resolveSessionPath(sessionArg: string, cwd: string, sessionDir?: 
 	if (localMatch) {
 		return { type: "local", path: localMatch.path };
 	}
+	const localNameMatches = localSessions.filter((s) => s.name === sessionArg);
+	if (localNameMatches.length === 1) return { type: "local", path: localNameMatches[0].path };
+	if (localNameMatches.length > 1) return { type: "ambiguous", arg: sessionArg, count: localNameMatches.length };
 
 	// Try global search across all projects
 	const allSessions = await SessionManager.listAll(sessionDir);
@@ -183,6 +187,11 @@ async function resolveSessionPath(sessionArg: string, cwd: string, sessionDir?: 
 	if (globalMatch) {
 		return { type: "global", path: globalMatch.path, cwd: globalMatch.cwd };
 	}
+	const globalNameMatches = allSessions.filter((s) => s.name === sessionArg);
+	if (globalNameMatches.length === 1) {
+		return { type: "global", path: globalNameMatches[0].path, cwd: globalNameMatches[0].cwd };
+	}
+	if (globalNameMatches.length > 1) return { type: "ambiguous", arg: sessionArg, count: globalNameMatches.length };
 
 	// Not found anywhere
 	return { type: "not_found", arg: sessionArg };
@@ -290,7 +299,13 @@ async function createSessionManager(
 
 			case "not_found":
 				console.error(chalk.red(`No session found matching '${resolved.arg}'`));
-				process.exit(1);
+				return process.exit(1);
+
+			case "ambiguous":
+				console.error(
+					chalk.red(`Session name '${resolved.arg}' matches ${resolved.count} sessions; use its ID instead`),
+				);
+				return process.exit(1);
 		}
 	}
 
@@ -314,7 +329,13 @@ async function createSessionManager(
 
 			case "not_found":
 				console.error(chalk.red(`No session found matching '${resolved.arg}'`));
-				process.exit(1);
+				return process.exit(1);
+
+			case "ambiguous":
+				console.error(
+					chalk.red(`Session name '${resolved.arg}' matches ${resolved.count} sessions; use its ID instead`),
+				);
+				return process.exit(1);
 		}
 	}
 

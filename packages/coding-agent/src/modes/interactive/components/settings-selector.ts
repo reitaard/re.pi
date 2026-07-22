@@ -497,12 +497,12 @@ export class SettingsSelectorComponent extends Container {
 			},
 			{
 				id: "compaction-model",
-				label: "Compaction model",
+				label: "Auto-compact model",
 				description: "Model used for manual and automatic context compaction",
 				currentValue: config.compactionModel,
 				submenu: (currentValue, done) =>
 					new SelectSubmenu(
-						"Compaction Model",
+						"Auto-compact Model",
 						"Choose Current model or pin compaction to a different available model.",
 						config.availableCompactionModels,
 						currentValue,

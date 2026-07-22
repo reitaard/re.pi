@@ -252,7 +252,7 @@ ${chalk.bold("Options:")}
   --legacy                      Temporarily use the legacy path
   --continue, -c                 Continue previous session
   --resume, -r                   Select a session to resume
-  --session <path|id>            Use specific session file or partial UUID
+  --session <path|id|name>       Use a session file, partial UUID, or custom name
   --session-id <id>              Use exact project session ID, creating it if missing
   --fork <path|id>               Fork specific session file or partial UUID into a new session
   --session-dir <dir>            Directory for session storage and lookup

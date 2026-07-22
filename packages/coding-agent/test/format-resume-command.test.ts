@@ -38,6 +38,7 @@ function createSessionManager(options: {
 	sessionFile?: string;
 	sessionId?: string;
 	sessionDir?: string;
+	sessionName?: string;
 	usesDefaultSessionDir?: boolean;
 }): SessionManager {
 	return {
@@ -45,6 +46,7 @@ function createSessionManager(options: {
 		getSessionFile: () => options.sessionFile,
 		getSessionId: () => options.sessionId ?? "0197f6e4-4cf9-7f44-a2d8-f8f7f49ee9d3",
 		getSessionDir: () => options.sessionDir ?? "/tmp/pi-sessions",
+		getSessionName: () => options.sessionName,
 		usesDefaultSessionDir: () => options.usesDefaultSessionDir ?? true,
 	} as unknown as SessionManager;
 }
@@ -56,6 +58,14 @@ describe("formatResumeCommand", () => {
 		const sessionManager = createSessionManager({ sessionFile, sessionId: "test-session" });
 
 		expect(formatResumeCommand(sessionManager)).toBe(`${APP_NAME} --session test-session`);
+	});
+
+	it("uses and quotes a custom session name", () => {
+		setStdoutIsTTY(true);
+		const sessionFile = createTempFile();
+		const sessionManager = createSessionManager({ sessionFile, sessionName: "Memory notes" });
+
+		expect(formatResumeCommand(sessionManager)).toBe(`${APP_NAME} --session 'Memory notes'`);
 	});
 
 	it("includes unquoted safe session dirs for non-default session dirs", () => {
