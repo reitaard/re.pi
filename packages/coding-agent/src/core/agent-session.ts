@@ -57,6 +57,7 @@ import {
 	resetApiProviders,
 	streamSimple,
 } from "@reitaard/repi-ai/compat";
+import { getAgentDir } from "../config.ts";
 import { loadLspConfig } from "../lsp/config.ts";
 import { startLspLifecycle } from "../lsp/lifecycle.ts";
 import { createLspWritethrough } from "../lsp/writethrough.ts";
@@ -111,6 +112,7 @@ import { emitSessionShutdownEvent } from "./extensions/runner.ts";
 import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
 import type { ModelRegistry } from "./model-registry.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
+import { RecodeSessionControlHost } from "./recode-session-control.ts";
 import { getRecodeSessionReference } from "./recode-session-identity.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
 import type { BranchSummaryEntry, CompactionEntry, SessionEntry, SessionManager } from "./session-manager.ts";
@@ -253,6 +255,8 @@ export interface AizenRuntimeProfile
 	> {
 	systemPrompt: string;
 	resources: AgentHarnessResources<HarnessSkill, HarnessPromptTemplate>;
+	compactionModel: Model<any>;
+	compactionThinkingLevel: ThinkingLevel;
 	recovery?: {
 		compaction: { enabled: boolean; reserveTokens: number; keepRecentTokens: number };
 		retry: { enabled: boolean; maxRetries: number; baseDelayMs: number };
@@ -396,6 +400,7 @@ export class AgentSession {
 	private _baseSystemPrompt = "";
 	private _baseSystemPromptOptions!: BuildSystemPromptOptions;
 	private _systemPromptOverride?: string;
+	private _sessionControl?: RecodeSessionControlHost;
 
 	constructor(config: AgentSessionConfig) {
 		this.agent = config.agent;
@@ -595,6 +600,8 @@ export class AgentSession {
 			await this._extensionRunner.emit({ type: "agent_settled" });
 			this._emit({ type: "agent_settled" });
 		} finally {
+			await this._sessionControl?.stop().catch(() => undefined);
+			this._sessionControl = undefined;
 			this._resolveIdleWaitIfIdle();
 		}
 	}
@@ -604,6 +611,18 @@ export class AgentSession {
 
 	/** Internal handler for agent events - shared by subscribe and reconnect */
 	private _handleAgentEvent = async (event: AgentEvent): Promise<void> => {
+		if (event.type === "agent_start") {
+			this._sessionControl = new RecodeSessionControlHost(
+				getAgentDir(),
+				this.sessionId,
+				this.sessionFile,
+				async () => this.agent.abort(),
+			);
+			await this._sessionControl.start();
+		} else if (event.type === "message_update" && event.message.role === "assistant") {
+			this._sessionControl?.setGenerating();
+		}
+
 		// When a user message starts, check if it's from either queue and remove it BEFORE emitting
 		// This ensures the UI sees the updated queue state
 		if (event.type === "message_start" && event.message.role === "user") {
@@ -864,6 +883,8 @@ export class AgentSession {
 		} catch {
 			// Dispose must succeed even if an abort hook throws.
 		}
+		void this._sessionControl?.stop().catch(() => undefined);
+		this._sessionControl = undefined;
 
 		this._extensionRunner.invalidate(
 			"This extension ctx is stale after session replacement or reload. Do not use a captured pi or command ctx after ctx.newSession(), ctx.fork(), ctx.switchSession(), or ctx.reload(). For newSession, fork, and switchSession, move post-replacement work into withSession and use the ctx passed to withSession. For reload, do not use the old ctx after await ctx.reload().",
@@ -1020,6 +1041,8 @@ export class AgentSession {
 		if (!model) {
 			throw new Error(formatNoModelSelectedMessage());
 		}
+		const compactionModel = this._resolveCompactionModel(model);
+		const compactionThinkingLevel = this._resolveCompactionThinkingLevel(compactionModel);
 		const tools = this.agent.state.tools.slice();
 		const resources: AgentHarnessResources<HarnessSkill, HarnessPromptTemplate> = {
 			promptTemplates: this._resourceLoader.getPrompts().prompts.map(({ name, description, content }) => ({
@@ -1044,6 +1067,8 @@ export class AgentSession {
 			steeringMode: this.steeringMode,
 			followUpMode: this.followUpMode,
 			resources,
+			compactionModel,
+			compactionThinkingLevel,
 			recovery: {
 				compaction: this.settingsManager.getCompactionSettings(),
 				retry: this.settingsManager.getRetrySettings(),
@@ -1858,6 +1883,34 @@ export class AgentSession {
 	// Compaction
 	// =========================================================================
 
+	private _resolveCompactionModel(currentModel: Model<any>): Model<any> {
+		const modelRef = this.settingsManager.getCompactionModel();
+		if (modelRef === "current") {
+			return currentModel;
+		}
+
+		const separatorIndex = modelRef.indexOf("/");
+		if (separatorIndex <= 0 || separatorIndex === modelRef.length - 1) {
+			throw new Error(`Invalid compaction model "${modelRef}". Choose a model again in /settings.`);
+		}
+		const provider = modelRef.slice(0, separatorIndex);
+		const modelId = modelRef.slice(separatorIndex + 1);
+		const model = this._modelRegistry.find(provider, modelId);
+		if (!model || !this._modelRegistry.hasConfiguredAuth(model)) {
+			throw new Error(
+				`Configured compaction model "${modelRef}" is unavailable. Choose another model in /settings.`,
+			);
+		}
+		return model;
+	}
+
+	private _resolveCompactionThinkingLevel(model: Model<any>): ThinkingLevel {
+		if (!model.reasoning) {
+			return "off";
+		}
+		return clampThinkingLevel(model, this.settingsManager.getCompactionThinkingLevel()) as ThinkingLevel;
+	}
+
 	/** Return whether the current branch contains history eligible for compaction. */
 	isCompactionAvailable(): boolean {
 		const settings = this.settingsManager.getCompactionSettings();
@@ -1884,7 +1937,9 @@ export class AgentSession {
 				throw new Error(formatNoModelSelectedMessage());
 			}
 
-			const { apiKey, headers, env } = await this._getSummarizationRequestAuth(this.model);
+			const compactionModel = this._resolveCompactionModel(this.model);
+			const compactionThinkingLevel = this._resolveCompactionThinkingLevel(compactionModel);
+			const { apiKey, headers, env } = await this._getSummarizationRequestAuth(compactionModel);
 
 			const pathEntries = this.sessionManager.getBranch();
 			const settings = this.settingsManager.getCompactionSettings();
@@ -1938,12 +1993,12 @@ export class AgentSession {
 				// Generate compaction result
 				const result = await compact(
 					preparation,
-					this.model,
+					compactionModel,
 					apiKey,
 					headers,
 					customInstructions,
 					this._compactionAbortController.signal,
-					this.thinkingLevel,
+					compactionThinkingLevel,
 					this.agent.streamFn,
 					env,
 				);
@@ -2140,11 +2195,13 @@ export class AgentSession {
 				return false;
 			}
 
+			const compactionModel = this._resolveCompactionModel(this.model);
+			const compactionThinkingLevel = this._resolveCompactionThinkingLevel(compactionModel);
 			let apiKey: string | undefined;
 			let headers: Record<string, string> | undefined;
 			let env: Record<string, string> | undefined;
 			if (this.agent.streamFn === streamSimple) {
-				const authResult = await this._modelRegistry.getApiKeyAndHeaders(this.model);
+				const authResult = await this._modelRegistry.getApiKeyAndHeaders(compactionModel);
 				if (!authResult.ok || !authResult.apiKey) {
 					return false;
 				}
@@ -2152,7 +2209,7 @@ export class AgentSession {
 				headers = authResult.headers;
 				env = authResult.env;
 			} else {
-				({ apiKey, headers, env } = await this._getSummarizationRequestAuth(this.model));
+				({ apiKey, headers, env } = await this._getSummarizationRequestAuth(compactionModel));
 			}
 
 			const pathEntries = this.sessionManager.getBranch();
@@ -2212,12 +2269,12 @@ export class AgentSession {
 				// Generate compaction result
 				const compactResult = await compact(
 					preparation,
-					this.model,
+					compactionModel,
 					apiKey,
 					headers,
 					undefined,
 					this._autoCompactionAbortController.signal,
-					this.thinkingLevel,
+					compactionThinkingLevel,
 					this.agent.streamFn,
 					env,
 				);
@@ -2282,15 +2339,19 @@ export class AgentSession {
 			return this.agent.hasQueuedMessages();
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : "compaction failed";
+			const aborted =
+				this._autoCompactionAbortController?.signal.aborted === true ||
+				(error instanceof Error && (error.name === "AbortError" || error.message === "Compaction cancelled"));
 			if (started) {
 				this._emit({
 					type: "compaction_end",
 					reason,
 					result: undefined,
-					aborted: false,
+					aborted,
 					willRetry: false,
-					errorMessage:
-						reason === "overflow"
+					errorMessage: aborted
+						? undefined
+						: reason === "overflow"
 							? `Context overflow recovery failed: ${errorMessage}`
 							: `Auto-compaction failed: ${errorMessage}`,
 				});
@@ -2732,6 +2793,15 @@ export class AgentSession {
 			await this._extensionRunner.emit({ type: "session_start", reason: "reload" });
 			await this.extendResourcesFromExtensions("reload");
 		}
+	}
+
+	/** Refresh the persisted transcript without changing the active session identity. */
+	reloadTranscriptFromDisk(): boolean {
+		const sessionFile = this.sessionManager.getSessionFile();
+		if (!sessionFile) return false;
+		this.sessionManager.setSessionFile(sessionFile);
+		this.agent.state.messages = this.sessionManager.buildSessionContext().messages;
+		return true;
 	}
 
 	// =========================================================================

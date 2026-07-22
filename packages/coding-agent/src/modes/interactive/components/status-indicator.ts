@@ -35,7 +35,7 @@ export class WorkingStatusIndicator extends StatusIndicator {
 	private usesCustomIndicator: boolean;
 	private workingMessage: string;
 
-	constructor(ui: TUI, message: string, indicator?: WorkingIndicatorOptions) {
+	constructor(ui: TUI, message: string, indicator?: WorkingIndicatorOptions, startedAt = Date.now()) {
 		super(
 			"working",
 			ui,
@@ -45,7 +45,7 @@ export class WorkingStatusIndicator extends StatusIndicator {
 			indicator ?? createRecodeMagicIndicator(selectRecodeSpinnerVerb()),
 		);
 		this.tui = ui;
-		this.startedAt = Date.now();
+		this.startedAt = startedAt;
 		this.usesCustomIndicator = indicator !== undefined;
 		this.workingMessage = message;
 		if (!this.usesCustomIndicator) {

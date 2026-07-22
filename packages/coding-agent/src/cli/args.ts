@@ -237,6 +237,7 @@ ${chalk.bold("Commands:")}
   ${APP_NAME} update [source|self]      Update RePi (use --all for RePi and extensions)
   ${APP_NAME} list                      List installed extensions from settings
   ${APP_NAME} config [-l]               Open TUI to enable/disable package resources (Tab switches scope)
+  ${APP_NAME} telegram                  Run the Telegram gateway (long polling)
   ${APP_NAME} <command> --help          Show help for install/remove/uninstall/update/list/config
 
 ${chalk.bold("Options:")}

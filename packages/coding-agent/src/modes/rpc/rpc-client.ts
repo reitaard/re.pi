@@ -27,6 +27,10 @@ type RpcCommandBody = DistributiveOmit<RpcCommand, "id">;
 export interface RpcClientOptions {
 	/** Path to the CLI entry point (default: searches for dist/cli.js) */
 	cliPath?: string;
+	/** Runtime executable used to launch the RPC process (default: node). */
+	runtimeExecutable?: string;
+	/** Arguments inserted before the RPC CLI arguments. */
+	runtimeArgs?: string[];
 	/** Working directory for the agent */
 	cwd?: string;
 	/** Environment variables */
@@ -90,11 +94,15 @@ export class RpcClient {
 			args.push(...this.options.args);
 		}
 
-		const childProcess = spawn("node", [cliPath, ...args], {
-			cwd: this.options.cwd,
-			env: { ...process.env, ...this.options.env },
-			stdio: ["pipe", "pipe", "pipe"],
-		});
+		const childProcess = spawn(
+			this.options.runtimeExecutable ?? "node",
+			[...(this.options.runtimeArgs ?? [cliPath]), ...args],
+			{
+				cwd: this.options.cwd,
+				env: { ...process.env, ...this.options.env },
+				stdio: ["pipe", "pipe", "pipe"],
+			},
+		);
 		this.process = childProcess;
 
 		// Collect stderr for debugging
@@ -234,6 +242,14 @@ export class RpcClient {
 	 */
 	async getState(): Promise<RpcSessionState> {
 		const response = await this.send({ type: "get_state" });
+		return this.getData(response);
+	}
+
+	/**
+	 * Wait until the child has completed runtime initialization and can process RPC commands.
+	 */
+	async waitUntilReady(timeout = 30000): Promise<RpcSessionState> {
+		const response = await this.send({ type: "get_state" }, timeout);
 		return this.getData(response);
 	}
 
@@ -528,7 +544,7 @@ export class RpcClient {
 		this.pendingRequests.clear();
 	}
 
-	private async send(command: RpcCommandBody): Promise<RpcResponse> {
+	private async send(command: RpcCommandBody, timeoutMs = 30000): Promise<RpcResponse> {
 		const childProcess = this.process;
 		const stdin = childProcess?.stdin;
 		if (!childProcess || !stdin) {
@@ -555,7 +571,7 @@ export class RpcClient {
 			const timeout = setTimeout(() => {
 				this.pendingRequests.delete(id);
 				reject(new Error(`Timeout waiting for response to ${command.type}. Stderr: ${this.stderr}`));
-			}, 30000);
+			}, timeoutMs);
 
 			this.pendingRequests.set(id, {
 				resolve: (response) => {

@@ -91,6 +91,7 @@ import { defaultModelPerProvider, findExactModelReferenceMatch, resolveModelScop
 import { DefaultPackageManager } from "../../core/package-manager.ts";
 import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "../../core/provider-display-names.ts";
 import { type AizenRuntime, createAizenRuntime } from "../../core/recode-aizen-runtime.ts";
+import { RecodeSessionControlClient } from "../../core/recode-session-control.ts";
 import { getRecodeSessionReference } from "../../core/recode-session-identity.ts";
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
@@ -364,6 +365,9 @@ export interface InteractiveModeOptions {
 export class InteractiveMode {
 	private runtimeHost: AgentSessionRuntime;
 	private aizenRuntime: AizenRuntime | undefined;
+	private remoteSessionControl: RecodeSessionControlClient | undefined;
+	private remoteSessionActive = false;
+	private remoteAttachmentGeneration = 0;
 	private ui: TUI;
 	private loadedResourcesContainer: Container;
 	private mcpStartupStatus: string | undefined;
@@ -491,7 +495,7 @@ export class InteractiveMode {
 		return this.session.settingsManager;
 	}
 	private get isAgentRunning(): boolean {
-		return this.aizenRuntime?.isRunning() ?? this.session.isStreaming;
+		return this.remoteSessionActive || (this.aizenRuntime?.isRunning() ?? this.session.isStreaming);
 	}
 	private get isRuntimeCompacting(): boolean {
 		return this.aizenRuntime?.isCompacting() ?? this.session.isCompacting;
@@ -518,6 +522,11 @@ export class InteractiveMode {
 		text: string,
 		options?: { images?: ImageContent[]; streamingBehavior?: "steer" | "followUp" },
 	): Promise<void> {
+		if (this.remoteSessionActive) {
+			throw new Error(
+				"This session is active in another Recode process. Wait for it to finish or press Esc to stop it.",
+			);
+		}
 		const runtime = this.aizenRuntime;
 		if (!runtime) {
 			await this.session.prompt(text, options);
@@ -553,6 +562,10 @@ export class InteractiveMode {
 	}
 
 	private async abortRuntime(): Promise<void> {
+		if (this.remoteSessionActive && this.remoteSessionControl) {
+			this.remoteSessionControl.abort();
+			return;
+		}
 		if (this.aizenRuntime) {
 			this.aizenRuntime.abortRetry();
 			await this.aizenRuntime.abort();
@@ -567,6 +580,14 @@ export class InteractiveMode {
 				? await this.aizenRuntime.compact(customInstructions)
 				: await this.session.compact(customInstructions)
 		) as Awaited<ReturnType<AgentSession["compact"]>>;
+	}
+
+	private abortCompactionRuntime(): void {
+		if (this.aizenRuntime) {
+			void this.aizenRuntime.abortCompaction();
+			return;
+		}
+		this.session.abortCompaction();
 	}
 
 	private rebuildAizenRuntime(): void {
@@ -1966,6 +1987,7 @@ export class InteractiveMode {
 	}
 
 	private async rebindCurrentSession(options: { renderBeforeBind?: boolean } = {}): Promise<void> {
+		this.detachRemoteSession();
 		this.unsubscribe?.();
 		this.unsubscribe = undefined;
 		this.aizenRuntime = this.options.aizenRuntime
@@ -1983,6 +2005,54 @@ export class InteractiveMode {
 		await this.updateAvailableProviderCount();
 		this.updateEditorBorderColor();
 		this.updateTerminalTitle();
+		await this.attachToRemoteSession();
+	}
+
+	private async attachToRemoteSession(): Promise<void> {
+		const generation = ++this.remoteAttachmentGeneration;
+		const client = await RecodeSessionControlClient.connect(getAgentDir(), this.session.sessionId, (message) => {
+			if (generation !== this.remoteAttachmentGeneration) return;
+			if (message.type === "state" && message.state.active) {
+				this.remoteSessionActive = true;
+				if (!(this.activeStatusIndicator instanceof WorkingStatusIndicator)) {
+					this.showStatusIndicator(
+						new WorkingStatusIndicator(this.ui, this.defaultWorkingMessage, undefined, message.state.startedAt),
+					);
+				}
+				if (message.state.generating && this.activeStatusIndicator instanceof WorkingStatusIndicator) {
+					this.activeStatusIndicator.setGenerating();
+				}
+				this.ui.requestRender();
+				return;
+			}
+			if (message.type === "settled" && this.remoteSessionActive) {
+				this.remoteSessionActive = false;
+				void this.refreshAfterRemoteSettlement(generation);
+			}
+		});
+		if (generation !== this.remoteAttachmentGeneration) {
+			client?.close();
+			return;
+		}
+		this.remoteSessionControl = client;
+	}
+
+	private detachRemoteSession(): void {
+		this.remoteAttachmentGeneration++;
+		this.remoteSessionActive = false;
+		this.remoteSessionControl?.close();
+		this.remoteSessionControl = undefined;
+	}
+
+	private async refreshAfterRemoteSettlement(generation: number): Promise<void> {
+		if (generation !== this.remoteAttachmentGeneration) return;
+		const sessionFile = this.session.sessionFile;
+		this.detachRemoteSession();
+		if (!sessionFile) {
+			this.clearStatusIndicator("working");
+			return;
+		}
+		await this.handleResumeSession(sessionFile);
 	}
 
 	private async handleFatalRuntimeError(prefix: string, error: unknown): Promise<never> {
@@ -3338,7 +3408,7 @@ export class InteractiveMode {
 				// Keep editor active; submissions are queued during compaction.
 				this.autoCompactionEscapeHandler = this.defaultEditor.onEscape;
 				this.defaultEditor.onEscape = () => {
-					this.session.abortCompaction();
+					this.abortCompactionRuntime();
 				};
 				this.showStatusIndicator(new CompactionStatusIndicator(this.ui, event.reason));
 				this.ui.requestRender();
@@ -4419,6 +4489,27 @@ export class InteractiveMode {
 			const selector = new SettingsSelectorComponent(
 				{
 					autoCompact: this.session.autoCompactionEnabled,
+					compactionModel: this.settingsManager.getCompactionModel(),
+					availableCompactionModels: [
+						{
+							value: "current",
+							label: "Current model",
+							description: "Follow the active chat model",
+						},
+						...this.session.modelRegistry
+							.getAvailable()
+							.sort((left, right) =>
+								`${left.provider}/${left.id}`.localeCompare(`${right.provider}/${right.id}`),
+							)
+							.map((model) => ({
+								value: `${model.provider}/${model.id}`,
+								label: model.id,
+								description:
+									model.name && model.name !== model.id ? `${model.provider} · ${model.name}` : model.provider,
+							})),
+					],
+					compactionThinkingLevel: this.settingsManager.getCompactionThinkingLevel(),
+					availableCompactionThinkingLevels: ["off", "minimal", "low", "medium", "high", "xhigh", "max"],
 					showImages: this.settingsManager.getShowImages(),
 					imageWidthCells: this.settingsManager.getImageWidthCells(),
 					autoResizeImages: this.settingsManager.getImageAutoResize(),
@@ -4454,6 +4545,15 @@ export class InteractiveMode {
 					onAutoCompactChange: (enabled) => {
 						this.session.setAutoCompactionEnabled(enabled);
 						this.footer.setAutoCompactEnabled(enabled);
+						this.rebuildAizenRuntime();
+					},
+					onCompactionModelChange: (model) => {
+						this.settingsManager.setCompactionModel(model);
+						this.rebuildAizenRuntime();
+					},
+					onCompactionThinkingLevelChange: (level) => {
+						this.settingsManager.setCompactionThinkingLevel(level);
+						this.rebuildAizenRuntime();
 					},
 					onShowImagesChange: (enabled) => {
 						this.settingsManager.setShowImages(enabled);
@@ -5723,7 +5823,7 @@ export class InteractiveMode {
 	}
 
 	private async handleReloadCommand(): Promise<void> {
-		if (this.isAgentRunning) {
+		if (this.isAgentRunning && !this.remoteSessionActive) {
 			this.showWarning("Wait for the current response to finish before reloading.");
 			return;
 		}
@@ -5732,6 +5832,8 @@ export class InteractiveMode {
 			return;
 		}
 
+		const wasRemotelyAttached = this.remoteSessionActive;
+		if (wasRemotelyAttached) this.detachRemoteSession();
 		this.resetExtensionUI();
 
 		const reloadBox = new Container();
@@ -5776,6 +5878,7 @@ export class InteractiveMode {
 
 		try {
 			await this.session.reload({ beforeSessionStart: restoreChatBeforeSessionStart });
+			this.session.reloadTranscriptFromDisk();
 			this.rebuildAizenRuntime();
 			restoreChatBeforeSessionStart();
 			configureHttpDispatcher(this.settingsManager.getHttpIdleTimeoutMs());
@@ -5819,11 +5922,13 @@ export class InteractiveMode {
 			);
 			dismissReloadBox(this.editor as Component);
 			reloadBoxDismissed = true;
+			if (wasRemotelyAttached) await this.attachToRemoteSession();
 		} catch (error) {
 			if (!reloadBoxDismissed) {
 				dismissReloadBox(previousEditor as Component);
 			}
 			this.showError(`Reload failed: ${error instanceof Error ? error.message : String(error)}`);
+			if (wasRemotelyAttached) await this.attachToRemoteSession();
 		}
 	}
 
@@ -6456,6 +6561,7 @@ export class InteractiveMode {
 	}
 
 	stop(): void {
+		this.detachRemoteSession();
 		if (this.settingsManager.getShowTerminalProgress()) {
 			this.ui.terminal.setProgress(false);
 		}

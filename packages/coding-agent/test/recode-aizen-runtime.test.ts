@@ -32,6 +32,8 @@ describe("Aizen runtime", () => {
 		models.setProvider(faux.provider);
 		const profile: AizenRuntimeProfile = {
 			model: faux.getModel(),
+			compactionModel: faux.getModel(),
+			compactionThinkingLevel: "off",
 			thinkingLevel: "off",
 			tools: [],
 			systemPrompt: "You are Aizen.",
@@ -56,12 +58,13 @@ describe("Aizen runtime", () => {
 		expect(runtime.profile).toBe(profile);
 		const reopened = SessionManager.open(manager.getSessionFile()!);
 		const branch = reopened.getBranch();
-		expect(branch.map((entry) => entry.type)).toEqual(["message", "message"]);
-		expect(branch[0]).toMatchObject({
+		const messageEntries = branch.filter((entry) => entry.type === "message");
+		expect(messageEntries).toHaveLength(2);
+		expect(messageEntries[0]).toMatchObject({
 			message: { role: "user", content: [{ type: "text", text: "Inspect the project" }] },
 		});
-		expect(branch[1]).toMatchObject({
-			parentId: branch[0]?.id,
+		expect(messageEntries[1]).toMatchObject({
+			parentId: messageEntries[0]?.id,
 			message: { role: "assistant", content: [{ type: "text", text: "Aizen ready" }] },
 		});
 		expect(eventTypes.at(-2)).toBe("agent_end");
@@ -81,6 +84,8 @@ describe("Aizen runtime", () => {
 		models.setProvider(faux.provider);
 		const profile: AizenRuntimeProfile = {
 			model: faux.getModel(),
+			compactionModel: faux.getModel(),
+			compactionThinkingLevel: "off",
 			thinkingLevel: "off",
 			tools: [],
 			systemPrompt: "You are Aizen.",
@@ -137,6 +142,8 @@ describe("Aizen runtime", () => {
 		models.setProvider(faux.provider);
 		const profile: AizenRuntimeProfile = {
 			model: faux.getModel(),
+			compactionModel: faux.getModel(),
+			compactionThinkingLevel: "off",
 			thinkingLevel: "off",
 			tools: [],
 			systemPrompt: "Base prompt",

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { RecodeMemoryRuntime } from "../src/core/recode-memory/recode-memory-runtime.ts";
 import {
 	buildRecodeShioriReviewChunks,
+	executeRecodeShiori,
 	getRecodeShioriCheckpoint,
 	getRecodeShioriGreeting,
 	parseRecodeShioriCandidates,
@@ -102,6 +103,132 @@ describe("Shiori (栞) memory review", () => {
 			max_output_tokens: 1024,
 			store: false,
 		});
+	});
+
+	it("omits reasoning for LM Studio models that do not expose reasoning configuration", async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					output: [{ type: "message", content: '{"memories":[]}' }],
+					stats: { reasoning_output_tokens: 0, total_output_tokens: 6 },
+				}),
+				{ status: 200, headers: { "Content-Type": "application/json" } },
+			),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		try {
+			await expect(
+				runRecodeShioriHarness({
+					cwd: "/project",
+					model: {
+						id: "qwen2.5-3b-instruct",
+						name: "Qwen 2.5 3B Instruct",
+						api: "openai-completions",
+						provider: "open-provider",
+						baseUrl: "http://127.0.0.1:1234/v1",
+						reasoning: false,
+						input: ["text"],
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+						contextWindow: 32768,
+						maxTokens: 4096,
+					},
+					modelRegistry: {
+						getApiKeyAndHeaders: vi.fn().mockResolvedValue({
+							ok: true,
+							apiKey: "test-key",
+							headers: {},
+						}),
+					} as never,
+					systemPrompt: "Review memory.",
+					prompt: "Transcript",
+					thinking: false,
+				}),
+			).resolves.toBe('{"memories":[]}');
+
+			const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+			const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+			expect(body).not.toHaveProperty("reasoning");
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it("retries once when LM Studio returns malformed JSON", async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						output: [{ type: "message", content: '{"memories":[]' }],
+						stats: { reasoning_output_tokens: 0, total_output_tokens: 5 },
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				),
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						output: [{ type: "message", content: '{"memories":[]}' }],
+						stats: { reasoning_output_tokens: 0, total_output_tokens: 6 },
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				),
+			);
+
+		vi.stubGlobal("fetch", fetchMock);
+
+		const sessionManager = SessionManager.inMemory("/project");
+		sessionManager.appendMessage({
+			role: "user",
+			content: "Always verify focused tests before committing.",
+			timestamp: 0,
+		});
+
+		try {
+			const result = await executeRecodeShiori({
+				cwd: "/project",
+				sessionManager,
+				modelRegistry: {
+					getApiKeyAndHeaders: vi.fn().mockResolvedValue({
+						ok: true,
+						apiKey: "test-key",
+						headers: {},
+					}),
+				} as never,
+				projectTrusted: true,
+				config: normalizeRecodeMemoryConfig({}),
+				manager: {
+					search: vi.fn().mockResolvedValue([]),
+					write: vi.fn(),
+					sync: vi.fn(),
+				} as never,
+				model: {
+					id: "qwen2.5-3b-instruct",
+					name: "Qwen 2.5 3B Instruct",
+					api: "openai-completions",
+					provider: "open-provider",
+					baseUrl: "http://127.0.0.1:1234/v1",
+					reasoning: false,
+					input: ["text"],
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+					contextWindow: 32768,
+					maxTokens: 4096,
+				},
+				appendMessage: vi.fn(),
+			});
+
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+			expect(result).toMatchObject({
+				reviewedEntries: 1,
+				saved: 0,
+			});
+			expect(getRecodeShioriCheckpoint(sessionManager.getBranch())).toMatchObject({
+				saved: 0,
+			});
+		} finally {
+			vi.unstubAllGlobals();
+		}
 	});
 
 	it("greets from the local time without spending a model call", () => {

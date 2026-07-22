@@ -4,6 +4,7 @@
 
 ### Added
 
+- Added cancellable harness compaction with optional per-operation model and thinking overrides.
 - Added `AgentToolResult.addedToolNames` propagation to `ToolResultMessage` so tools introduced by a result can be loaded from that transcript point onward ([#6474](https://github.com/earendil-works/pi-mono/pull/6474)).
 
 ### Fixed

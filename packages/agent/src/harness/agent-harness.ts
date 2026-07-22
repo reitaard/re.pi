@@ -172,6 +172,7 @@ export class AgentHarness<
 	readonly models: Models;
 	private phase: AgentHarnessPhase = "idle";
 	private runAbortController?: AbortController;
+	private compactionAbortController?: AbortController;
 	private runPromise?: Promise<void>;
 	private pendingSessionWrites: PendingSessionWrite[] = [];
 	private model: Model<any>;
@@ -722,7 +723,11 @@ export class AgentHarness<
 
 	/** Retry the latest failed assistant turn without duplicating its user prompt. */
 	async retry(options?: {
-		compact?: { instructions?: string; settings?: CompactionSettings };
+		compact?: {
+			instructions?: string;
+			settings?: CompactionSettings;
+			execution?: { model?: Model<any>; thinkingLevel?: ThinkingLevel };
+		};
 	}): Promise<AssistantMessage> {
 		if (this.phase !== "idle") throw new AgentHarnessError("busy", "AgentHarness is busy");
 		const branch = await this.session.getBranch();
@@ -735,7 +740,7 @@ export class AgentHarness<
 		}
 		await this.session.getStorage().setLeafId(latest.parentId);
 		if (options?.compact) {
-			await this.compact(options.compact.instructions, options.compact.settings);
+			await this.compact(options.compact.instructions, options.compact.settings, options.compact.execution);
 		}
 		this.phase = "retry";
 		const finishRunPromise = this.startRunPromise();
@@ -848,12 +853,17 @@ export class AgentHarness<
 	async compact(
 		customInstructions?: string,
 		settings: CompactionSettings = DEFAULT_COMPACTION_SETTINGS,
+		execution?: { model?: Model<any>; thinkingLevel?: ThinkingLevel },
 	): Promise<{ summary: string; firstKeptEntryId: string; tokensBefore: number; details?: unknown }> {
 		if (this.phase !== "idle") throw new AgentHarnessError("busy", "compact() requires idle harness");
 		this.phase = "compaction";
+		const abortController = new AbortController();
+		this.compactionAbortController = abortController;
+		const finishRunPromise = this.startRunPromise();
 		try {
 			return await this.runJournaledOperation("compaction", async () => {
-				const model = this.model;
+				const model = execution?.model ?? this.model;
+				const thinkingLevel = execution?.thinkingLevel ?? this.thinkingLevel;
 				if (!model) throw new AgentHarnessError("invalid_state", "No model set for compaction");
 				const branchEntries = await this.session.getBranch();
 				const preparationResult = prepareCompaction(branchEntries, settings);
@@ -865,14 +875,26 @@ export class AgentHarness<
 					preparation,
 					branchEntries,
 					customInstructions,
-					signal: new AbortController().signal,
+					signal: abortController.signal,
 				});
-				if (hookResult?.cancel) throw new AgentHarnessError("compaction", "Compaction cancelled");
+				if (hookResult?.cancel || abortController.signal.aborted) {
+					throw new CompactionError("aborted", "Compaction cancelled");
+				}
 				const provided = hookResult?.compaction;
 				const compactResult = provided
 					? { ok: true as const, value: provided }
-					: await compact(preparation, this.models, model, customInstructions, undefined, this.thinkingLevel);
+					: await compact(
+							preparation,
+							this.models,
+							model,
+							customInstructions,
+							abortController.signal,
+							thinkingLevel,
+						);
 				if (!compactResult.ok) throw compactResult.error;
+				if (abortController.signal.aborted) {
+					throw new CompactionError("aborted", "Compaction cancelled");
+				}
 				const result = compactResult.value;
 				const entryId = await this.session.appendCompaction(
 					result.summary,
@@ -894,7 +916,11 @@ export class AgentHarness<
 		} catch (error) {
 			throw normalizeHarnessError(error, "compaction");
 		} finally {
+			if (this.compactionAbortController === abortController) {
+				this.compactionAbortController = undefined;
+			}
 			this.phase = "idle";
+			finishRunPromise();
 		}
 	}
 
@@ -1175,6 +1201,7 @@ export class AgentHarness<
 		this.steerQueue = [];
 		this.followUpQueue = [];
 		this.runAbortController?.abort();
+		this.compactionAbortController?.abort();
 		const errors: Error[] = [];
 		try {
 			await this.emitQueueUpdate();
@@ -1196,6 +1223,13 @@ export class AgentHarness<
 			throw normalizeHarnessError(cause, "hook");
 		}
 		return { clearedSteer, clearedFollowUp };
+	}
+
+	async abortCompaction(): Promise<void> {
+		const controller = this.compactionAbortController;
+		if (!controller) return;
+		controller.abort();
+		await this.waitForIdle();
 	}
 
 	async waitForIdle(): Promise<void> {

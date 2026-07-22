@@ -231,7 +231,8 @@ Keep the upstream license, changelog history, issue links, and attribution.
 - [x] Stabilize working coding-agent memory and LSP implementations without premature service extraction.
 - [x] Record the AgentHarness migration hold, parity gates, and ownership map in `docs/AGENTHARNESS.md`.
 - [ ] Design SQLite schemas only after the service and event boundaries are set.
-- [ ] Select the first local client/channel.
+- [x] Select Telegram as the first authenticated channel and prove the narrow
+  Recode Gateway-to-Aizen RPC path.
 - [x] Move publishable workspaces to the `@reitaard/repi-*` namespace.
 - [x] Prove isolated named workers and reusable in-memory worker conversations.
 - [x] Verify direct named-worker start/continue behavior through the source CLI.

@@ -13,26 +13,35 @@ process.title = APP_NAME;
 process.env.PI_CODING_AGENT = "true";
 process.emitWarning = (() => {}) as typeof process.emitWarning;
 
-// Register upstream Pi package aliases before loading the application graph.
-// This keeps third-party extensions on Recode's single runtime/TUI instance.
+// Must run before loading Recode or third-party extension modules.
 await installPiPackageCompatibilityHooks();
 
-// Configure undici's global dispatcher before provider SDKs issue requests.
-// Runtime settings are applied once SettingsManager has loaded global/project settings.
+// Configure undici before provider SDKs issue requests.
 configureHttpDispatcher();
 
-const [{ RecodeMemoryRuntime }, { main }, { recodeMemory }, { recodeOpenProvider }] = await Promise.all([
-	import("./core/recode-memory/recode-memory-runtime.ts"),
-	import("./main.ts"),
-	import("./recode-memory.ts"),
-	import("./recode-open-provider.ts"),
-]);
+const args = process.argv.slice(2);
 
-const memoryRuntime = new RecodeMemoryRuntime();
+if (args[0] === "telegram") {
+	const { runRecodeTelegramGateway } = await import("./recode-telegram-gateway.ts");
 
-void main(process.argv.slice(2), {
-	extensionFactories: [
-		{ name: "recode-open-provider", factory: recodeOpenProvider },
-		{ name: "recode-memory", factory: (pi) => recodeMemory(pi, memoryRuntime) },
-	],
-}).finally(() => memoryRuntime.close());
+	void runRecodeTelegramGateway().catch((error: unknown) => {
+		console.error(error instanceof Error ? `Error: ${error.message}` : `Error: ${String(error)}`);
+		process.exitCode = 1;
+	});
+} else {
+	const [{ RecodeMemoryRuntime }, { main }, { recodeMemory }, { recodeOpenProvider }] = await Promise.all([
+		import("./core/recode-memory/recode-memory-runtime.ts"),
+		import("./main.ts"),
+		import("./recode-memory.ts"),
+		import("./recode-open-provider.ts"),
+	]);
+
+	const memoryRuntime = new RecodeMemoryRuntime();
+
+	void main(args, {
+		extensionFactories: [
+			{ name: "recode-open-provider", factory: recodeOpenProvider },
+			{ name: "recode-memory", factory: (pi) => recodeMemory(pi, memoryRuntime) },
+		],
+	}).finally(() => memoryRuntime.close());
+}

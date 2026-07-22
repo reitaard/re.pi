@@ -1,7 +1,8 @@
 # RePi Agent Orchestration Plan
 
-Status: local worker harness and presentation checkpoint complete; Aizen harness
-migration remains the next architecture phase.
+Status: local worker harness and Aizen runtime migration checkpoints are complete.
+Telegram is the first narrow Recode Gateway adapter; durable multi-channel control
+plane work remains later.
 
 ## Target shape
 
@@ -9,7 +10,7 @@ migration remains the next architecture phase.
 You / Telegram / Web / another Aizen / programmatic host
                         |
                         v
-              WorkerDirectory + Gateway later
+              Recode Gateway + WorkerDirectory
                         |
                         v
               Aizen (main intelligent agent)
@@ -29,6 +30,11 @@ OpenClaw remains a control-plane reference for the future Gateway: authenticatio
 channel routing, session separation, health, cancellation, and typed events. RePi
 keeps Pi's runtime and agent loop rather than copying OpenClaw's agent loop or its
 full channel/plugin stack.
+
+The current Telegram checkpoint implements one authenticated adapter, per-chat
+session routing, sequential delivery, cancellation, and streamed replies through
+Aizen RPC. It is the first vertical slice, not the final durable multi-channel
+control plane.
 
 Pi delegation packages remain references for fresh child context, named specialists,
 tool allowlists, bounded results, cancellation, parallel calls, and blocking

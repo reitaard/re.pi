@@ -9,9 +9,7 @@ describe("Pi package compatibility mapping", () => {
 		expect(mapPiPackageSpecifier(`${scope}/pi-agent-core`)).toBe("@reitaard/repi-agent-core");
 		expect(mapPiPackageSpecifier(`${scope}/pi-agent-core/node`)).toBe("@reitaard/repi-agent-core/node");
 		expect(mapPiPackageSpecifier(`${scope}/pi-coding-agent`)).toBe("@reitaard/repi-coding-agent");
-		expect(mapPiPackageSpecifier(`${scope}/pi-coding-agent/workers`)).toBe(
-			"@reitaard/repi-coding-agent/workers",
-		);
+		expect(mapPiPackageSpecifier(`${scope}/pi-coding-agent/workers`)).toBe("@reitaard/repi-coding-agent/workers");
 		expect(mapPiPackageSpecifier(`${scope}/pi-tui`)).toBe("@reitaard/repi-tui");
 	});
 

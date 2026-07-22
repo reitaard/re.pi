@@ -12,6 +12,8 @@ export interface CompactionSettings {
 	enabled?: boolean; // default: true
 	reserveTokens?: number; // default: 16384
 	keepRecentTokens?: number; // default: 20000
+	model?: string; // default: "current"; otherwise "provider/model-id"
+	thinkingLevel?: ThinkingLevel; // default: "off"
 }
 
 export interface BranchSummarySettings {
@@ -787,11 +789,46 @@ export class SettingsManager {
 		return this.settings.compaction?.keepRecentTokens ?? 20000;
 	}
 
-	getCompactionSettings(): { enabled: boolean; reserveTokens: number; keepRecentTokens: number } {
+	getCompactionModel(): string {
+		const model = this.settings.compaction?.model;
+		return typeof model === "string" && model.trim().length > 0 ? model.trim() : "current";
+	}
+
+	setCompactionModel(model: string): void {
+		const normalized = model.trim();
+		if (!normalized) {
+			throw new Error("Compaction model cannot be empty");
+		}
+		this.globalSettings.compaction ??= {};
+		this.globalSettings.compaction.model = normalized;
+		this.markModified("compaction", "model");
+		this.save();
+	}
+
+	getCompactionThinkingLevel(): ThinkingLevel {
+		return this.settings.compaction?.thinkingLevel ?? "off";
+	}
+
+	setCompactionThinkingLevel(level: ThinkingLevel): void {
+		this.globalSettings.compaction ??= {};
+		this.globalSettings.compaction.thinkingLevel = level;
+		this.markModified("compaction", "thinkingLevel");
+		this.save();
+	}
+
+	getCompactionSettings(): {
+		enabled: boolean;
+		reserveTokens: number;
+		keepRecentTokens: number;
+		model: string;
+		thinkingLevel: ThinkingLevel;
+	} {
 		return {
 			enabled: this.getCompactionEnabled(),
 			reserveTokens: this.getCompactionReserveTokens(),
 			keepRecentTokens: this.getCompactionKeepRecentTokens(),
+			model: this.getCompactionModel(),
+			thinkingLevel: this.getCompactionThinkingLevel(),
 		};
 	}
 
