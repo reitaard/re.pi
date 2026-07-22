@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { basename, resolve } from "node:path";
 import type { AgentMessage } from "@reitaard/repi-agent-core";
 import { getAgentDir } from "./config.ts";
@@ -75,7 +76,7 @@ function loadTelegramConfig(): TelegramConfig {
 		botToken,
 		allowedUserId,
 		allowedGroupIds,
-		workingDirectory: process.env.RECODE_TELEGRAM_CWD ?? fileConfig.workingDirectory,
+		workingDirectory: process.env.RECODE_TELEGRAM_CWD ?? fileConfig.workingDirectory ?? homedir(),
 	};
 }
 

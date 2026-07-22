@@ -33,7 +33,7 @@ export RECODE_TELEGRAM_CWD="/path/to/project"
 recode telegram
 ```
 
-`RECODE_TELEGRAM_CWD` is optional and defaults to the directory where the gateway starts.
+`RECODE_TELEGRAM_CWD` is optional and defaults to the operating-system user's home directory (`~`). Set it when Telegram should operate inside a specific project.
 
 The same values can be stored in `~/.pi/agent/telegram.json`:
 
