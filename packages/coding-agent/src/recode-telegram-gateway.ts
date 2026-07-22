@@ -164,6 +164,7 @@ class TelegramRpcRuntime implements RecodeGatewayRuntime {
 
 	async start(): Promise<void> {
 		await this.rpc.start();
+		await this.rpc.waitUntilReady(5 * 60 * 1000);
 	}
 
 	async run(prompt: string, onText: (text: string) => void): Promise<void> {
