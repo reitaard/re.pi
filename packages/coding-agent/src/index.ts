@@ -200,6 +200,23 @@ export type {
 	ResolvedResource,
 } from "./core/package-manager.ts";
 export { DefaultPackageManager } from "./core/package-manager.ts";
+export {
+	RecodeGateway,
+	type RecodeGatewayAcceptedJob,
+	type RecodeGatewayDelivery,
+	type RecodeGatewayInboundMessage,
+	type RecodeGatewayJobLedger,
+	type RecodeGatewayOptions,
+	type RecodeGatewayRuntime,
+	type RecodeGatewaySessionStore,
+	type RecodeGatewayStatus,
+	type RecodeGatewaySubmission,
+} from "./core/recode-gateway.ts";
+export {
+	type RecodeGatewayJob,
+	type RecodeGatewayJobStatus,
+	RecodeGatewayStore,
+} from "./core/recode-gateway-store.ts";
 export type { ResourceCollision, ResourceDiagnostic, ResourceLoader } from "./core/resource-loader.ts";
 export { DefaultResourceLoader, loadProjectContextFiles } from "./core/resource-loader.ts";
 // SDK for programmatic usage

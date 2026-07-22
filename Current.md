@@ -1,4 +1,4 @@
-> Updated 2026-07-19: Phase 0 and the production AgentHarness migration checkpoints are complete. Recode now
+> Updated 2026-07-22: Phase 0 and the production AgentHarness migration checkpoints are complete. Recode now
 > snapshots Aizen's minimal runtime profile and adapts the existing JSONL
 > `SessionManager` to Pi's `SessionStorage` contract. A focused Phase 1C proof
 > runs one Aizen turn through `AgentHarness` and reopens the same persisted tree.
@@ -18,6 +18,11 @@
 > Start with
 > `docs/AGENT_RUNTIME_INSPECTION.md`, then use `docs/AGENTHARNESS.md` and
 > `docs/JARVIS_BUILD_PLAN.md` for the parity and stop/go gates.
+>
+> Telegram is now the first authenticated channel checkpoint. Its narrow path is
+> `Telegram Bot API -> Recode Gateway -> Aizen RPC -> AgentHarness -> JSONL session`.
+> This adopts OpenClaw's gateway/channel separation without copying its agent loop
+> or full multi-channel control plane. See `packages/coding-agent/docs/telegram.md`.
 
 The earlier audit below is retained as historical evidence. Its Windows paths
 and statements that delegation is still future work are superseded by the live
