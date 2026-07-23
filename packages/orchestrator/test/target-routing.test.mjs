@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { createOrchestratorRequestHandler } from "../src/request-handler.ts";
 import {
 	dispatchPhase4ATarget,
 	parseOrchestratorTarget,
@@ -12,6 +13,27 @@ function assertRoutingError(error, code) {
 	assert.ok(error instanceof TargetRoutingError);
 	assert.equal(error.code, code);
 	return true;
+}
+
+function createCoordinator(overrides = {}) {
+	return {
+		async spawnInstance() {
+			throw new Error("unexpected spawn");
+		},
+		listInstances() {
+			return [];
+		},
+		getInstance() {
+			return undefined;
+		},
+		async stopInstance() {
+			return undefined;
+		},
+		async handleRpc() {
+			return undefined;
+		},
+		...overrides,
+	};
 }
 
 test("omitted target preserves the existing local route", async () => {
@@ -100,4 +122,67 @@ test("node identifiers are bounded and credential-free", () => {
 		() => parseOrchestratorTarget({ kind: "node", nodeId: "user:password@node" }),
 		(error) => assertRoutingError(error, "target_invalid"),
 	);
+});
+
+test("IPC router forwards the exact RpcCommand for omitted and explicit local targets", async () => {
+	for (const target of [undefined, { kind: "local" }]) {
+		const command = { type: "get_state" };
+		let forwardedInstanceId;
+		let forwardedCommand;
+		const handler = createOrchestratorRequestHandler(
+			createCoordinator({
+				async handleRpc(instanceId, value) {
+					forwardedInstanceId = instanceId;
+					forwardedCommand = value;
+					return { type: "response", id: "test", success: true, command: "get_state", data: {} };
+				},
+			}),
+		);
+
+		const response = await handler({
+			type: "rpc",
+			instanceId: "local-instance",
+			command,
+			target,
+		});
+
+		assert.equal(response.type, "rpc_result");
+		assert.equal(response.ok, true);
+		assert.equal(forwardedInstanceId, "local-instance");
+		assert.equal(forwardedCommand, command);
+	}
+});
+
+test("IPC router rejects non-local targets before instance lookup or RPC forwarding", async () => {
+	const calls = [];
+	const handler = createOrchestratorRequestHandler(
+		createCoordinator({
+			getInstance(instanceId) {
+				calls.push(["getInstance", instanceId]);
+				return undefined;
+			},
+			async handleRpc(instanceId, command) {
+				calls.push(["handleRpc", instanceId, command]);
+				return undefined;
+			},
+		}),
+	);
+
+	const rpc = await handler({
+		type: "rpc",
+		instanceId: "missing",
+		command: { type: "get_state" },
+		target: { kind: "node", nodeId: "node-1" },
+	});
+	assert.equal(rpc.type, "error");
+	assert.match(rpc.error, /^target_not_authorized:/);
+
+	const stream = await handler({
+		type: "rpc_stream",
+		instanceId: "missing",
+		target: { kind: "sandbox" },
+	});
+	assert.equal(stream.type, "error");
+	assert.match(stream.error, /^target_not_authorized:/);
+	assert.deepEqual(calls, []);
 });
