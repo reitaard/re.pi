@@ -23,6 +23,7 @@ import type {
 	StopRequest,
 	StopResponse,
 } from "./ipc/protocol.ts";
+import { dispatchPhase4ATarget, TargetRoutingError } from "./target-routing.ts";
 import { supervisor } from "./supervisor.ts";
 import type { InstanceRecord } from "./types.ts";
 
@@ -43,6 +44,14 @@ function unknownInstanceError(instanceId: string): ErrorResponse {
 		type: "error",
 		ok: false,
 		error: `Unknown instance: ${instanceId}`,
+	};
+}
+
+function targetRoutingError(error: TargetRoutingError): ErrorResponse {
+	return {
+		type: "error",
+		ok: false,
+		error: `${error.code}: ${error.message}`,
 	};
 }
 
@@ -103,28 +112,42 @@ export async function handleIpcRequest(request: OrchestratorRequest): Promise<Or
 		}
 
 		case "rpc": {
-			const response = await supervisor.handleRpc(request.instanceId, request.command);
-			if (!response) {
-				return unknownInstanceError(request.instanceId);
-			}
+			try {
+				const response = await dispatchPhase4ATarget(request.target, () =>
+					supervisor.handleRpc(request.instanceId, request.command),
+				);
+				if (!response) {
+					return unknownInstanceError(request.instanceId);
+				}
 
-			return {
-				type: "rpc_result",
-				ok: true,
-				response,
-			};
+				return {
+					type: "rpc_result",
+					ok: true,
+					response,
+				};
+			} catch (error) {
+				if (error instanceof TargetRoutingError) return targetRoutingError(error);
+				throw error;
+			}
 		}
 
 		case "rpc_stream": {
-			const instance = supervisor.getInstance(request.instanceId);
-			if (!instance) {
-				return unknownInstanceError(request.instanceId);
+			try {
+				const instance = await dispatchPhase4ATarget(request.target, () =>
+					supervisor.getInstance(request.instanceId),
+				);
+				if (!instance) {
+					return unknownInstanceError(request.instanceId);
+				}
+				return {
+					type: "rpc_ready",
+					ok: true,
+					instance: toInstanceSummary(instance),
+				};
+			} catch (error) {
+				if (error instanceof TargetRoutingError) return targetRoutingError(error);
+				throw error;
 			}
-			return {
-				type: "rpc_ready",
-				ok: true,
-				instance: toInstanceSummary(instance),
-			};
 		}
 	}
 }
