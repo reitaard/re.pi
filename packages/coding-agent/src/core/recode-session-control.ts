@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, watch, writeFileSync } from "node:fs";
 import { createConnection, createServer, type Server, type Socket } from "node:net";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 export interface RecodeSessionControlState {
 	active: boolean;
@@ -48,7 +48,17 @@ export function watchRecodeSessionControl(
 	mkdirSync(paths.directory, { recursive: true, mode: 0o700 });
 	const recordName = paths.record.slice(paths.directory.length + 1);
 	const watcher = watch(paths.directory, (_event, filename) => {
-		if (filename && filename.toString() === recordName) onChange();
+		if (!filename || filename.toString() === recordName) onChange();
+	});
+	watcher.on("error", () => undefined);
+	return watcher;
+}
+
+export function watchRecodeSessionTranscript(sessionFile: string, onChange: () => void): { close(): void } {
+	const directory = dirname(sessionFile);
+	const sessionName = basename(sessionFile);
+	const watcher = watch(directory, (_event, filename) => {
+		if (!filename || filename.toString() === sessionName) onChange();
 	});
 	watcher.on("error", () => undefined);
 	return watcher;
@@ -192,6 +202,7 @@ export class RecodeSessionControlClient {
 		try {
 			record = JSON.parse(readFileSync(paths.record, "utf8")) as RecodeSessionControlRecord;
 			process.kill(record.pid, 0);
+			if (record.pid === process.pid) return undefined;
 		} catch {
 			rmSync(paths.record, { force: true });
 			return undefined;

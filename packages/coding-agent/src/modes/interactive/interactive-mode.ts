@@ -91,7 +91,11 @@ import { defaultModelPerProvider, findExactModelReferenceMatch, resolveModelScop
 import { DefaultPackageManager } from "../../core/package-manager.ts";
 import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "../../core/provider-display-names.ts";
 import { type AizenRuntime, createAizenRuntime } from "../../core/recode-aizen-runtime.ts";
-import { RecodeSessionControlClient, watchRecodeSessionControl } from "../../core/recode-session-control.ts";
+import {
+	RecodeSessionControlClient,
+	watchRecodeSessionControl,
+	watchRecodeSessionTranscript,
+} from "../../core/recode-session-control.ts";
 import { getRecodeSessionReference } from "../../core/recode-session-identity.ts";
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
@@ -367,6 +371,8 @@ export class InteractiveMode {
 	private aizenRuntime: AizenRuntime | undefined;
 	private remoteSessionControl: RecodeSessionControlClient | undefined;
 	private remoteSessionWatcher: { close(): void } | undefined;
+	private remoteTranscriptWatcher: { close(): void } | undefined;
+	private remoteTranscriptRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 	private remoteSessionActive = false;
 	private remoteAttachmentGeneration = 0;
 	private remoteAttachmentPending = false;
@@ -2029,6 +2035,7 @@ export class InteractiveMode {
 				if (generation !== this.remoteAttachmentGeneration) return;
 				if (message.type === "state" && message.state.active) {
 					this.remoteSessionActive = true;
+					this.startRemoteTranscriptMonitoring(generation, message.state.sessionFile);
 					if (!(this.activeStatusIndicator instanceof WorkingStatusIndicator)) {
 						this.showStatusIndicator(
 							new WorkingStatusIndicator(
@@ -2042,6 +2049,7 @@ export class InteractiveMode {
 					if (message.state.generating && this.activeStatusIndicator instanceof WorkingStatusIndicator) {
 						this.activeStatusIndicator.setGenerating();
 					}
+					this.scheduleRemoteTranscriptRefresh(generation);
 					this.ui.requestRender();
 					return;
 				}
@@ -2062,8 +2070,33 @@ export class InteractiveMode {
 
 	private disconnectRemoteSession(): void {
 		this.remoteSessionActive = false;
+		if (this.remoteTranscriptRefreshTimer) {
+			clearTimeout(this.remoteTranscriptRefreshTimer);
+			this.remoteTranscriptRefreshTimer = undefined;
+		}
+		this.remoteTranscriptWatcher?.close();
+		this.remoteTranscriptWatcher = undefined;
 		this.remoteSessionControl?.close();
 		this.remoteSessionControl = undefined;
+	}
+
+	private startRemoteTranscriptMonitoring(generation: number, sessionFile: string | undefined): void {
+		if (!sessionFile || this.remoteTranscriptWatcher) return;
+		this.remoteTranscriptWatcher = watchRecodeSessionTranscript(sessionFile, () => {
+			this.scheduleRemoteTranscriptRefresh(generation);
+		});
+	}
+
+	private scheduleRemoteTranscriptRefresh(generation: number): void {
+		if (generation !== this.remoteAttachmentGeneration || !this.remoteSessionActive) return;
+		if (this.remoteTranscriptRefreshTimer) clearTimeout(this.remoteTranscriptRefreshTimer);
+		this.remoteTranscriptRefreshTimer = setTimeout(() => {
+			this.remoteTranscriptRefreshTimer = undefined;
+			if (generation !== this.remoteAttachmentGeneration || !this.remoteSessionActive) return;
+			if (!this.session.reloadTranscriptFromDisk()) return;
+			this.renderCurrentSessionState();
+			this.ui.requestRender();
+		}, 25);
 	}
 
 	private stopRemoteSessionMonitoring(): void {
@@ -5901,13 +5934,13 @@ export class InteractiveMode {
 			}
 			this.hideThinkingBlock = this.settingsManager.getHideThinkingBlock();
 			this.outputPad = this.settingsManager.getOutputPad();
+			this.session.reloadTranscriptFromDisk();
 			this.rebuildChatFromMessages();
 			chatRestoredBeforeSessionStart = true;
 		};
 
 		try {
 			await this.session.reload({ beforeSessionStart: restoreChatBeforeSessionStart });
-			this.session.reloadTranscriptFromDisk();
 			this.rebuildAizenRuntime();
 			restoreChatBeforeSessionStart();
 			configureHttpDispatcher(this.settingsManager.getHttpIdleTimeoutMs());

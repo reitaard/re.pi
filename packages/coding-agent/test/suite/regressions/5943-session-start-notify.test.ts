@@ -77,7 +77,9 @@ type LoadedResourcesContext = {
 };
 
 type RebindContext = {
+	options: { aizenRuntime?: boolean };
 	unsubscribe?: () => void;
+	stopRemoteSessionMonitoring: () => void;
 	applyRuntimeSettings: () => void;
 	renderCurrentSessionState: () => void;
 	bindCurrentSessionExtensions: () => Promise<void>;
@@ -85,14 +87,18 @@ type RebindContext = {
 	updateAvailableProviderCount: () => Promise<void>;
 	updateEditorBorderColor: () => void;
 	updateTerminalTitle: () => void;
+	startRemoteSessionMonitoring: () => Promise<void>;
 };
 
 type ReloadCommandContext = {
 	hideThinkingBlock: boolean;
+	stopRemoteSessionMonitoring: () => void;
+	startRemoteSessionMonitoring: () => Promise<void>;
 	session: {
 		isStreaming: boolean;
 		isCompacting: boolean;
 		reload: (options?: { beforeSessionStart?: () => void | Promise<void> }) => Promise<void>;
+		reloadTranscriptFromDisk: () => boolean;
 		resourceLoader: { getThemes: () => { themes: [] } };
 		extensionRunner: unknown;
 		modelRegistry: { getError: () => string | undefined };
@@ -120,6 +126,7 @@ type ReloadCommandContext = {
 	defaultEditor: { setPaddingX: (padding: number) => void; setAutocompleteMaxVisible: (maxVisible: number) => void };
 	themeController: { applyFromSettings: () => Promise<void> };
 	resetExtensionUI: () => void;
+	rebuildAizenRuntime: () => void;
 	rebuildChatFromMessages: () => void;
 	setupAutocompleteProvider: () => void;
 	setupExtensionShortcuts: (runner: unknown) => void;
@@ -158,12 +165,15 @@ function createReloadCommandContext(overrides: ReloadCommandContextOverrides = {
 	const editor = overrides.editor ?? {};
 	return {
 		hideThinkingBlock: overrides.hideThinkingBlock ?? false,
+		stopRemoteSessionMonitoring: () => {},
+		startRemoteSessionMonitoring: async () => {},
 		session: {
 			isStreaming: false,
 			isCompacting: false,
 			reload: async (options) => {
 				await options?.beforeSessionStart?.();
 			},
+			reloadTranscriptFromDisk: () => true,
 			resourceLoader: { getThemes: () => ({ themes: [] }) },
 			extensionRunner: {},
 			modelRegistry: { getError: () => undefined },
@@ -194,6 +204,7 @@ function createReloadCommandContext(overrides: ReloadCommandContextOverrides = {
 		customHeader: overrides.customHeader,
 		builtInHeader: overrides.builtInHeader,
 		resetExtensionUI: overrides.resetExtensionUI ?? (() => {}),
+		rebuildAizenRuntime: () => {},
 		rebuildChatFromMessages: overrides.rebuildChatFromMessages ?? (() => {}),
 		setupAutocompleteProvider: overrides.setupAutocompleteProvider ?? (() => {}),
 		setupExtensionShortcuts: overrides.setupExtensionShortcuts ?? (() => {}),
@@ -289,6 +300,8 @@ describe("regression #5943: session_start transient UI", () => {
 
 		try {
 			const context: RebindContext = {
+				options: {},
+				stopRemoteSessionMonitoring: () => {},
 				applyRuntimeSettings: () => events.push("apply"),
 				renderCurrentSessionState: () => events.push("render"),
 				bindCurrentSessionExtensions: async () => {
@@ -302,6 +315,7 @@ describe("regression #5943: session_start transient UI", () => {
 				updateAvailableProviderCount: async () => {},
 				updateEditorBorderColor: () => {},
 				updateTerminalTitle: () => {},
+				startRemoteSessionMonitoring: async () => {},
 			};
 
 			await interactiveModePrototype.rebindCurrentSession.call(context, { renderBeforeBind: true });
@@ -330,6 +344,8 @@ describe("regression #5943: session_start transient UI", () => {
 
 		try {
 			const context: RebindContext = {
+				options: {},
+				stopRemoteSessionMonitoring: () => {},
 				applyRuntimeSettings: () => {},
 				renderCurrentSessionState: () => events.push("render"),
 				bindCurrentSessionExtensions: async () => {
@@ -351,6 +367,7 @@ describe("regression #5943: session_start transient UI", () => {
 				updateAvailableProviderCount: async () => {},
 				updateEditorBorderColor: () => {},
 				updateTerminalTitle: () => {},
+				startRemoteSessionMonitoring: async () => {},
 			};
 
 			await interactiveModePrototype.rebindCurrentSession.call(context, { renderBeforeBind: true });
@@ -382,6 +399,8 @@ describe("regression #5943: session_start transient UI", () => {
 
 		try {
 			const context: RebindContext = {
+				options: {},
+				stopRemoteSessionMonitoring: () => {},
 				applyRuntimeSettings: () => {},
 				renderCurrentSessionState: () => events.push("render"),
 				bindCurrentSessionExtensions: async () => {
@@ -403,6 +422,7 @@ describe("regression #5943: session_start transient UI", () => {
 				updateAvailableProviderCount: async () => {},
 				updateEditorBorderColor: () => {},
 				updateTerminalTitle: () => {},
+				startRemoteSessionMonitoring: async () => {},
 			};
 
 			await interactiveModePrototype.rebindCurrentSession.call(context, { renderBeforeBind: true });
@@ -472,6 +492,28 @@ describe("regression #5943: session_start transient UI", () => {
 
 		expect(context.hideThinkingBlock).toBe(true);
 		expect(events).toEqual(["reload", "rebuild:true", "start:true"]);
+	});
+
+	it("reloads the transcript before rebuilding chat", async () => {
+		initTheme("dark", false);
+		const events: string[] = [];
+		const context = createReloadCommandContext({
+			session: {
+				reloadTranscriptFromDisk: () => {
+					events.push("transcript");
+					return true;
+				},
+				reload: async (options) => {
+					await options?.beforeSessionStart?.();
+					events.push("start");
+				},
+			},
+			rebuildChatFromMessages: () => events.push("rebuild"),
+		});
+
+		await interactiveModePrototype.handleReloadCommand.call(context);
+
+		expect(events).toEqual(["transcript", "rebuild", "start"]);
 	});
 
 	it("keeps the reload blocker focused until async reload completes", async () => {

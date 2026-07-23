@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Kept resumed sessions synchronized with active remote tool calls and prevented reloads from invalidating a process's own running extension context.
+
 ## [0.81.4] - 2026-07-22
 
 ### Added
