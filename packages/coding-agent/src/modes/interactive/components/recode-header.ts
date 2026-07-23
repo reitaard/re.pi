@@ -2,7 +2,9 @@ import type { Component } from "@reitaard/repi-tui";
 import { truncateToWidth, visibleWidth } from "@reitaard/repi-tui";
 import chalk from "chalk";
 import Yoga, { Direction, FlexDirection } from "yoga-layout";
+import type { ActiveWorkerHeaderState } from "../../../core/delegation/worker-header-state.ts";
 import { theme } from "../theme/theme.ts";
+import { workerForeground } from "./recode-worker-indicator.ts";
 
 export type RecodeHeaderMode = "hidden" | "welcome";
 
@@ -10,6 +12,7 @@ export interface RecodeHeaderDetails {
 	model: string;
 	provider: string;
 	cwd: string;
+	worker?: ActiveWorkerHeaderState;
 }
 
 type RecodeHeaderLayout = {
@@ -71,6 +74,21 @@ function gradientText(text: string): string {
 			textColor(Math.floor((index * BRAND_TEXT_PALETTE.length) / Math.max(1, characters.length)), character),
 		)
 		.join("");
+}
+
+function workerStatus(text: string): string {
+	const normalized = text.trim().toLowerCase();
+	if (["failed", "error", "unavailable", "timeout", "cancelled"].includes(normalized)) {
+		return theme.bold(theme.fg("error", text));
+	}
+	if (["ready", "completed", "healthy"].includes(normalized)) {
+		return theme.bold(theme.fg("success", text));
+	}
+	return theme.bold(theme.fg("warning", text));
+}
+
+function metric(value: number): string {
+	return theme.bold(theme.fg("accent", String(value)));
 }
 
 function renderWordmarkRow(row: number): string {
@@ -160,6 +178,8 @@ export class RecodeHeader implements Component {
 	private renderWide(width: number, leftWidth: number, rightWidth: number): string[] {
 		const details = this.getDetails();
 		const model = details.provider === "unknown" ? details.model : `${details.model} · ${details.provider}`;
+		const workerLabel = (text: string): string =>
+			details.worker ? workerForeground(details.worker.workerId, "text", text, theme) : text;
 		const leftRows = [
 			theme.bold(theme.fg("text", " Welcome to re™")),
 			"",
@@ -169,15 +189,32 @@ export class RecodeHeader implements Component {
 			theme.fg("muted", ` ${model}`),
 			theme.fg("dim", ` ${details.cwd}`),
 		];
-		const rightRows = [
-			theme.bold(theme.fg("accent", " Tips for getting started")),
-			theme.fg("muted", " Type / for commands · ! for bash"),
-			theme.fg("dim", " Press Ctrl+O to expand startup help"),
-			"",
-			theme.bold(theme.fg("borderAccent", " Session")),
-			theme.fg("muted", " Fresh session · ready"),
-			theme.fg("dim", " Type a message to begin"),
-		];
+		const rightRows = details.worker
+			? [
+					theme.bold(
+						workerForeground(
+							details.worker.workerId,
+							"identity",
+							` Direct chat · ${details.worker.workerName}`,
+							theme,
+						),
+					),
+					`${workerLabel(" Health       ")}${workerStatus(details.worker.status)}`,
+					`${workerLabel(" Memory       ")}${metric(details.worker.memoryDocumentCount)}${theme.fg("dim", " documents")}`,
+					`${workerLabel(" Progress     ")}${metric(details.worker.sessionCount)}${theme.fg("dim", " sessions · ")}${metric(details.worker.turnCount)}${theme.fg("dim", " turns")}`,
+					`${workerLabel(" Evaluations  ")}${metric(details.worker.evaluationCount)}${theme.fg("dim", " recorded")}`,
+					theme.fg("dim", " Enter sends · Esc returns to Aizen"),
+					"",
+				]
+			: [
+					theme.bold(theme.fg("accent", " Tips for getting started")),
+					theme.fg("muted", " Type / for commands · ! for bash"),
+					theme.fg("dim", " Press Ctrl+O to expand startup help"),
+					"",
+					theme.bold(theme.fg("borderAccent", " Session")),
+					theme.fg("muted", " Fresh session · ready"),
+					theme.fg("dim", " Type a message to begin"),
+				];
 		const rows = [this.renderTopBorder(width)];
 
 		for (let row = 0; row < WELCOME_BOX_HEIGHT - 2; row++) {

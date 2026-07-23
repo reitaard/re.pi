@@ -25,19 +25,47 @@ import type {
 	WorkerDescriptor,
 	WorkerDirectory,
 } from "./core/delegation/worker-directory.ts";
+import { getActiveWorkerHeaderState, setActiveWorkerHeaderState } from "./core/delegation/worker-header-state.ts";
 import {
 	applyWorkerSettingsConfig,
 	type PersistedWorkerSettingsConfig,
 	readWorkerSettingsConfig,
 	writeWorkerSettingsConfig,
 } from "./core/delegation/worker-settings.ts";
+import {
+	inspectWorkerStorage,
+	resolveWorkerStoragePaths,
+	type WorkerStorageState,
+} from "./core/delegation/worker-storage.ts";
 import type {
 	ExtensionAPI,
 	ExtensionCommandContext,
+	ExtensionContext,
 	ToolDefinition,
 	ToolRenderContext,
 } from "./core/extensions/types.ts";
+import { admitRecodeCardinalMemory } from "./core/recode-memory/recode-cardinal.ts";
+import { RecodeMemoryManager } from "./core/recode-memory/recode-memory-manager.ts";
+import type { RecodeMemoryConfig, RecodeShioriRouting } from "./core/recode-memory/recode-memory-types.ts";
+import { RECODE_SHIORI_DISPLAY_NAME } from "./core/recode-memory/recode-shiori.ts";
+import {
+	RECODE_SHIORI_SETTINGS_REQUEST,
+	RECODE_SHIORI_SETTINGS_UPDATE,
+	type RecodeShioriSettingsRequest,
+	type RecodeShioriSettingsSnapshot,
+	type RecodeShioriSettingsUpdate,
+} from "./core/recode-memory/recode-shiori-control.ts";
+import {
+	extractRecodeTeachCandidate,
+	RecodeTeachController,
+	type RecodeTeachProposal,
+	recodeTeachPrompt,
+} from "./core/recode-teach/recode-teach-controller.ts";
 import type { SessionEntry } from "./core/session-manager.ts";
+import {
+	type RecodeTeachSettingId,
+	RecodeTeachSettingsComponent,
+} from "./modes/interactive/components/recode-teach-settings.ts";
 import {
 	createRecodeWorkerIndicator,
 	creatorForeground,
@@ -45,6 +73,7 @@ import {
 	workerStarFrame,
 } from "./modes/interactive/components/recode-worker-indicator.ts";
 import {
+	RecodeWorkerDirectChatComponent,
 	type RecodeWorkerSettingId,
 	RecodeWorkerSettingsComponent,
 } from "./modes/interactive/components/recode-worker-settings.ts";
@@ -52,11 +81,27 @@ import { getMarkdownTheme, type Theme } from "./modes/interactive/theme/theme.ts
 
 const WORKER_HANDOFF_ENTRY = "recode-worker-handoff";
 const CREATOR_MESSAGE_ENTRY = "recode-creator-worker-message";
+const WORKER_DIRECT_SESSION_ENTRY = "recode-worker-direct-session";
+const WORKER_DIRECT_RESET_ENTRY = "recode-worker-direct-reset";
 const WORKER_WIDGET_PREFIX = "recode-worker-active";
+const WORKER_HEADER_REFRESH_WIDGET = "recode-worker-header-refresh";
 const WORKER_TOOL_ANIMATION_INTERVAL_MS = 90;
 const AIZEN_IDENTITY = formatOrchestrationActor(REPI_AIZEN_IDENTITY);
 const CURRENT_MODEL_LABEL = "current (follows Aizen)";
+const SHIORI_WORKER_ID = "shiori";
+const WORKER_MEMORY_CONFIG: RecodeMemoryConfig = {
+	enabled: true,
+	scope: "project",
+	autoRecall: true,
+	globalAccess: true,
+	globalAutoRecall: false,
+	cardinalRouting: "auto",
+	shioriThinking: false,
+	maxResults: 6,
+	maxInjectedCharacters: 6_000,
+};
 export interface RecodeWorkersOptions {
+	agentDir?: string;
 	settingsPath?: string;
 }
 
@@ -85,6 +130,22 @@ interface CreatorMessageEntry {
 	message: string;
 }
 
+interface WorkerDirectSessionEntry {
+	workerId: string;
+	open: boolean;
+}
+
+interface WorkerDirectResetEntry {
+	workerId: string;
+	workerName: string;
+	createdAt: number;
+}
+
+interface WorkerTeachSupport {
+	controller(worker: NamedWorkerDefinition): RecodeTeachController;
+	handleCommand(worker: NamedWorkerDefinition, message: string, ctx: ExtensionContext): Promise<boolean>;
+}
+
 const WORKER_ACTIVITY_PHRASES: Readonly<Record<string, readonly string[]>> = {
 	research: ["following the trail", "cross-checking the sources", "organizing the findings"],
 	audit: ["checking the boundary", "reviewing the evidence", "tightening the report"],
@@ -100,12 +161,57 @@ function identity(worker: Pick<NamedWorkerDefinition, "displayName" | "aliases">
 	return formatNamedWorkerIdentity(worker);
 }
 
+export function getWorkerDirectSessionRequest(entries: readonly SessionEntry[]): WorkerDirectSessionEntry | undefined {
+	for (let index = entries.length - 1; index >= 0; index--) {
+		const entry = entries[index];
+		if (
+			entry?.type === "custom" &&
+			entry.customType === WORKER_DIRECT_SESSION_ENTRY &&
+			entry.data &&
+			typeof (entry.data as { workerId?: unknown }).workerId === "string" &&
+			typeof (entry.data as { open?: unknown }).open === "boolean"
+		) {
+			return entry.data as WorkerDirectSessionEntry;
+		}
+	}
+	return undefined;
+}
+
 function durationText(durationMs: number): string {
 	if (durationMs < 1_000) return `${durationMs.toFixed(0)} ms`;
 	if (durationMs < 60_000) return `${(durationMs / 1_000).toFixed(1)} s`;
 	const minutes = Math.floor(durationMs / 60_000);
 	const seconds = Math.floor((durationMs % 60_000) / 1_000);
 	return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
+}
+
+function formatWorkerTeachProposal(proposal: RecodeTeachProposal): string {
+	return [
+		`${proposal.id.slice(0, 8)} · ${proposal.proposedVersion.kind} · ${proposal.proposedVersion.scope}`,
+		proposal.proposedVersion.text,
+		`Reason: ${proposal.reason}`,
+	].join("\n");
+}
+
+async function withWorkerMemoryManager<T>(
+	agentDir: string,
+	cwd: string,
+	worker: NamedWorkerDefinition,
+	run: (manager: RecodeMemoryManager) => Promise<T>,
+): Promise<T> {
+	const paths = resolveWorkerStoragePaths(agentDir, cwd, worker);
+	const manager = new RecodeMemoryManager({
+		globalRoot: paths.kiokuGlobal,
+		projectRoot: paths.kiokuProject,
+		databasePath: join(paths.kioku, "kioku.sqlite"),
+		config: WORKER_MEMORY_CONFIG,
+	});
+	await manager.initialize(true);
+	try {
+		return await run(manager);
+	} finally {
+		manager.close();
+	}
 }
 
 function latestWorkerStatus(directory: WorkerDirectory, workerId: string): WorkerConversationSnapshot | undefined {
@@ -187,6 +293,15 @@ export function restoreDirectWorkerChats(
 	directory: WorkerDirectory,
 ): void {
 	for (const entry of entries) {
+		if (
+			entry.type === "custom" &&
+			entry.customType === WORKER_DIRECT_RESET_ENTRY &&
+			entry.data &&
+			typeof (entry.data as { workerId?: unknown }).workerId === "string"
+		) {
+			chat.close((entry.data as WorkerDirectResetEntry).workerId);
+			continue;
+		}
 		if (entry.type !== "custom" || entry.customType !== WORKER_HANDOFF_ENTRY || !entry.data) continue;
 		const data = entry.data as WorkerHandoffEntry;
 		if (!isRestorableDirectHandoff(data)) continue;
@@ -256,7 +371,7 @@ function textContent(content: readonly { type: string; text?: string }[]): strin
 }
 
 function workerLoader(
-	ctx: ExtensionCommandContext,
+	ctx: ExtensionContext,
 	worker: NamedWorkerDefinition,
 	mode: WorkerPresentationMode,
 	turnNumber: number,
@@ -281,17 +396,22 @@ async function sendDirectMessage(
 	pi: ExtensionAPI,
 	chat: WorkerChatController,
 	directory: WorkerDirectory,
-	ctx: ExtensionCommandContext,
+	teach: WorkerTeachSupport,
+	ctx: ExtensionContext,
+	agentDir: string,
 	workerReference: string,
 	message?: string,
 ): Promise<void> {
 	const worker = directory.resolveWorker(workerReference);
 	const prompt = message?.trim() || (await ctx.ui.input(`Direct chat · ${identity(worker)}`, "Write a message"));
 	if (!prompt?.trim()) return;
+	if (await teach.handleCommand(worker, prompt, ctx)) {
+		await showWorkerInHeader(directory, agentDir, ctx, worker.id);
+		return;
+	}
 	pi.appendEntry(CREATOR_MESSAGE_ENTRY, {
 		message: prompt.trim(),
 	} satisfies CreatorMessageEntry);
-	await ctx.waitForIdle();
 	const turnNumber = (latestWorkerStatus(directory, worker.id)?.turnCount ?? 0) + 1;
 	const widgetKey = workerActivityWidgetKey(worker.id);
 	workerLoader(ctx, worker, "direct", turnNumber);
@@ -300,16 +420,109 @@ async function sendDirectMessage(
 		settleWorkerActivity(
 			() => ctx.ui.setWidget(widgetKey, undefined),
 			() => {
-				if (!pi.getSessionName() && !ctx.sessionManager.getEntries().some((entry) => entry.type === "message")) {
-					pi.setSessionName("Worker direct chats");
-				}
+				pi.setSessionName(`${worker.displayName} direct chat`);
 				pi.appendEntry(WORKER_HANDOFF_ENTRY, handoffMessage(turn, "direct", prompt), {
 					persistImmediately: true,
 				});
 			},
 		);
+		await showWorkerInHeader(directory, agentDir, ctx, worker.id);
 	} finally {
 		ctx.ui.setWidget(widgetKey, undefined);
+	}
+}
+
+async function showWorkerInHeader(
+	directory: WorkerDirectory,
+	agentDir: string,
+	ctx: Pick<ExtensionContext, "cwd" | "ui">,
+	workerReference: string,
+): Promise<void> {
+	const worker = directory.resolveWorker(workerReference);
+	const conversation = directory
+		.getStatus()
+		.filter((candidate) => candidate.workerId === worker.id)
+		.sort((left, right) => right.updatedAt - left.updatedAt)[0];
+	const storage = await inspectWorkerStorage(resolveWorkerStoragePaths(agentDir, ctx.cwd || process.cwd(), worker));
+	setActiveWorkerHeaderState({
+		workerId: worker.id,
+		workerName: identity(worker),
+		status: conversation?.status ?? storage.health,
+		turnCount: conversation?.turnCount ?? 0,
+		memoryDocumentCount: storage.memoryDocumentCount,
+		sessionCount: storage.sessionCount,
+		evaluationCount: storage.evaluationCount,
+	});
+	ctx.ui.setWidget(WORKER_HEADER_REFRESH_WIDGET, undefined);
+}
+
+function clearWorkerHeader(ctx: Pick<ExtensionContext, "ui">): void {
+	setActiveWorkerHeaderState(undefined);
+	ctx.ui.setWidget(WORKER_HEADER_REFRESH_WIDGET, undefined);
+}
+
+async function startFreshWorkerDirectSession(
+	chat: WorkerChatController,
+	directory: WorkerDirectory,
+	ctx: ExtensionCommandContext,
+	workerReference: string,
+): Promise<void> {
+	const worker = directory.resolveWorker(workerReference);
+	chat.close(worker.id);
+	await ctx.newSession({
+		setup: async (sessionManager) => {
+			sessionManager.appendSessionInfo(`${worker.displayName} direct chat`);
+			sessionManager.appendCustomEntry(WORKER_DIRECT_SESSION_ENTRY, {
+				workerId: worker.id,
+				open: true,
+			} satisfies WorkerDirectSessionEntry);
+		},
+	});
+}
+
+async function openDirectChat(
+	pi: ExtensionAPI,
+	chat: WorkerChatController,
+	directory: WorkerDirectory,
+	teach: WorkerTeachSupport,
+	ctx: ExtensionContext,
+	agentDir: string,
+	workerReference: string,
+): Promise<void> {
+	const worker = directory.resolveWorker(workerReference);
+	pi.setSessionName(`${worker.displayName} direct chat`);
+	try {
+		while (!ctx.signal?.aborted) {
+			await showWorkerInHeader(directory, agentDir, ctx, worker.id);
+			const message = await ctx.ui.custom<string | undefined>((_tui, _activeTheme, _keybindings, done) => {
+				const descriptor = directory.listWorkers().find((candidate) => candidate.id === worker.id);
+				if (!descriptor) throw new Error(`Worker descriptor is unavailable: ${worker.id}`);
+				return new RecodeWorkerDirectChatComponent(descriptor, done, () => done(undefined));
+			});
+			if (message === undefined) return;
+			if (!message.trim()) {
+				chat.close(worker.id);
+				pi.appendEntry(
+					WORKER_DIRECT_RESET_ENTRY,
+					{
+						workerId: worker.id,
+						workerName: identity(worker),
+						createdAt: Date.now(),
+					} satisfies WorkerDirectResetEntry,
+					{ persistImmediately: true },
+				);
+				ctx.ui.notify(`New ${identity(worker)} direct conversation started.`, "info");
+				continue;
+			}
+			await sendDirectMessage(pi, chat, directory, teach, ctx, agentDir, worker.id, message);
+		}
+	} finally {
+		pi.appendEntry(
+			WORKER_DIRECT_SESSION_ENTRY,
+			{ workerId: worker.id, open: false } satisfies WorkerDirectSessionEntry,
+			{ persistImmediately: true },
+		);
+		clearWorkerHeader(ctx);
 	}
 }
 
@@ -317,27 +530,91 @@ async function showWorkerPage(
 	pi: ExtensionAPI,
 	chat: WorkerChatController,
 	directory: WorkerDirectory,
+	teach: WorkerTeachSupport,
 	ctx: ExtensionCommandContext,
+	agentDir: string,
 	config: PersistedWorkerSettingsConfig,
 	updateConfig: (next: PersistedWorkerSettingsConfig) => Promise<void>,
 ): Promise<void> {
 	const availableModels = ctx.modelRegistry.getAvailable();
 	const modelValues = availableModels.map((model) => `${model.provider}/${model.id}`);
+	const shiori = await new Promise<RecodeShioriSettingsSnapshot | undefined>((resolve) => {
+		pi.events.emit(RECODE_SHIORI_SETTINGS_REQUEST, {
+			resolve: (snapshot) => resolve(snapshot),
+		} satisfies RecodeShioriSettingsRequest);
+		queueMicrotask(() => resolve(undefined));
+	});
+	const storageStates = new Map<string, WorkerStorageState>(
+		await Promise.all(
+			directory
+				.getWorkerDefinitions()
+				.map(
+					async (worker) =>
+						[
+							worker.id,
+							await inspectWorkerStorage(resolveWorkerStoragePaths(agentDir, ctx.cwd || process.cwd(), worker)),
+						] as const,
+				),
+		),
+	);
 	let activeConfig = config;
 	const selected = await ctx.ui.custom<{ workerId: string; action: "chat" } | undefined>(
 		(tui, _activeTheme, _keybindings, done) => {
 			let pending = Promise.resolve();
 			const applyChange = async (id: RecodeWorkerSettingId, value: string): Promise<void> => {
+				if (id.workerId === SHIORI_WORKER_ID) {
+					if (!shiori) throw new Error("Shiori settings are unavailable");
+					if (id.action === "status") {
+						ctx.ui.notify(
+							shiori.enabled
+								? `${RECODE_SHIORI_DISPLAY_NAME}: ${shiori.reviewing ? "reviewing" : "ready · passive"}`
+								: `${RECODE_SHIORI_DISPLAY_NAME}: disabled with Kioku`,
+							"info",
+						);
+						return;
+					}
+					if (id.action === "prompt") {
+						ctx.ui.notify(
+							`${RECODE_SHIORI_DISPLAY_NAME} is RePi's passive memory reviewer. She extracts durable candidates from session evidence; Cardinal is the only admission path into Kioku.`,
+							"info",
+						);
+						return;
+					}
+					const patch: RecodeShioriSettingsUpdate["patch"] = {};
+					if (id.action === "model") {
+						if (value === CURRENT_MODEL_LABEL) patch.shioriModel = undefined;
+						else {
+							const model = availableModels.find(
+								(candidate) => `${candidate.provider}/${candidate.id}` === value,
+							);
+							if (!model) throw new Error(`Shiori model is unavailable: ${value}`);
+							patch.shioriModel = { provider: model.provider, id: model.id };
+						}
+					} else if (id.action === "thinking") {
+						patch.shioriThinking = value === "on";
+					} else if (id.action === "cardinal") {
+						patch.cardinalRouting = value as RecodeShioriRouting;
+					} else {
+						return;
+					}
+					await new Promise<RecodeShioriSettingsSnapshot>((resolve, reject) => {
+						pi.events.emit(RECODE_SHIORI_SETTINGS_UPDATE, {
+							patch,
+							resolve,
+							reject,
+						} satisfies RecodeShioriSettingsUpdate);
+					});
+					return;
+				}
 				const worker = directory.resolveWorker(id.workerId);
 				if (id.action === "chat") {
 					done({ workerId: worker.id, action: "chat" });
 					return;
 				}
 				if (id.action === "close") {
-					ctx.ui.notify(
-						chat.close(worker.id) ? `${identity(worker)} direct chat closed.` : "No open direct chat.",
-						"info",
-					);
+					const closed = chat.close(worker.id);
+					if (closed) clearWorkerHeader(ctx);
+					ctx.ui.notify(closed ? `${identity(worker)} direct chat closed.` : "No open direct chat.", "info");
 					return;
 				}
 				if (id.action === "status") {
@@ -348,6 +625,21 @@ async function showWorkerPage(
 							: `${identity(worker)}: ready · no direct conversation`,
 						"info",
 					);
+					return;
+				}
+				if (id.action === "memory" || id.action === "progress" || id.action === "evaluations") {
+					const storage = storageStates.get(worker.id);
+					if (!storage) {
+						ctx.ui.notify(`${identity(worker)} storage is unavailable.`, "warning");
+						return;
+					}
+					const detail =
+						id.action === "memory"
+							? `Kioku: ${storage.paths.kioku} · ${storage.memoryDocumentCount} documents`
+							: id.action === "progress"
+								? `Direct-chat sessions: ${storage.paths.projectSessions} · ${storage.sessionCount} files`
+								: `Evaluations: ${storage.paths.evaluations} · ${storage.evaluationCount} recorded`;
+					ctx.ui.notify(detail, "info");
 					return;
 				}
 				if (id.action === "tools") {
@@ -395,7 +687,9 @@ async function showWorkerPage(
 							return snapshot ? [[worker.id, snapshot] as const] : [];
 						}),
 					),
+					storageStates,
 					modelValues,
+					shiori,
 					maxVisible: Math.max(4, Math.min(9, tui.terminal.rows - 10)),
 				},
 				(id, value) => {
@@ -414,7 +708,13 @@ async function showWorkerPage(
 			return component;
 		},
 	);
-	if (selected?.action === "chat") await sendDirectMessage(pi, chat, directory, ctx, selected.workerId);
+	if (selected?.action === "chat") {
+		if (chat.getConversationId(selected.workerId)) {
+			await openDirectChat(pi, chat, directory, teach, ctx, agentDir, selected.workerId);
+		} else {
+			await startFreshWorkerDirectSession(chat, directory, ctx, selected.workerId);
+		}
+	}
 }
 
 function resolveCallWorker(
@@ -703,8 +1003,140 @@ export async function recodeWorkers(
 	directory: WorkerDirectory,
 	options: RecodeWorkersOptions = {},
 ): Promise<void> {
-	const chat = new WorkerChatController(directory);
-	const settingsPath = options.settingsPath ?? join(getAgentDir(), "recode-workers.json");
+	const agentDir = options.agentDir ?? getAgentDir();
+	const settingsPath = options.settingsPath ?? join(agentDir, "recode-workers.json");
+	const teachControllers = new Map<string, RecodeTeachController>();
+	let activeContext: Pick<ExtensionCommandContext, "cwd" | "sessionManager" | "model"> | undefined;
+	const teach: WorkerTeachSupport = {
+		controller(worker) {
+			let controller = teachControllers.get(worker.id);
+			if (controller) return controller;
+			const paths = resolveWorkerStoragePaths(agentDir, activeContext?.cwd || process.cwd(), worker);
+			controller = new RecodeTeachController({
+				id: worker.id,
+				displayName: identity(worker),
+				kind: "worker",
+				root: paths.root,
+			});
+			teachControllers.set(worker.id, controller);
+			return controller;
+		},
+		async handleCommand(worker, message, ctx) {
+			const match = message.trim().match(/^\/teach(?:\s+(.*))?$/i);
+			if (!match) return false;
+			const controller = this.controller(worker);
+			const commandArgs = match[1]?.trim();
+			if (!commandArgs && ctx.mode === "tui") {
+				const pending = await controller.listProposals("pending");
+				const enabled = await controller.isEnabled();
+				const selected = await ctx.ui.custom<{ id: RecodeTeachSettingId; value: string } | undefined>(
+					(_tui, _activeTheme, _keybindings, done) =>
+						new RecodeTeachSettingsComponent(
+							{
+								ownerName: identity(worker),
+								enabled,
+								pending: pending.length,
+							},
+							(id, value) => done({ id, value }),
+							() => done(undefined),
+						),
+				);
+				if (!selected) return true;
+				const next = selected.id === "enabled" ? (selected.value === "enabled" ? "on" : "off") : selected.id;
+				return this.handleCommand(worker, `/teach ${next}`, ctx);
+			}
+			const [action = "status", requestedId] = (commandArgs || "status").split(/\s+/, 2);
+			if (action === "on" || action === "off") {
+				await controller.setEnabled(action === "on");
+				ctx.ui.notify(`${identity(worker)} Teach Mode ${action === "on" ? "enabled" : "disabled"}.`, "info");
+				return true;
+			}
+			const pending = await controller.listProposals("pending");
+			if (action === "status") {
+				ctx.ui.notify(
+					`${identity(worker)} Teach Mode: ${(await controller.isEnabled()) ? "on" : "off"} · ${pending.length} pending`,
+					"info",
+				);
+				return true;
+			}
+			if (action === "review") {
+				ctx.ui.notify(
+					pending.length > 0
+						? pending.map(formatWorkerTeachProposal).join("\n\n")
+						: `No pending ${identity(worker)} proposals.`,
+					"info",
+				);
+				return true;
+			}
+			if (action === "save") {
+				let proposal = requestedId
+					? pending.find((candidate) => candidate.id === requestedId || candidate.id.startsWith(requestedId))
+					: undefined;
+				if (!proposal && !requestedId && pending.length === 1) proposal = pending[0];
+				if (!proposal && !requestedId && pending.length > 1 && ctx.hasUI) {
+					const selected = await ctx.ui.select(
+						`Approve ${identity(worker)} teach proposal`,
+						pending.map((candidate) => `${candidate.id.slice(0, 8)} · ${candidate.proposedVersion.text}`),
+					);
+					const selectedId = selected?.split(" · ", 1)[0];
+					proposal = pending.find((candidate) => candidate.id.startsWith(selectedId ?? ""));
+				}
+				if (!proposal) {
+					ctx.ui.notify(
+						pending.length === 0
+							? `No pending ${identity(worker)} proposals.`
+							: "Choose a proposal: /teach save <id>",
+						pending.length === 0 ? "info" : "warning",
+					);
+					return true;
+				}
+				if (!ctx.isProjectTrusted()) {
+					ctx.ui.notify("Worker memory is unavailable until this project is trusted.", "error");
+					return true;
+				}
+				const admission = await withWorkerMemoryManager(agentDir, ctx.cwd, worker, (manager) =>
+					admitRecodeCardinalMemory({
+						manager,
+						candidate: proposal.proposedVersion,
+						globalAccess: true,
+						includeProject: true,
+					}),
+				);
+				await controller.resolve(proposal.id, "approved");
+				ctx.ui.notify(
+					admission.status === "duplicate"
+						? `Cardinal marked ${proposal.id.slice(0, 8)} as an existing ${identity(worker)} memory.`
+						: `Cardinal approved ${proposal.id.slice(0, 8)} for ${identity(worker)}.`,
+					"info",
+				);
+				return true;
+			}
+			ctx.ui.notify("Usage in this direct chat: /teach on|status|review|save [id]|off", "warning");
+			return true;
+		},
+	};
+	const chat = new WorkerChatController(directory, REPI_CREATOR_IDENTITY, async (worker) => {
+		const controller = teach.controller(worker);
+		return (await controller.isEnabled()) ? recodeTeachPrompt(controller.owner) : undefined;
+	});
+	directory.updateRuntime({
+		transformResult: async (worker, speaker, result) => {
+			if (speaker.id !== REPI_CREATOR_IDENTITY.id) return result;
+			const controller = teach.controller(worker);
+			if (!(await controller.isEnabled())) return result;
+			const extracted = extractRecodeTeachCandidate(result.output);
+			if (extracted.candidate) {
+				const snapshot = latestWorkerStatus(directory, worker.id);
+				await controller.stage(extracted.candidate, {
+					session: activeContext?.sessionManager.getSessionId() ?? "worker-direct-chat",
+					turn: (snapshot?.turnCount ?? 0) + 1,
+					reviewModel: activeContext?.model?.id ?? "current-worker-model",
+				});
+			}
+			return extracted.visibleOutput === result.output ? result : { ...result, output: extracted.visibleOutput };
+		},
+	});
+	let unsubscribeHeaderEscape: (() => void) | undefined;
 	let config = await readWorkerSettingsConfig(settingsPath);
 	applyWorkerSettingsConfig(directory, config);
 	const updateConfig = async (next: PersistedWorkerSettingsConfig): Promise<void> => {
@@ -722,8 +1154,38 @@ export async function recodeWorkers(
 		return entry.data ? renderHandoff(entry.data, theme) : undefined;
 	});
 
-	pi.on("session_start", (_event, ctx) => {
+	pi.registerEntryRenderer<WorkerDirectResetEntry>(WORKER_DIRECT_RESET_ENTRY, (entry, _options, theme) => {
+		if (!entry.data) return undefined;
+		return new Text(theme.fg("success", `✓ New ${entry.data.workerName} direct conversation`), 0, 0);
+	});
+
+	pi.on("session_start", async (_event, ctx) => {
+		activeContext = ctx;
+		unsubscribeHeaderEscape?.();
+		unsubscribeHeaderEscape = ctx.ui.onTerminalInput((data) => {
+			if (data === "\u001b" && getActiveWorkerHeaderState()) clearWorkerHeader(ctx);
+			return undefined;
+		});
+		clearWorkerHeader(ctx);
 		restoreDirectWorkerChats(ctx.sessionManager.getBranch(), chat, directory);
+		const directSession = getWorkerDirectSessionRequest(ctx.sessionManager.getBranch());
+		if (directSession?.open) {
+			const worker = directory.resolveWorker(directSession.workerId);
+			pi.setSessionName(`${worker.displayName} direct chat`);
+			await showWorkerInHeader(directory, agentDir, ctx, worker.id);
+			queueMicrotask(() => {
+				void openDirectChat(pi, chat, directory, teach, ctx, agentDir, worker.id).catch((error: unknown) => {
+					ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
+				});
+			});
+			return;
+		}
+		const latest = directory.getStatus().sort((left, right) => right.updatedAt - left.updatedAt)[0];
+		if (latest) {
+			const worker = directory.resolveWorker(latest.workerId);
+			pi.setSessionName(`${worker.displayName} direct chat`);
+			await showWorkerInHeader(directory, agentDir, ctx, worker.id);
+		}
 	});
 
 	pi.registerCommand("worker", {
@@ -753,16 +1215,21 @@ export async function recodeWorkers(
 			try {
 				const trimmed = args.trim();
 				if (!trimmed) {
-					await showWorkerPage(pi, chat, directory, ctx, config, updateConfig);
+					await showWorkerPage(pi, chat, directory, teach, ctx, agentDir, config, updateConfig);
 					return;
 				}
 				const [command, workerReference, ...messageParts] = trimmed.split(/\s+/);
 				if (command === "chat" && workerReference) {
-					await sendDirectMessage(pi, chat, directory, ctx, workerReference, messageParts.join(" "));
+					const message = messageParts.join(" ").trim();
+					if (message)
+						await sendDirectMessage(pi, chat, directory, teach, ctx, agentDir, workerReference, message);
+					else await startFreshWorkerDirectSession(chat, directory, ctx, workerReference);
 					return;
 				}
 				if (command === "close" && workerReference) {
-					ctx.ui.notify(chat.close(workerReference) ? "Direct chat closed." : "No open direct chat.", "info");
+					const closed = chat.close(workerReference);
+					if (closed) clearWorkerHeader(ctx);
+					ctx.ui.notify(closed ? "Direct chat closed." : "No open direct chat.", "info");
 					return;
 				}
 				ctx.ui.notify("Usage: /worker, /worker chat <name> [message], or /worker close <name>", "warning");
@@ -776,14 +1243,30 @@ export async function recodeWorkers(
 		const commandName = worker.displayName.toLowerCase();
 		pi.registerCommand(commandName, {
 			description: `Start or continue direct chat with ${identity(worker)}`,
-			argumentHint: "<message>",
+			argumentHint: "[new|message]",
 			getArgumentCompletions: (prefix) =>
-				prefix.length === 0
-					? [{ value: "", label: "<message>", description: `Type a direct message for ${identity(worker)}` }]
-					: null,
+				[
+					{
+						value: "new",
+						label: "new",
+						description: `Start a new direct-chat session with ${identity(worker)}`,
+					},
+					{
+						value: "",
+						label: "<message>",
+						description: `Type a direct message for ${identity(worker)}`,
+					},
+				].filter((option) => option.value.startsWith(prefix)),
 			handler: async (args, ctx) => {
 				try {
-					await sendDirectMessage(pi, chat, directory, ctx, worker.id, args);
+					const message = args.trim();
+					if (message === "new") {
+						await startFreshWorkerDirectSession(chat, directory, ctx, worker.id);
+					} else if (message) {
+						await sendDirectMessage(pi, chat, directory, teach, ctx, agentDir, worker.id, message);
+					} else {
+						await startFreshWorkerDirectSession(chat, directory, ctx, worker.id);
+					}
 				} catch (error: unknown) {
 					ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
 				}
@@ -791,5 +1274,11 @@ export async function recodeWorkers(
 		});
 	}
 
-	pi.on("session_shutdown", () => chat.clear());
+	pi.on("session_shutdown", () => {
+		activeContext = undefined;
+		unsubscribeHeaderEscape?.();
+		unsubscribeHeaderEscape = undefined;
+		chat.clear();
+		setActiveWorkerHeaderState(undefined);
+	});
 }

@@ -33,6 +33,7 @@ import {
 import { initTheme, theme } from "../src/modes/interactive/theme/theme.ts";
 import {
 	formatCreatorMessage,
+	getWorkerDirectSessionRequest,
 	recodeWorkers,
 	renderRoster,
 	renderStatuses,
@@ -108,7 +109,11 @@ describe("recode worker TUI", () => {
 			extensionFactories: [
 				{
 					name: "recode-workers",
-					factory: (pi) => recodeWorkers(pi, directory, { settingsPath: join(agentDir, "recode-workers.json") }),
+					factory: (pi) =>
+						recodeWorkers(pi, directory, {
+							agentDir,
+							settingsPath: join(agentDir, "recode-workers.json"),
+						}),
 				},
 			],
 		});
@@ -121,13 +126,34 @@ describe("recode worker TUI", () => {
 		expect(result.extensions[0].path).toBe("<inline:recode-workers>");
 		expect(result.extensions[0].commands.has("worker")).toBe(true);
 		expect(result.extensions[0].commands.get("worker")?.argumentHint).toBe("[chat|close] <worker> [message]");
-		expect(result.extensions[0].commands.get("levi")?.argumentHint).toBe("<message>");
-		expect(result.extensions[0].commands.get("mayuri")?.argumentHint).toBe("<message>");
+		expect(result.extensions[0].commands.get("levi")?.argumentHint).toBe("[new|message]");
+		expect(result.extensions[0].commands.get("mayuri")?.argumentHint).toBe("[new|message]");
 		expect(await result.extensions[0].commands.get("levi")?.getArgumentCompletions?.("")).toEqual([
+			{ value: "new", label: "new", description: "Start a new direct-chat session with Levi (監査)" },
 			{ value: "", label: "<message>", description: "Type a direct message for Levi (監査)" },
 		]);
 		expect(result.extensions[0].entryRenderers?.has("recode-worker-handoff")).toBe(true);
 		expect(result.extensions[0].entryRenderers?.has("recode-creator-worker-message")).toBe(true);
+
+		const leviCommand = result.extensions[0].commands.get("levi");
+		if (!leviCommand) throw new Error("levi command missing");
+		for (const args of ["new", ""]) {
+			const freshSession = SessionManager.create(cwd, join(root, `fresh-${args || "empty"}`));
+			const newSession = vi.fn(async (options?: Parameters<ExtensionCommandContext["newSession"]>[0]) => {
+				await options?.setup?.(freshSession);
+				return { cancelled: false };
+			});
+			await leviCommand.handler(args, {
+				newSession,
+				ui: { notify: vi.fn() },
+			} as unknown as ExtensionCommandContext);
+			expect(newSession).toHaveBeenCalledOnce();
+			expect(freshSession.getSessionName()).toBe("Levi direct chat");
+			expect(getWorkerDirectSessionRequest(freshSession.getBranch())).toEqual({
+				workerId: "audit",
+				open: true,
+			});
+		}
 
 		const waitForIdle = vi.fn(async () => {});
 		const custom = vi.fn(async () => undefined);
@@ -313,6 +339,22 @@ describe("recode worker TUI", () => {
 			turnCount: 1,
 			lastOutput: "I will remember cobalt.",
 		});
+		restoreDirectWorkerChats(
+			[
+				{
+					type: "custom",
+					id: "reset-entry",
+					parentId: "restore-entry",
+					timestamp: new Date(3000).toISOString(),
+					customType: "recode-worker-direct-reset",
+					data: { workerId: "audit", workerName: "Levi (監査)", createdAt: 3000 },
+				},
+			],
+			chat,
+			directory,
+		);
+		expect(chat.getConversationId("Levi")).toBeUndefined();
+		expect(() => directory.getStatus("restore-conversation")).toThrow("Unknown worker conversation");
 	});
 
 	it("can persist a custom-entry-only worker session before an Aizen reply", () => {
@@ -390,7 +432,14 @@ describe("recode worker TUI", () => {
 					],
 				]),
 				modelValues: [],
-				maxVisible: 20,
+				shiori: {
+					enabled: true,
+					reviewing: false,
+					model: { provider: "local", id: "shiori-model" },
+					thinking: true,
+					cardinalRouting: "project",
+				},
+				maxVisible: 50,
 			},
 			() => {},
 			() => {},
@@ -401,6 +450,10 @@ describe("recode worker TUI", () => {
 		expect(settingsText.match(/Levi \(監査\)/g)).toHaveLength(1);
 		expect(settingsText.match(/Direct Chat/g)).toHaveLength(4);
 		expect(settingsText).toContain("continue · 2 turns");
+		expect(settingsText).toContain("Shiori (栞)");
+		expect(settingsText).toContain("ready · passive");
+		expect(settingsText).toContain("local/shiori-model");
+		expect(settingsText).toContain("Cardinal Routing");
 		expect(settingsText).toContain("─────────────");
 		expect(renderedSettings.every((line) => visibleWidth(line) <= 100)).toBe(true);
 	});

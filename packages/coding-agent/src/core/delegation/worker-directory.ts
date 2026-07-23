@@ -94,6 +94,11 @@ export interface WorkerDirectoryRuntimeOptions {
 	timeoutMs?: number;
 	maxResultCharacters?: number;
 	onProgress?: (event: NamedWorkerProgressEvent) => void;
+	transformResult?: (
+		worker: NamedWorkerDefinition,
+		speaker: OrchestrationActorIdentity,
+		result: NamedWorkerRunResult,
+	) => Promise<NamedWorkerRunResult>;
 }
 
 export interface WorkerDirectoryOptions extends WorkerDirectoryRuntimeOptions {
@@ -388,12 +393,15 @@ export class WorkerDirectory {
 
 		const conversationContext = this.buildConversationContext(record, context);
 		try {
-			const result = await this.run(record.worker, message, conversationContext, controller.signal, (event) => {
+			let result = await this.run(record.worker, message, conversationContext, controller.signal, (event) => {
 				if (event.type === "start") record.runId = event.runId;
 				if (event.type === "tool_start") record.lastToolName = event.toolName;
 				record.updatedAt = Date.now();
 				this.runtime.onProgress?.(event);
 			});
+			if (this.runtime.transformResult) {
+				result = await this.runtime.transformResult(record.worker, record.speaker, result);
+			}
 			this.recordResult(record, message, result);
 			return result;
 		} catch (error: unknown) {

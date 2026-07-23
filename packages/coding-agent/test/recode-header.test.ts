@@ -1,7 +1,8 @@
 import { stripVTControlCharacters } from "node:util";
 import { beforeEach, describe, expect, it } from "vitest";
 import { RecodeHeader } from "../src/modes/interactive/components/recode-header.ts";
-import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { workerForeground } from "../src/modes/interactive/components/recode-worker-indicator.ts";
+import { initTheme, theme } from "../src/modes/interactive/theme/theme.ts";
 
 describe("RecodeHeader", () => {
 	beforeEach(() => initTheme("dark"));
@@ -64,6 +65,63 @@ describe("RecodeHeader", () => {
 		expect(header.render(64)).toHaveLength(9);
 		expect(header.render(40)).toHaveLength(1);
 		expect(header.render(80)).toHaveLength(9);
+	});
+
+	it("keeps the logo and replaces only helper content during direct worker chat", () => {
+		const header = new RecodeHeader(
+			"0.81.0",
+			() => "welcome",
+			() => ({
+				model: "qwen3.5-9b",
+				provider: "open-provider",
+				cwd: "re.pi",
+				worker: {
+					workerId: "research",
+					workerName: "Mayuri (研究)",
+					status: "ready",
+					turnCount: 3,
+					memoryDocumentCount: 7,
+					sessionCount: 2,
+					evaluationCount: 1,
+				},
+			}),
+		);
+		const rendered = header.render(100);
+		const text = rendered.map(stripVTControlCharacters).join("\n");
+		const styled = rendered.join("\n");
+
+		expect(text).toContain("Welcome to re™");
+		expect(text).toContain("▄▀▀▀▀▀ █▀▀▀▀█ █▀▀▀▀▄ █▀▀▀▀▀");
+		expect(text).toContain("Direct chat · Mayuri (研究)");
+		expect(text).toContain("Memory       7 documents");
+		expect(text).toContain("Progress     2 sessions · 3 turns");
+		expect(text).not.toContain("Tips for getting started");
+		expect(styled).toContain(theme.fg("success", "ready"));
+		expect(styled).toContain(theme.fg("accent", "7"));
+		expect(styled).toContain(workerForeground("research", "text", " Memory       ", theme));
+	});
+
+	it("renders failed worker health in red", () => {
+		const header = new RecodeHeader(
+			"0.81.0",
+			() => "welcome",
+			() => ({
+				model: "qwen3.5-9b",
+				provider: "open-provider",
+				cwd: "re.pi",
+				worker: {
+					workerId: "audit",
+					workerName: "Levi (監査)",
+					status: "failed",
+					turnCount: 0,
+					memoryDocumentCount: 0,
+					sessionCount: 0,
+					evaluationCount: 0,
+				},
+			}),
+		);
+
+		expect(header.render(100).join("\n")).toContain(theme.fg("error", "failed"));
 	});
 
 	it("does not occupy rows outside the welcome state", () => {

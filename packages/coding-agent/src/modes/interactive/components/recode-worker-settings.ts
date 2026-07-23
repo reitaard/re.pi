@@ -4,11 +4,15 @@ import {
 	fuzzyFilter,
 	getKeybindings,
 	Input,
+	Text,
 	truncateToWidth,
 	visibleWidth,
 	wrapTextWithAnsi,
 } from "@reitaard/repi-tui";
 import type { WorkerConversationSnapshot, WorkerDescriptor } from "../../../core/delegation/worker-directory.ts";
+import type { WorkerStorageState } from "../../../core/delegation/worker-storage.ts";
+import { RECODE_SHIORI_DISPLAY_NAME } from "../../../core/recode-memory/recode-shiori.ts";
+import type { RecodeShioriSettingsSnapshot } from "../../../core/recode-memory/recode-shiori-control.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { workerForeground } from "./recode-worker-indicator.ts";
@@ -17,11 +21,15 @@ export type RecodeWorkerSettingAction =
 	| "chat"
 	| "close"
 	| "status"
+	| "memory"
+	| "progress"
+	| "evaluations"
 	| "model"
 	| "thinking"
 	| "tokens"
 	| "tools"
-	| "prompt";
+	| "prompt"
+	| "cardinal";
 
 export interface RecodeWorkerSettingId {
 	workerId: string;
@@ -31,7 +39,9 @@ export interface RecodeWorkerSettingId {
 export interface RecodeWorkerSettingsOptions {
 	workers: readonly WorkerDescriptor[];
 	directChats?: ReadonlyMap<string, WorkerConversationSnapshot>;
+	storageStates?: ReadonlyMap<string, WorkerStorageState>;
 	modelValues: readonly string[];
+	shiori?: RecodeShioriSettingsSnapshot;
 	maxVisible: number;
 }
 
@@ -55,7 +65,22 @@ export function parseWorkerSettingId(value: string): RecodeWorkerSettingId | und
 	if (separator < 1) return undefined;
 	const workerId = value.slice(0, separator);
 	const action = value.slice(separator + 1) as RecodeWorkerSettingAction;
-	if (!["chat", "close", "status", "model", "thinking", "tokens", "tools", "prompt"].includes(action)) {
+	if (
+		![
+			"chat",
+			"close",
+			"status",
+			"memory",
+			"progress",
+			"evaluations",
+			"model",
+			"thinking",
+			"tokens",
+			"tools",
+			"prompt",
+			"cardinal",
+		].includes(action)
+	) {
 		return undefined;
 	}
 	return { workerId, action };
@@ -216,9 +241,46 @@ export class RecodeWorkerSettingsComponent extends Container {
 				: "current (follows Aizen)";
 			const shared = { workerId: worker.id, workerName, searchText: `${worker.id} ${workerName}` };
 			const directChat = options.directChats?.get(worker.id);
+			const storage = options.storageStates?.get(worker.id);
 			const turns = directChat
 				? `${directChat.turnCount} ${directChat.turnCount === 1 ? "turn" : "turns"}`
 				: undefined;
+			const directChatState = directChat
+				? [
+						{
+							...shared,
+							id: settingId(worker.id, "status"),
+							label: "Health",
+							description: "Direct-chat runtime and durable worker storage health",
+							currentValue: `${directChat.status} · storage ${storage?.health ?? "unavailable"}`,
+							values: [`${directChat.status} · storage ${storage?.health ?? "unavailable"}`],
+						},
+						{
+							...shared,
+							id: settingId(worker.id, "memory"),
+							label: "Memory",
+							description: storage?.paths.kioku ?? "Worker Kioku directory is unavailable",
+							currentValue: `${storage?.memoryDocumentCount ?? 0} documents`,
+							values: [`${storage?.memoryDocumentCount ?? 0} documents`],
+						},
+						{
+							...shared,
+							id: settingId(worker.id, "progress"),
+							label: "Progress",
+							description: "Durable direct-chat sessions and current conversation turns",
+							currentValue: `${storage?.sessionCount ?? 0} sessions · ${turns}`,
+							values: [`${storage?.sessionCount ?? 0} sessions · ${turns}`],
+						},
+						{
+							...shared,
+							id: settingId(worker.id, "evaluations"),
+							label: "Evaluations",
+							description: storage?.paths.evaluations ?? "Worker evaluation directory is unavailable",
+							currentValue: `${storage?.evaluationCount ?? 0} recorded`,
+							values: [`${storage?.evaluationCount ?? 0} recorded`],
+						},
+					]
+				: [];
 			return [
 				{
 					...shared,
@@ -228,14 +290,7 @@ export class RecodeWorkerSettingsComponent extends Container {
 					currentValue: directChat ? `continue · ${turns}` : "start",
 					values: [directChat ? `continue · ${turns}` : "start"],
 				},
-				{
-					...shared,
-					id: settingId(worker.id, "status"),
-					label: "Status",
-					description: "Show current conversation state and turn count",
-					currentValue: directChat ? `${directChat.status} · ${turns}` : "ready",
-					values: [directChat ? `${directChat.status} · ${turns}` : "ready"],
-				},
+				...directChatState,
 				{
 					...shared,
 					id: settingId(worker.id, "model"),
@@ -286,6 +341,55 @@ export class RecodeWorkerSettingsComponent extends Container {
 				},
 			];
 		});
+		if (options.shiori) {
+			const shiori = options.shiori;
+			const workerId = "shiori";
+			const workerName = RECODE_SHIORI_DISPLAY_NAME;
+			const shared = { workerId, workerName, searchText: `shiori memory reviewer passive ${workerName}` };
+			const model = shiori.model ? `${shiori.model.provider}/${shiori.model.id}` : "current (follows Aizen)";
+			items.push(
+				{
+					...shared,
+					id: settingId(workerId, "status"),
+					label: "Health",
+					description: "Shiori is a passive memory reviewer and only runs when explicitly requested",
+					currentValue: shiori.enabled ? (shiori.reviewing ? "reviewing" : "ready · passive") : "disabled",
+					values: [shiori.enabled ? (shiori.reviewing ? "reviewing" : "ready · passive") : "disabled"],
+				},
+				{
+					...shared,
+					id: settingId(workerId, "model"),
+					label: "Model",
+					description: "Choose the current Aizen model or a fixed model for Shiori reviews",
+					currentValue: model,
+					values: [...new Set(["current (follows Aizen)", model, ...options.modelValues])],
+				},
+				{
+					...shared,
+					id: settingId(workerId, "thinking"),
+					label: "Thinking",
+					description: "Allow Shiori to reason before extracting memory candidates",
+					currentValue: shiori.thinking ? "on" : "off",
+					values: ["off", "on"],
+				},
+				{
+					...shared,
+					id: settingId(workerId, "cardinal"),
+					label: "Cardinal Routing",
+					description: "Choose where Cardinal admits Shiori's reviewed memories",
+					currentValue: shiori.cardinalRouting,
+					values: ["auto", "project", "global", "ask"],
+				},
+				{
+					...shared,
+					id: settingId(workerId, "prompt"),
+					label: "Prompt/Role",
+					description: "View Shiori's passive memory-review role and safety boundary",
+					currentValue: "view",
+					values: ["view"],
+				},
+			);
+		}
 
 		this.addChild(new DynamicBorder());
 		this.settingsList = new GroupedWorkerSettingsList(
@@ -307,5 +411,72 @@ export class RecodeWorkerSettingsComponent extends Container {
 
 	handleInput(data: string): void {
 		this.settingsList.handleInput(data);
+	}
+}
+
+export class RecodeWorkerDirectChatComponent extends Container {
+	private readonly input = new Input();
+	private readonly onSubmit: (message: string) => void;
+	private readonly onCancel: () => void;
+	private showTeachHints = false;
+
+	constructor(worker: WorkerDescriptor, onSubmit: (message: string) => void, onCancel: () => void) {
+		super();
+		this.onSubmit = onSubmit;
+		this.onCancel = onCancel;
+		const workerName = `${worker.displayName}${worker.aliases?.[0] ? ` (${worker.aliases[0]})` : ""}`;
+		this.addChild(new DynamicBorder());
+		this.addChild(new Text(theme.bold(workerForeground(worker.id, "identity", ` ${workerName} ›`, theme)), 1, 0));
+		this.addChild(this.input);
+		this.addChild(new DynamicBorder());
+	}
+
+	handleInput(data: string): void {
+		const keybindings = getKeybindings();
+		if (keybindings.matches(data, "tui.select.cancel")) {
+			this.onCancel();
+			return;
+		}
+		if (keybindings.matches(data, "tui.input.submit")) {
+			this.onSubmit(this.input.getValue().trim());
+			return;
+		}
+		if (keybindings.matches(data, "tui.input.tab")) {
+			const value = this.input.getValue();
+			if (value === "/teach") {
+				this.input.handleInput(" ");
+				this.showTeachHints = true;
+				return;
+			}
+			if (value.startsWith("/teach ")) {
+				const prefix = value.slice("/teach ".length);
+				const matches = ["on", "status", "review", "save", "off"].filter((option) => option.startsWith(prefix));
+				if (matches.length === 1) this.input.handleInput(matches[0]!.slice(prefix.length));
+				this.showTeachHints = true;
+				return;
+			}
+		}
+		this.input.handleInput(data);
+		const value = this.input.getValue();
+		this.showTeachHints = value.startsWith("/teach ");
+	}
+
+	override render(width: number): string[] {
+		const lines = super.render(width);
+		if (!this.showTeachHints) return lines;
+		const prefix = this.input.getValue().slice("/teach ".length);
+		const options = ["on", "status", "review", "save <id>", "off"].filter((option) => option.startsWith(prefix));
+		if (options.length === 0) return lines;
+		lines.splice(
+			Math.max(0, lines.length - 1),
+			0,
+			truncateToWidth(theme.fg("dim", `  /teach ${options.join("   /teach ")}`), width, ""),
+			truncateToWidth(
+				theme.fg("dim", "  Tab completes · Space shows commands · hidden while typing normally"),
+				width,
+				"",
+			),
+		);
+		return lines;
 	}
 }

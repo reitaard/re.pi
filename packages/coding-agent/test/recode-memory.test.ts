@@ -2,13 +2,24 @@ import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createEventBus } from "../src/core/event-bus.ts";
+import type { ExtensionContext } from "../src/core/extensions/types.ts";
 import { chunkRecodeMemory } from "../src/core/recode-memory/recode-memory-chunker.ts";
 import { RecodeMemoryManager } from "../src/core/recode-memory/recode-memory-manager.ts";
-import { resolveRecodeMemoryLocation } from "../src/core/recode-memory/recode-memory-runtime.ts";
+import { RecodeMemoryRuntime, resolveRecodeMemoryLocation } from "../src/core/recode-memory/recode-memory-runtime.ts";
+import {
+	RECODE_SHIORI_SETTINGS_REQUEST,
+	RECODE_SHIORI_SETTINGS_UPDATE,
+	type RecodeShioriSettingsRequest,
+	type RecodeShioriSettingsSnapshot,
+	type RecodeShioriSettingsUpdate,
+} from "../src/core/recode-memory/recode-shiori-control.ts";
 import { archiveRecodeShioriDeskItem, placeOnRecodeShioriDesk } from "../src/core/recode-memory/recode-shiori-desk.ts";
+import { DefaultResourceLoader } from "../src/core/resource-loader.ts";
 import {
 	formatRecodeMemoryFooter,
 	normalizeRecodeMemoryConfig,
+	recodeMemory,
 	resolveAutomaticMemoryScope,
 } from "../src/recode-memory.ts";
 
@@ -45,6 +56,117 @@ describe("re.code core memory", () => {
 	it("uses the Kioku kanji display name in footer status", () => {
 		expect(formatRecodeMemoryFooter("project")).toBe("Kioku (記憶): project");
 		expect(formatRecodeMemoryFooter("error")).toBe("Kioku (記憶): error");
+	});
+
+	it("blocks direct Kioku writes while Aizen Teach Mode is active", async () => {
+		const root = await mkdtemp(join(tmpdir(), "repi-memory-teach-"));
+		roots.push(root);
+		const agentDir = join(root, "agent");
+		const runtime = new RecodeMemoryRuntime();
+		const loader = new DefaultResourceLoader({
+			cwd: root,
+			agentDir,
+			noExtensions: true,
+			noSkills: true,
+			noPromptTemplates: true,
+			noThemes: true,
+			extensionFactories: [
+				{
+					name: "recode-memory",
+					factory: (pi) => recodeMemory(pi, runtime, { agentDir }),
+				},
+			],
+		});
+		try {
+			await loader.reload();
+			const extension = loader.getExtensions().extensions[0];
+			const teachCommand = extension?.commands.get("teach");
+			const writeTool = extension?.tools.get("kioku_write")?.definition;
+			if (!teachCommand || !writeTool) throw new Error("Teach command or Kioku write tool missing");
+			const notify = vi.fn();
+			await teachCommand.handler("on", {
+				mode: "print",
+				ui: { notify },
+			} as unknown as Parameters<typeof teachCommand.handler>[1]);
+			const result = await writeTool.execute(
+				"write-1",
+				{ scope: "project", text: "This must remain staged until approval." },
+				undefined,
+				undefined,
+				{
+					cwd: root,
+					isProjectTrusted: () => true,
+				} as ExtensionContext,
+			);
+			expect((result as { isError?: boolean }).isError).toBe(true);
+			expect(result.content).toEqual([
+				expect.objectContaining({
+					type: "text",
+					text: expect.stringContaining("Direct Kioku writes are blocked while Teach Mode is active"),
+				}),
+			]);
+		} finally {
+			runtime.close();
+		}
+	});
+
+	it("links Shiori worker settings to the live memory runtime", async () => {
+		const root = await mkdtemp(join(tmpdir(), "repi-memory-shiori-settings-"));
+		roots.push(root);
+		const agentDir = join(root, "agent");
+		const runtime = new RecodeMemoryRuntime();
+		const eventBus = createEventBus();
+		const loader = new DefaultResourceLoader({
+			cwd: root,
+			agentDir,
+			eventBus,
+			noExtensions: true,
+			noSkills: true,
+			noPromptTemplates: true,
+			noThemes: true,
+			extensionFactories: [
+				{
+					name: "recode-memory",
+					factory: (pi) => recodeMemory(pi, runtime, { agentDir }),
+				},
+			],
+		});
+		try {
+			await loader.reload();
+			const initial = await new Promise<RecodeShioriSettingsSnapshot>((resolve) => {
+				eventBus.emit(RECODE_SHIORI_SETTINGS_REQUEST, { resolve } satisfies RecodeShioriSettingsRequest);
+			});
+			expect(initial).toMatchObject({ thinking: false, cardinalRouting: "auto", reviewing: false });
+
+			const updated = await new Promise<RecodeShioriSettingsSnapshot>((resolve, reject) => {
+				eventBus.emit(RECODE_SHIORI_SETTINGS_UPDATE, {
+					patch: {
+						shioriModel: { provider: "local", id: "shiori-model" },
+						shioriThinking: true,
+						cardinalRouting: "project",
+					},
+					resolve,
+					reject,
+				} satisfies RecodeShioriSettingsUpdate);
+			});
+			expect(updated).toMatchObject({
+				model: { provider: "local", id: "shiori-model" },
+				thinking: true,
+				cardinalRouting: "project",
+			});
+			expect(runtime.getConfig()).toMatchObject({
+				shioriModel: { provider: "local", id: "shiori-model" },
+				shioriThinking: true,
+				cardinalRouting: "project",
+			});
+			expect(JSON.parse(await readFile(join(agentDir, "recode-memory.json"), "utf8"))).toMatchObject({
+				shioriModel: { provider: "local", id: "shiori-model" },
+				shioriThinking: true,
+				cardinalRouting: "project",
+			});
+		} finally {
+			runtime.close();
+		}
 	});
 
 	it("reuses an existing project memory root when launched from inside it", () => {

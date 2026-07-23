@@ -2,9 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added isolated named-worker session, Kioku, state, and evaluation storage roots plus a direct-chat surface with worker health information.
+- Added owner-scoped Teach Mode for Aizen and direct worker chats with persistent staged proposals, Cardinal approval, parent settings, and Tab/Space command hints.
+- Added Shiori as a passive reviewer in parent Worker Settings, with live-linked model, thinking, Cardinal routing, health, and role controls shared with Memory Settings.
+
 ### Fixed
 
 - Kept resumed sessions synchronized with active remote tool calls and prevented reloads from invalidating a process's own running extension context.
+- Kept the Recode logo visible after messages, new sessions, reloads, and resumed sessions.
+- Prevented Teach Mode from bypassing staged Creator approval through direct Kioku or Shiori writes.
+- Made empty worker shortcuts and their `new` argument create fresh named direct-chat sessions instead of appending to the active Aizen session.
 
 ## [0.81.4] - 2026-07-22
 

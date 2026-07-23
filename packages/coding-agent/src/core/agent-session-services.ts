@@ -8,6 +8,7 @@ import { AuthStorage } from "./auth-storage.ts";
 import {
 	createDelegateTool,
 	createWorkerControlTools,
+	ensureWorkerStorage,
 	REPI_NAMED_WORKERS,
 	WorkerDirectory,
 } from "./delegation/index.ts";
@@ -215,6 +216,7 @@ export async function createAgentSessionServices(
 				modelRegistry,
 			})
 		: undefined;
+	if (workerDirectory) await ensureWorkerStorage(agentDir, cwd, workerDirectory.getWorkerDefinitions());
 	const configuredResourceLoaderOptions = options.resourceLoaderOptions ?? {};
 	const extensionFactories = [
 		...(configuredResourceLoaderOptions.extensionFactories ?? []),
@@ -223,7 +225,10 @@ export async function createAgentSessionServices(
 					{
 						name: "recode-workers",
 						factory: (pi: Parameters<typeof recodeWorkers>[0]) =>
-							recodeWorkers(pi, workerDirectory, { settingsPath: join(agentDir, "recode-workers.json") }),
+							recodeWorkers(pi, workerDirectory, {
+								agentDir,
+								settingsPath: join(agentDir, "recode-workers.json"),
+							}),
 					},
 				]
 			: []),

@@ -36,5 +36,17 @@ export {
 	type WorkerDirectoryOptions,
 	type WorkerDirectoryRuntimeOptions,
 } from "./worker-directory.ts";
+export {
+	type ActiveWorkerHeaderState,
+	getActiveWorkerHeaderState,
+	setActiveWorkerHeaderState,
+} from "./worker-header-state.ts";
 export { REPI_NAMED_WORKERS } from "./worker-registry.ts";
+export {
+	ensureWorkerStorage,
+	inspectWorkerStorage,
+	resolveWorkerStoragePaths,
+	type WorkerStoragePaths,
+	type WorkerStorageState,
+} from "./worker-storage.ts";
 export { createWorkerControlTools } from "./worker-tools.ts";

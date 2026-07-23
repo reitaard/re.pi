@@ -71,6 +71,7 @@ import {
 	computeCacheWaste,
 	detectCacheMiss,
 } from "../../core/cache-stats.ts";
+import { getActiveWorkerHeaderState } from "../../core/delegation/worker-header-state.ts";
 import type {
 	AutocompleteProviderFactory,
 	EditorFactory,
@@ -97,6 +98,7 @@ import {
 	watchRecodeSessionTranscript,
 } from "../../core/recode-session-control.ts";
 import { getRecodeSessionReference } from "../../core/recode-session-identity.ts";
+import { parseRecodeCreatorMessage } from "../../core/recode-teach/recode-creator-message.ts";
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
 import { type SessionEntry, SessionManager, sessionEntryToContextMessages } from "../../core/session-manager.ts";
@@ -149,6 +151,7 @@ import {
 	formatAuthSelectorProviderType,
 	OAuthSelectorComponent,
 } from "./components/oauth-selector.ts";
+import { RecodeCreatorMessageComponent } from "./components/recode-creator-message.ts";
 import { RecodeHeader } from "./components/recode-header.ts";
 import { formatRecodeThinkingLevel } from "./components/recode-thinking-label.ts";
 import { ScopedModelsSelectorComponent } from "./components/scoped-models-selector.ts";
@@ -985,11 +988,12 @@ export class InteractiveMode {
 			this.headerContainer.addChild(
 				new RecodeHeader(
 					this.version,
-					() => (this.session.state.messages.length === 0 ? "welcome" : "hidden"),
+					() => "welcome",
 					() => ({
 						model: this.session.model?.id ?? "No model selected",
 						provider: this.session.model?.provider ?? "unknown",
 						cwd: path.basename(this.sessionManager.getCwd()) || ".",
+						worker: getActiveWorkerHeaderState(),
 					}),
 				),
 			);
@@ -3650,6 +3654,14 @@ export class InteractiveMode {
 				if (textContent) {
 					if (this.chatContainer.children.length > 0) {
 						this.chatContainer.addChild(new Spacer(1));
+					}
+					const creatorMessage = parseRecodeCreatorMessage(textContent);
+					if (creatorMessage !== undefined) {
+						this.chatContainer.addChild(
+							new RecodeCreatorMessageComponent(creatorMessage, this.getMarkdownThemeWithSettings()),
+						);
+						if (options?.populateHistory) this.editor.addToHistory?.(creatorMessage);
+						break;
 					}
 					const skillBlock = parseSkillBlock(textContent);
 					if (skillBlock) {

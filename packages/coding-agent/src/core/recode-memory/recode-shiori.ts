@@ -1,6 +1,7 @@
 import type { Model } from "@reitaard/repi-ai";
 import type { ModelRegistry } from "../model-registry.ts";
 import type { SessionEntry, SessionManager } from "../session-manager.ts";
+import { admitRecodeCardinalMemory } from "./recode-cardinal.ts";
 import type { RecodeMemoryManager } from "./recode-memory-manager.ts";
 import type { RecodeMemoryConfig, RecodeMemoryScope, RecodeShioriRouting } from "./recode-memory-types.ts";
 import { runRecodeShioriHarness } from "./recode-shiori-harness.ts";
@@ -372,12 +373,6 @@ async function chooseRouting(
 	return { scope: await chooseScope(candidate, globalAccess), cancelled: false };
 }
 
-async function isDuplicate(manager: RecodeMemoryManager, candidate: RecodeShioriMemoryCandidate): Promise<boolean> {
-	const results = await manager.search(candidate.text, 6, candidate.scope);
-	const normalized = normalizeText(candidate.text);
-	return results.some((result) => normalizeText(result.text).includes(normalized));
-}
-
 export async function executeRecodeShioriFileReview(options: {
 	cwd: string;
 	sourcePath: string;
@@ -429,7 +424,14 @@ export async function executeRecodeShioriFileReview(options: {
 			const route = await chooseRouting(config.cardinalRouting, candidate, config.globalAccess, options.chooseScope);
 			if (!route.scope) continue;
 			const routed = { ...candidate, scope: route.scope };
-			if (await isDuplicate(manager, routed)) {
+			const admission = await admitRecodeCardinalMemory({
+				manager,
+				candidate: routed,
+				globalAccess: config.globalAccess,
+				includeProject: true,
+				reconcile: false,
+			});
+			if (admission.status === "duplicate") {
 				skippedDuplicates += 1;
 				continue;
 			}
@@ -440,7 +442,6 @@ export async function executeRecodeShioriFileReview(options: {
 	let savedGlobal = 0;
 	let savedProject = 0;
 	for (const candidate of pendingWrites) {
-		await manager.write(candidate.scope, candidate.text, false, true, candidate.tags, false);
 		if (candidate.scope === "global") savedGlobal += 1;
 		else savedProject += 1;
 	}
@@ -508,7 +509,14 @@ export async function executeRecodeShiori(options: {
 			if (route.cancelled) throw new Error("Cardinal routing cancelled");
 			if (!route.scope) continue;
 			const routed = { ...candidate, scope: route.scope };
-			if (await isDuplicate(manager, routed)) {
+			const admission = await admitRecodeCardinalMemory({
+				manager,
+				candidate: routed,
+				globalAccess: config.globalAccess,
+				includeProject: true,
+				reconcile: false,
+			});
+			if (admission.status === "duplicate") {
 				skippedDuplicates += 1;
 				continue;
 			}
@@ -518,7 +526,6 @@ export async function executeRecodeShiori(options: {
 		lastReviewedEntryId = chunk.entries.at(-1)!.id;
 	}
 	for (const candidate of pendingWrites) {
-		await manager.write(candidate.scope, candidate.text, false, true, candidate.tags, false);
 		saved += 1;
 		if (candidate.scope === "global") savedGlobal += 1;
 		else savedProject += 1;
