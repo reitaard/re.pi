@@ -7,7 +7,6 @@ import type {
 } from "@reitaard/repi-coding-agent";
 import type {
 	ErrorResponse,
-	InstanceSummary,
 	ListRequest,
 	ListResponse,
 	OrchestratorRequest,
@@ -23,39 +22,12 @@ import type {
 	StopRequest,
 	StopResponse,
 } from "./ipc/protocol.ts";
-import { dispatchPhase4ATarget, TargetRoutingError } from "./target-routing.ts";
+import { createOrchestratorRequestHandler } from "./request-handler.ts";
 import { supervisor } from "./supervisor.ts";
-import type { InstanceRecord } from "./types.ts";
 
-function toInstanceSummary(instance: InstanceRecord): InstanceSummary {
-	return {
-		id: instance.id,
-		status: instance.status,
-		cwd: instance.cwd,
-		label: instance.label,
-		sessionId: instance.sessionId,
-		sessionFile: instance.sessionFile,
-		radiusPiId: instance.radiusPiId,
-	};
-}
+const requestHandler = createOrchestratorRequestHandler(supervisor);
 
-function unknownInstanceError(instanceId: string): ErrorResponse {
-	return {
-		type: "error",
-		ok: false,
-		error: `Unknown instance: ${instanceId}`,
-	};
-}
-
-function targetRoutingError(error: TargetRoutingError): ErrorResponse {
-	return {
-		type: "error",
-		ok: false,
-		error: `${error.code}: ${error.message}`,
-	};
-}
-
-// Overhead types
+// Overload types retained for callers while routing implementation remains injectable.
 export async function handleIpcRequest(request: SpawnRequest): Promise<SpawnResponse | ErrorResponse>;
 export async function handleIpcRequest(request: ListRequest): Promise<ListResponse | ErrorResponse>;
 export async function handleIpcRequest(request: StopRequest): Promise<StopResponse | ErrorResponse>;
@@ -64,92 +36,7 @@ export async function handleIpcRequest(request: RpcRequest): Promise<RpcBridgeRe
 export async function handleIpcRequest(request: RpcStreamRequest): Promise<RpcReadyResponse | ErrorResponse>;
 export async function handleIpcRequest(request: OrchestratorRequest): Promise<OrchestratorResponse>;
 export async function handleIpcRequest(request: OrchestratorRequest): Promise<OrchestratorResponse> {
-	switch (request.type) {
-		case "spawn": {
-			const instance = await supervisor.spawnInstance({
-				cwd: request.cwd,
-				label: request.label,
-			});
-			return {
-				type: "spawn_result",
-				ok: true,
-				instance: toInstanceSummary(instance),
-			};
-		}
-
-		case "list": {
-			return {
-				type: "list_result",
-				ok: true,
-				instances: supervisor.listInstances().map(toInstanceSummary),
-			};
-		}
-
-		case "status": {
-			const instance = supervisor.getInstance(request.instanceId);
-			if (!instance) {
-				return unknownInstanceError(request.instanceId);
-			}
-
-			return {
-				type: "status_result",
-				ok: true,
-				instance: toInstanceSummary(instance),
-			};
-		}
-
-		case "stop": {
-			const instance = await supervisor.stopInstance(request.instanceId);
-			if (!instance) {
-				return unknownInstanceError(request.instanceId);
-			}
-
-			return {
-				type: "stop_result",
-				ok: true,
-				instanceId: request.instanceId,
-			};
-		}
-
-		case "rpc": {
-			try {
-				const response = await dispatchPhase4ATarget(request.target, () =>
-					supervisor.handleRpc(request.instanceId, request.command),
-				);
-				if (!response) {
-					return unknownInstanceError(request.instanceId);
-				}
-
-				return {
-					type: "rpc_result",
-					ok: true,
-					response,
-				};
-			} catch (error) {
-				if (error instanceof TargetRoutingError) return targetRoutingError(error);
-				throw error;
-			}
-		}
-
-		case "rpc_stream": {
-			try {
-				const instance = await dispatchPhase4ATarget(request.target, () =>
-					supervisor.getInstance(request.instanceId),
-				);
-				if (!instance) {
-					return unknownInstanceError(request.instanceId);
-				}
-				return {
-					type: "rpc_ready",
-					ok: true,
-					instance: toInstanceSummary(instance),
-				};
-			} catch (error) {
-				if (error instanceof TargetRoutingError) return targetRoutingError(error);
-				throw error;
-			}
-		}
-	}
+	return await requestHandler(request);
 }
 
 export function openRpcStream(
