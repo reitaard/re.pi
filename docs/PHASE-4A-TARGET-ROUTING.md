@@ -45,6 +45,8 @@ The initial stream handshake authorizes the target for the lifetime of the strea
 
 Spawn, list, status, and stop requests are unchanged.
 
+The request router is constructed against an injected coordinator. Production composes it with the existing local `OrchestratorSupervisor`; tests use a side-effect-free fake coordinator. This proves target authorization ordering without touching Radius, auth storage, child processes, or browser state.
+
 ## Explicit non-goals
 
 Phase 4A does not:
@@ -68,12 +70,14 @@ npm --prefix packages/orchestrator run build
 npm run check
 ```
 
-The target-routing tests must prove:
+Seven target-routing tests must pass and prove:
 
 1. omitted target invokes the current local route exactly once;
 2. explicit local forwards the unchanged inner command;
 3. node and sandbox fail before local execution;
 4. malformed, secret-bearing, endpoint, and scheduler-only fields fail closed;
-5. node identifiers are bounded and credential-free.
+5. node identifiers are bounded and credential-free;
+6. the actual IPC router forwards the exact same `RpcCommand` for omitted and explicit local targets;
+7. the actual IPC router rejects node and sandbox before instance lookup or RPC forwarding.
 
 Phase 4B node capability discovery and selection must not begin until this exact-head gate passes.
