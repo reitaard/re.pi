@@ -1,10 +1,5 @@
 import type { RpcCommand, RpcResponse } from "@reitaard/repi-coding-agent";
-import type {
-	ErrorResponse,
-	InstanceSummary,
-	OrchestratorRequest,
-	OrchestratorResponse,
-} from "./ipc/protocol.ts";
+import type { ErrorResponse, InstanceSummary, OrchestratorRequest, OrchestratorResponse } from "./ipc/protocol.ts";
 import { dispatchPhase4ATarget, TargetRoutingError } from "./target-routing.ts";
 import type { InstanceRecord } from "./types.ts";
 

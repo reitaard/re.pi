@@ -2,10 +2,7 @@ export const ORCHESTRATOR_TARGET_KINDS = ["local", "node", "sandbox"] as const;
 
 export type OrchestratorTargetKind = (typeof ORCHESTRATOR_TARGET_KINDS)[number];
 
-export type OrchestratorExecutionTarget =
-	| { kind: "local" }
-	| { kind: "node"; nodeId: string }
-	| { kind: "sandbox" };
+export type OrchestratorExecutionTarget = { kind: "local" } | { kind: "node"; nodeId: string } | { kind: "sandbox" };
 
 export interface ResolvedOrchestratorTarget {
 	target: OrchestratorExecutionTarget;
@@ -112,10 +109,7 @@ export function resolvePhase4ATarget(value: unknown): ResolvedOrchestratorTarget
  * target argument by design, so orchestration-only fields cannot enter the
  * coding-agent RPC command or registered browser tool input.
  */
-export async function dispatchPhase4ATarget<T>(
-	value: unknown,
-	executeLocal: () => T | Promise<T>,
-): Promise<T> {
+export async function dispatchPhase4ATarget<T>(value: unknown, executeLocal: () => T | Promise<T>): Promise<T> {
 	resolvePhase4ATarget(value);
 	return await executeLocal();
 }
