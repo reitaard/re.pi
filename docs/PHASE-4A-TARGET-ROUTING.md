@@ -1,19 +1,20 @@
 # Phase 4A — target contract and unchanged local route
 
-Status: behavior gate passed on Windows at `cd47d55`; Biome normalization created two uncommitted source edits, so exact-head acceptance is pending one final committed rerun.
+Status: accepted and frozen at Windows-tested code head `8ef5f64fe735e406db2eeb1ef3cf4effc420d67d`.
 
 ## Purpose
 
 Phase 4A creates the smallest honest routing seam in the main RePi orchestrator without implementing remote-node transport or sandbox execution.
 
-The browser package remains one deterministic registered tool inside the coding-agent process. The orchestrator owns the outer execution target envelope and removes it before forwarding the unchanged inner `RpcCommand`.
+The browser package remains one deterministic registered tool inside the coding-agent process. Aizen is the agent/runtime that reasons and invokes tools. The orchestrator is a separate outer service that owns instance lifecycle and execution-target routing. The optional target envelope is removed before the unchanged inner `RpcCommand` reaches Aizen's local coding-agent child.
 
 ```text
 Aizen / client
   -> orchestrator RPC envelope { target?, command }
      -> target validation and authorization
         -> current local coding-agent RPC child
-           -> unchanged registered browser tool
+           -> Aizen / AgentHarness
+              -> unchanged registered browser tool
 ```
 
 ## Target envelope
@@ -58,59 +59,39 @@ Phase 4A does not:
 - expose loopback browser-control tokens;
 - create a second browser runtime.
 
-## Windows behavior gate
+## Accepted Windows gate
 
-Tested source head before Biome normalization:
-
-```text
-cd47d55dafeb1fd59a141b945751d124db892be6
-```
-
-Observed Windows result:
+Exact tested code head:
 
 ```text
-orchestrator tests: 7
-pass: 7
-fail: 0
-orchestrator build: passed
-full monorepo check: passed
-browser smoke: passed
+8ef5f64fe735e406db2eeb1ef3cf4effc420d67d
 ```
 
-The root check reported:
+Results:
 
 ```text
-Checked 893 files. Fixed 2 files.
+orchestrator tests 7
+pass 7
+fail 0
+cancelled 0
+skipped 0
+orchestrator build passed
+full monorepo check passed
+Checked 893 files. No fixes applied.
+shrinkwrap up to date
+install lock up to date
+browser smoke passed
+working tree clean
 ```
 
-Only these files were modified by Biome:
-
-```text
-packages/orchestrator/src/request-handler.ts
-packages/orchestrator/src/target-routing.ts
-```
-
-Because the root check uses `biome check --write`, the exact accepted head must include those deterministic edits and rerun the focused test, build, and full check with no remaining tracked changes.
-
-The unrelated local `re.pi-packages/` nested checkout must not be committed. It may be hidden locally through `.git/info/exclude`.
-
-## Final acceptance gate
-
-```bash
-npm --prefix packages/orchestrator test
-npm --prefix packages/orchestrator run build
-npm run check
-git status --short
-```
-
-The target-routing tests must prove:
+The tests prove:
 
 1. omitted target invokes the current local route exactly once;
 2. explicit local forwards the unchanged inner command;
 3. node and sandbox fail before local execution;
 4. malformed, secret-bearing, endpoint, and scheduler-only fields fail closed;
 5. node identifiers are bounded and credential-free;
-6. omitted and explicit local IPC routes forward the exact same `RpcCommand`;
-7. non-local IPC routes fail before instance lookup or RPC forwarding.
+6. the IPC router forwards the exact `RpcCommand` for omitted and explicit local targets;
+7. non-local targets are rejected before instance lookup or RPC forwarding.
 
-Phase 4B node capability discovery and selection must not begin until the exact committed formatting head passes this gate.
+Phase 4A is frozen. Phase 4B node capability discovery and deterministic selection may begin, but remote execution transport remains out of scope until its own later gate.
