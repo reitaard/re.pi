@@ -1,6 +1,6 @@
 # Phase 4A — target contract and unchanged local route
 
-Status: implemented on `phase-4a-target-routing`; Windows acceptance pending.
+Status: behavior gate passed on Windows at `cd47d55`; Biome normalization created two uncommitted source edits, so exact-head acceptance is pending one final committed rerun.
 
 ## Purpose
 
@@ -45,8 +45,6 @@ The initial stream handshake authorizes the target for the lifetime of the strea
 
 Spawn, list, status, and stop requests are unchanged.
 
-The request router is constructed against an injected coordinator. Production composes it with the existing local `OrchestratorSupervisor`; tests use a side-effect-free fake coordinator. This proves target authorization ordering without touching Radius, auth storage, child processes, or browser state.
-
 ## Explicit non-goals
 
 Phase 4A does not:
@@ -60,24 +58,59 @@ Phase 4A does not:
 - expose loopback browser-control tokens;
 - create a second browser runtime.
 
-## Acceptance gate
+## Windows behavior gate
 
-Run from the main `re.pi` repository on Windows:
+Tested source head before Biome normalization:
+
+```text
+cd47d55dafeb1fd59a141b945751d124db892be6
+```
+
+Observed Windows result:
+
+```text
+orchestrator tests: 7
+pass: 7
+fail: 0
+orchestrator build: passed
+full monorepo check: passed
+browser smoke: passed
+```
+
+The root check reported:
+
+```text
+Checked 893 files. Fixed 2 files.
+```
+
+Only these files were modified by Biome:
+
+```text
+packages/orchestrator/src/request-handler.ts
+packages/orchestrator/src/target-routing.ts
+```
+
+Because the root check uses `biome check --write`, the exact accepted head must include those deterministic edits and rerun the focused test, build, and full check with no remaining tracked changes.
+
+The unrelated local `re.pi-packages/` nested checkout must not be committed. It may be hidden locally through `.git/info/exclude`.
+
+## Final acceptance gate
 
 ```bash
 npm --prefix packages/orchestrator test
 npm --prefix packages/orchestrator run build
 npm run check
+git status --short
 ```
 
-Seven target-routing tests must pass and prove:
+The target-routing tests must prove:
 
 1. omitted target invokes the current local route exactly once;
 2. explicit local forwards the unchanged inner command;
 3. node and sandbox fail before local execution;
 4. malformed, secret-bearing, endpoint, and scheduler-only fields fail closed;
 5. node identifiers are bounded and credential-free;
-6. the actual IPC router forwards the exact same `RpcCommand` for omitted and explicit local targets;
-7. the actual IPC router rejects node and sandbox before instance lookup or RPC forwarding.
+6. omitted and explicit local IPC routes forward the exact same `RpcCommand`;
+7. non-local IPC routes fail before instance lookup or RPC forwarding.
 
-Phase 4B node capability discovery and selection must not begin until this exact-head gate passes.
+Phase 4B node capability discovery and selection must not begin until the exact committed formatting head passes this gate.
