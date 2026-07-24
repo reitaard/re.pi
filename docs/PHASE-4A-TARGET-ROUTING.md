@@ -2,6 +2,8 @@
 
 Status: accepted and frozen at Windows-tested code head `8ef5f64fe735e406db2eeb1ef3cf4effc420d67d`.
 
+The branch may contain a newer documentation-only commit recording this acceptance. The accepted code remains the exact tested head above.
+
 ## Purpose
 
 Phase 4A creates the smallest honest routing seam in the main RePi orchestrator without implementing remote-node transport or sandbox execution.
