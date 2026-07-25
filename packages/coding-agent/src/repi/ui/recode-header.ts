@@ -143,11 +143,15 @@ function calculateLayout(width: number): RecodeHeaderLayout {
 }
 
 export class RecodeHeader implements Component {
-	constructor(
-		private readonly version: string,
-		private readonly getDetails: () => RecodeHeaderDetails,
-		private readonly theme: Theme,
-	) {}
+	private readonly version: string;
+	private readonly getDetails: () => RecodeHeaderDetails;
+	private readonly theme: Theme;
+
+	constructor(version: string, getDetails: () => RecodeHeaderDetails, theme: Theme) {
+		this.version = version;
+		this.getDetails = getDetails;
+		this.theme = theme;
+	}
 
 	invalidate(): void {}
 
