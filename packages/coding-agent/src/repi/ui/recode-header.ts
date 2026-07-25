@@ -115,11 +115,18 @@ function calculateLayout(width: number): RecodeHeaderLayout {
 
 export class RecodeHeader implements Component {
 	private readonly version: string;
+	private readonly isVisible: () => boolean;
 	private readonly getDetails: () => RecodeHeaderDetails;
 	private readonly theme: Theme;
 
-	constructor(version: string, getDetails: () => RecodeHeaderDetails, theme: Theme) {
+	constructor(
+		version: string,
+		isVisible: () => boolean,
+		getDetails: () => RecodeHeaderDetails,
+		theme: Theme,
+	) {
 		this.version = version;
+		this.isVisible = isVisible;
 		this.getDetails = getDetails;
 		this.theme = theme;
 	}
@@ -127,7 +134,7 @@ export class RecodeHeader implements Component {
 	invalidate(): void {}
 
 	render(width: number): string[] {
-		if (width <= 0) return [];
+		if (!this.isVisible() || width <= 0) return [];
 		const layout = calculateLayout(width);
 		if (layout.mode === "compact") return [this.renderCompact(width)];
 		if (layout.mode === "stacked") return this.renderStacked(width, layout.leftWidth);
