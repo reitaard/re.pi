@@ -14,7 +14,6 @@ const args = new Set(process.argv.slice(2));
 const shouldPack = args.has("--pack") || args.has("--publish");
 const shouldPublish = args.has("--publish");
 const skipBuild = args.has("--skip-build");
-const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 
 function run(command, commandArgs, options = {}) {
 	return execFileSync(command, commandArgs, {
@@ -22,6 +21,15 @@ function run(command, commandArgs, options = {}) {
 		encoding: "utf8",
 		stdio: options.capture ? ["ignore", "pipe", "inherit"] : "inherit",
 	});
+}
+
+function runNpm(commandArgs, options = {}) {
+	const npmExecPath = process.env.npm_execpath;
+	if (npmExecPath) return run(process.execPath, [npmExecPath, ...commandArgs], options);
+	if (process.platform === "win32") {
+		throw new Error("npm_execpath is unavailable. Run this script through an npm run command on Windows.");
+	}
+	return run("npm", commandArgs, options);
 }
 
 function copyIfPresent(source, destination) {
@@ -43,7 +51,7 @@ if (shouldPublish && (!buildInfo.release || buildInfo.dirty)) {
 }
 
 if (!skipBuild) {
-	run(npmCommand, ["--prefix", "packages/coding-agent", "run", "build"]);
+	runNpm(["--prefix", "packages/coding-agent", "run", "build"]);
 	buildInfo = deriveRepiBuildInfo(rootDir);
 }
 
@@ -77,7 +85,7 @@ console.log(`Stage: ${stageDir}`);
 
 if (shouldPack) {
 	mkdirSync(artifactsDir, { recursive: true });
-	const output = run(npmCommand, ["pack", "--json", "--pack-destination", artifactsDir], {
+	const output = runNpm(["pack", "--json", "--pack-destination", artifactsDir], {
 		cwd: stageDir,
 		capture: true,
 	});
@@ -87,6 +95,6 @@ if (shouldPack) {
 }
 
 if (shouldPublish) {
-	run(npmCommand, ["publish", "--access", "public", "--tag", "latest"], { cwd: stageDir });
+	runNpm(["publish", "--access", "public", "--tag", "latest"], { cwd: stageDir });
 	console.log(`Published ${releaseManifest.name}@${releaseManifest.version} with dist-tag latest`);
 }
