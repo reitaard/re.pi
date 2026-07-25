@@ -38,7 +38,13 @@ describe("RePi TUI update notifier", () => {
 						"0.82.1-repi.1": {
 							name: "@reitaard/repi-coding-agent",
 							version: "0.82.1-repi.1",
-							repi: { productName: "RePi", channel: "stable" },
+							repi: {
+								productName: "RePi",
+								channel: "stable",
+								upstreamVersion: "0.82.1",
+								revision: 1,
+								releaseTag: "repi-v0.82.1-r1",
+							},
 						},
 					},
 				}),
