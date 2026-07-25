@@ -10,6 +10,8 @@ describe("Recode update command routing", () => {
 		expect(shouldHandleRepiSelfUpdate(["update", "pi"])).toBe(true);
 		expect(shouldHandleRepiSelfUpdate(["update", "--all"])).toBe(true);
 		expect(shouldHandleRepiSelfUpdate(["update", "--self", "--extensions"])).toBe(true);
+		expect(shouldHandleRepiSelfUpdate(["update", "self", "--extensions"])).toBe(true);
+		expect(shouldHandleRepiSelfUpdate(["update", "recode", "--extensions"])).toBe(true);
 	});
 
 	it("delegates extension, model, help, and named-package updates", () => {
