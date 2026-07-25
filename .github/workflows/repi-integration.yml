@@ -124,10 +124,16 @@ jobs:
             coding_agent=$?
             npm --prefix packages/ai test -- test/provider-retry.test.ts
             ai=$?
+            npm --prefix packages/agent run test:harness -- test/harness/recode-harness-journal.test.ts
+            agent=$?
+            node --test packages/tui/test/loader-loop.test.ts
+            tui=$?
             node --test scripts/repi-version.test.mjs scripts/repi-release-package.test.mjs
             scripts=$?
             if [ "$coding_agent" -ne 0 ]; then exit "$coding_agent"; fi
             if [ "$ai" -ne 0 ]; then exit "$ai"; fi
+            if [ "$agent" -ne 0 ]; then exit "$agent"; fi
+            if [ "$tui" -ne 0 ]; then exit "$tui"; fi
             exit "$scripts"
           } > "$RUNNER_TEMP/repi-tests.log" 2>&1
           code=$?
@@ -146,7 +152,7 @@ jobs:
       - name: Stop after focused test failure
         if: steps.repi_tests.outputs.exit_code != '0'
         run: |
-          tail -n 200 "$RUNNER_TEMP/repi-tests.log"
+          tail -n 240 "$RUNNER_TEMP/repi-tests.log"
           exit 1
 
       - name: Validate release command syntax
