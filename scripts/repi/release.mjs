@@ -11,8 +11,6 @@ const artifactsDir = join(rootDir, ".artifacts");
 const cliArgs = process.argv.slice(2);
 const publish = cliArgs.includes("--publish");
 const bootstrap = cliArgs.includes("--bootstrap");
-const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
-const recodeCommand = process.platform === "win32" ? "recode.cmd" : "recode";
 
 if (bootstrap && !publish) {
 	throw new Error("--bootstrap is only valid together with --publish");
@@ -23,6 +21,7 @@ function run(command, args, options = {}) {
 		cwd: options.cwd ?? rootDir,
 		encoding: "utf8",
 		stdio: options.capture ? ["ignore", "pipe", "pipe"] : "inherit",
+		...(options.shell ? { shell: true } : {}),
 	});
 	if (result.status !== 0) {
 		const detail =
@@ -37,7 +36,28 @@ function git(args, options = {}) {
 }
 
 function npm(args, options = {}) {
-	return run(npmCommand, args, options);
+	const npmExecPath = process.env.npm_execpath;
+	if (npmExecPath) return run(process.execPath, [npmExecPath, ...args], options);
+	if (process.platform === "win32") {
+		throw new Error("npm_execpath is unavailable. Run the release through npm run repi:release on Windows.");
+	}
+	return run("npm", args, options);
+}
+
+function npmProbe(args) {
+	const npmExecPath = process.env.npm_execpath;
+	if (npmExecPath) {
+		return spawnSync(process.execPath, [npmExecPath, ...args], {
+			cwd: rootDir,
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+	}
+	return spawnSync("npm", args, {
+		cwd: rootDir,
+		encoding: "utf8",
+		stdio: ["ignore", "pipe", "pipe"],
+	});
 }
 
 function node(args, options = {}) {
@@ -108,7 +128,11 @@ function smokeTestTarball(tarball, expectedVersion, packageName) {
 function installBootstrapTarball(tarball, expectedVersion) {
 	console.log(`Installing tested Recode bootstrap ${expectedVersion}...`);
 	npm(["install", "-g", "--ignore-scripts", tarball]);
-	const output = run(recodeCommand, ["--version"], { capture: true });
+	const command = process.platform === "win32" ? "recode.cmd" : "recode";
+	const output = run(command, ["--version"], {
+		capture: true,
+		...(process.platform === "win32" ? { shell: true } : {}),
+	});
 	if (!output.includes(expectedVersion)) {
 		throw new Error(`Global Recode bootstrap reported an unexpected version: ${output}`);
 	}
@@ -117,11 +141,7 @@ function installBootstrapTarball(tarball, expectedVersion) {
 
 function waitForLatestDistTag(packageName, expectedVersion) {
 	for (let attempt = 0; attempt < 15; attempt += 1) {
-		const result = spawnSync(npmCommand, ["view", packageName, "dist-tags.latest"], {
-			cwd: rootDir,
-			encoding: "utf8",
-			stdio: ["ignore", "pipe", "pipe"],
-		});
+		const result = npmProbe(["view", packageName, "dist-tags.latest"]);
 		if (result.status === 0 && result.stdout.trim() === expectedVersion) return;
 		Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2000);
 	}
@@ -151,11 +171,7 @@ if (!publish) {
 }
 
 npm(["whoami"], { capture: true });
-const published = spawnSync(npmCommand, ["view", `${buildInfo.packageName}@${releaseVersion}`, "version"], {
-	cwd: rootDir,
-	encoding: "utf8",
-	stdio: ["ignore", "pipe", "pipe"],
-});
+const published = npmProbe(["view", `${buildInfo.packageName}@${releaseVersion}`, "version"]);
 if (published.status === 0 && published.stdout.trim() === releaseVersion) {
 	throw new Error(`${buildInfo.packageName}@${releaseVersion} is already published`);
 }
