@@ -12,6 +12,7 @@ const cliArgs = process.argv.slice(2);
 const publish = cliArgs.includes("--publish");
 const bootstrap = cliArgs.includes("--bootstrap");
 const requiredNodePrefix = "26.5.";
+const npmRegistry = "https://registry.npmjs.org/";
 
 if (!process.versions.node.startsWith(requiredNodePrefix)) {
 	throw new Error(`RePi releases require Node 26.5.x; current runtime is ${process.version}`);
@@ -145,17 +146,31 @@ function installBootstrapTarball(tarball, expectedVersion) {
 }
 
 function publishedVersion(packageName, version) {
-	const result = npmProbe(["view", `${packageName}@${version}`, "version"]);
+	const result = npmProbe([
+		"view",
+		`${packageName}@${version}`,
+		"version",
+		"--registry",
+		npmRegistry,
+		"--prefer-online",
+	]);
 	return result.status === 0 && result.stdout.trim() === version;
 }
 
 function waitForLatestDistTag(packageName, expectedVersion) {
-	for (let attempt = 0; attempt < 15; attempt += 1) {
-		const result = npmProbe(["view", packageName, "dist-tags.latest"]);
+	for (let attempt = 0; attempt < 90; attempt += 1) {
+		const result = npmProbe([
+			"view",
+			packageName,
+			"dist-tags.latest",
+			"--registry",
+			npmRegistry,
+			"--prefer-online",
+		]);
 		if (result.status === 0 && result.stdout.trim() === expectedVersion) return;
 		Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2000);
 	}
-	throw new Error(`Published package did not expose latest=${expectedVersion} within 30 seconds`);
+	throw new Error(`Published package did not expose latest=${expectedVersion} within 180 seconds`);
 }
 
 function deleteLocalTag(tag) {
@@ -213,8 +228,8 @@ try {
 		const tarball = packageTarball(releaseVersion);
 		smokeTestTarball(tarball, releaseVersion, buildInfo.packageName);
 		npm(["publish", tarball, "--access", "public", "--tag", "latest"]);
-		waitForLatestDistTag(buildInfo.packageName, releaseVersion);
 		packageIsPublished = true;
+		waitForLatestDistTag(buildInfo.packageName, releaseVersion);
 		console.log(`Published ${buildInfo.packageName}@${releaseVersion}`);
 	} else {
 		console.log(`${buildInfo.packageName}@${releaseVersion} is already published; resuming tag finalization.`);
