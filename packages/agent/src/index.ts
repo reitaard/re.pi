@@ -3,7 +3,10 @@ export { uuidv7 } from "@earendil-works/pi-ai";
 export * from "./agent.ts";
 // Loop functions
 export * from "./agent-loop.ts";
-export * from "./harness/agent-harness.ts";
+// Harness implementations
+export { AgentHarness as PiAgentHarness } from "./harness/agent-harness.ts";
+export { RecodeAgentHarness as AgentHarness } from "./harness/recode-agent-harness.ts";
+export * from "./harness/recode-harness-journal.ts";
 export {
 	type BranchPreparation,
 	type BranchSummaryDetails,
