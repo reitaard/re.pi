@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { retryProviderRequest } from "../src/utils/provider-retry.ts";
 
-function providerError(status: number | undefined, headers?: Record<string, string>): Error {
-	return Object.assign(new Error(`Provider error: ${status}`), {
+function providerError(status: number | undefined, headers?: Record<string, string>, message?: string): Error {
+	return Object.assign(new Error(message ?? `Provider error: ${status}`), {
 		status,
 		headers: new Headers(headers),
 	});
@@ -27,6 +27,18 @@ describe("provider request retries", () => {
 
 		await expect(result).resolves.toBe("ok");
 		expect(request).toHaveBeenCalledTimes(2);
+	});
+
+	it("does not retry exhausted OAuth subscription windows", async () => {
+		const error = providerError(
+			429,
+			undefined,
+			'OpenAI API error (429): {"type":"usage_limit_reached","message":"The usage limit has been reached","plan_type":"plus","resets_in_seconds":325874}',
+		);
+		const request = vi.fn<() => Promise<string>>().mockRejectedValue(error);
+
+		await expect(retryProviderRequest(request, { maxRetries: 3 })).rejects.toBe(error);
+		expect(request).toHaveBeenCalledTimes(1);
 	});
 
 	it("does not retry errors the provider marks as non-retryable", async () => {
