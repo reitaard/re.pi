@@ -1,7 +1,6 @@
 import type { Component } from "@earendil-works/pi-tui";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import chalk from "chalk";
-import Yoga, { Direction, FlexDirection } from "yoga-layout";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import { workerForeground } from "./recode-worker-indicator.ts";
 
@@ -36,6 +35,7 @@ const WORDMARK_LETTERS = [
 ] as const;
 const MIN_STACKED_WIDTH = 48;
 const MIN_WIDE_WIDTH = 72;
+const WIDE_LEFT_WIDTH = 32;
 const WELCOME_BOX_HEIGHT = 9;
 const BRAND_TEXT_PALETTE = ["#FF3478", "#FF8E71", "#EFFFBD"] as const;
 const BRAND_LINE_PALETTE = ["#025D7A", "#00B6B9", "#55DC99", "#B2FF7B"] as const;
@@ -103,43 +103,14 @@ function renderWordmarkRow(row: number): string {
 
 function calculateLayout(width: number): RecodeHeaderLayout {
 	if (width < MIN_STACKED_WIDTH) return { mode: "compact", leftWidth: width, rightWidth: 0 };
-
+	if (width < MIN_WIDE_WIDTH) return { mode: "stacked", leftWidth: width - 2, rightWidth: 0 };
 	const innerWidth = width - 2;
-	const root = Yoga.Node.create();
-	const brand = Yoga.Node.create();
-	const divider = Yoga.Node.create();
-	const details = Yoga.Node.create();
-
-	try {
-		root.setWidth(innerWidth);
-		root.setFlexDirection(width >= MIN_WIDE_WIDTH ? FlexDirection.Row : FlexDirection.Column);
-		brand.setFlexShrink(0);
-		details.setFlexGrow(1);
-
-		if (width >= MIN_WIDE_WIDTH) {
-			brand.setWidth(32);
-			brand.setMinWidth(28);
-			divider.setWidth(1);
-			details.setMinWidth(36);
-		} else {
-			brand.setWidth("100%");
-			divider.setWidth("100%");
-			details.setWidth("100%");
-		}
-
-		root.insertChild(brand, 0);
-		root.insertChild(divider, 1);
-		root.insertChild(details, 2);
-		root.calculateLayout(innerWidth, "auto", Direction.LTR);
-
-		return {
-			mode: width >= MIN_WIDE_WIDTH ? "wide" : "stacked",
-			leftWidth: Math.floor(brand.getComputedWidth()),
-			rightWidth: Math.floor(details.getComputedWidth()),
-		};
-	} finally {
-		root.freeRecursive();
-	}
+	const leftWidth = Math.min(WIDE_LEFT_WIDTH, Math.max(28, innerWidth - 37));
+	return {
+		mode: "wide",
+		leftWidth,
+		rightWidth: innerWidth - leftWidth - 1,
+	};
 }
 
 export class RecodeHeader implements Component {
