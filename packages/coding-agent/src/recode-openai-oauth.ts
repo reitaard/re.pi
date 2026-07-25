@@ -14,7 +14,7 @@ interface DiscoveredModel {
 	maxTokens?: number;
 }
 
-const ZERO_COST = {
+const ZERO_COST: ProviderModelConfig["cost"] = {
 	input: 0,
 	output: 0,
 	cacheRead: 0,
@@ -98,7 +98,11 @@ function toProviderModel(model: DiscoveredModel, catalog: Map<string, Model<Api>
 	const thinkingLevelMap = known?.thinkingLevelMap
 		? { ...known.thinkingLevelMap }
 		: inferred.thinkingLevelMap;
-	const input = known?.input ? [...known.input] : /^gpt-/i.test(model.id) ? ["text", "image"] : ["text"];
+	const input: ProviderModelConfig["input"] = known?.input
+		? [...known.input]
+		: /^gpt-/i.test(model.id)
+			? ["text", "image"]
+			: ["text"];
 
 	return {
 		id: model.id,
