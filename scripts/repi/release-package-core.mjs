@@ -1,3 +1,9 @@
+const UPSTREAM_RUNTIME_PACKAGES = [
+	"@earendil-works/pi-agent-core",
+	"@earendil-works/pi-ai",
+	"@earendil-works/pi-tui",
+];
+
 export function createRepiPackageManifest(sourceManifest, buildInfo, options = {}) {
 	if (!sourceManifest || typeof sourceManifest !== "object") throw new Error("Source package manifest is required");
 	for (const key of ["packageName", "version", "appName", "configDir", "productName", "upstreamVersion", "releaseTag", "sourceCommit"]) {
@@ -13,6 +19,10 @@ export function createRepiPackageManifest(sourceManifest, buildInfo, options = {
 		? sourceManifest.files.filter((entry) => entry !== "npm-shrinkwrap.json")
 		: ["dist", "docs", "examples", "CHANGELOG.md"];
 	const note = typeof options.note === "string" && options.note.trim() ? options.note.trim() : undefined;
+	const dependencies = { ...(sourceManifest.dependencies ?? {}) };
+	for (const packageName of UPSTREAM_RUNTIME_PACKAGES) {
+		if (packageName in dependencies) dependencies[packageName] = buildInfo.upstreamVersion;
+	}
 
 	return {
 		...sourceManifest,
@@ -29,6 +39,7 @@ export function createRepiPackageManifest(sourceManifest, buildInfo, options = {
 		},
 		files,
 		scripts: {},
+		dependencies,
 		publishConfig: {
 			access: "public",
 		},
