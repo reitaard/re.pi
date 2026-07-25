@@ -1,7 +1,8 @@
 import { join } from "node:path";
-import type { AgentTool, Skill } from "@earendil-works/pi-agent-core";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { getAgentDir } from "../../config.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../core/extensions/types.ts";
+import type { Skill } from "../../core/skills.ts";
 import { createToolDefinitionFromAgentTool } from "../../core/tools/tool-definition-wrapper.ts";
 import { createDelegateTool } from "./delegate-tool.ts";
 import { resolveExternalAgentTools } from "./external-tool-loader.ts";
