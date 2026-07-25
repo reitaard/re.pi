@@ -22,9 +22,7 @@ function selectedModel(ctx: { model: { id: string; provider: string } | undefine
 }
 
 function hasConversation(ctx: ExtensionContext): boolean {
-	return ctx.sessionManager
-		.getEntries()
-		.some((entry) => entry.type === "message" || entry.type === "custom_message");
+	return ctx.sessionManager.getEntries().some((entry) => entry.type === "message" || entry.type === "custom");
 }
 
 function footerStateFromContext(ctx: ExtensionContext): RecodeFooterState {
