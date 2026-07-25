@@ -4,6 +4,7 @@ import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "../../core/extensions/types.ts";
 import { SettledStatus, type SettledOutcome } from "../../modes/interactive/components/status-indicator.ts";
+import { getActiveWorkerHeaderState } from "../delegation/worker-header-state.ts";
 import { RecodeFooter, type RecodeFooterState } from "./recode-footer.ts";
 import { RecodeHeader, type RecodeHeaderDetails } from "./recode-header.ts";
 
@@ -62,7 +63,15 @@ export function repiProductUi(pi: ExtensionAPI): void {
 	let settledOutcome: SettledOutcome = "completed";
 
 	const installHeader = (ctx: ExtensionContext): void => {
-		ctx.ui.setHeader((_tui, theme) => new RecodeHeader(version, () => visible, () => details, theme));
+		ctx.ui.setHeader(
+			(_tui, theme) =>
+				new RecodeHeader(
+					version,
+					() => visible || getActiveWorkerHeaderState() !== undefined,
+					() => ({ ...details, worker: getActiveWorkerHeaderState() }),
+					theme,
+				),
+		);
 	};
 
 	const installFooter = (ctx: ExtensionContext): void => {
@@ -137,7 +146,7 @@ export function repiProductUi(pi: ExtensionAPI): void {
 				thinkingLevel: ctx.thinkingLevel ?? footerState.thinkingLevel,
 			};
 		}
-		if (ctx.mode === "tui" && visible) installHeader(ctx);
+		if (ctx.mode === "tui" && (visible || getActiveWorkerHeaderState())) installHeader(ctx);
 	});
 
 	pi.on("thinking_level_select", (event, ctx) => {
