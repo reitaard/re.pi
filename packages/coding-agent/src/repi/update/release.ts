@@ -1,4 +1,4 @@
-import { gt, valid } from "semver";
+import { compare, gt, valid } from "semver";
 
 const DEFAULT_REGISTRY_URL = "https://registry.npmjs.org";
 const DEFAULT_DIST_TAG = "latest";
@@ -20,6 +20,13 @@ export interface RepiReleaseLookupOptions {
 	distTag?: string;
 	timeoutMs?: number;
 	fetchImpl?: typeof fetch;
+}
+
+interface ParsedRepiVersion {
+	upstreamVersion: string;
+	revision: number;
+	development: boolean;
+	distance: number;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -46,7 +53,41 @@ function configuredDistTag(options: RepiReleaseLookupOptions): string {
 	return (options.distTag ?? process.env.REPI_UPDATE_DIST_TAG ?? DEFAULT_DIST_TAG).trim() || DEFAULT_DIST_TAG;
 }
 
+function parseRepiVersion(value: string): ParsedRepiVersion | undefined {
+	const match = /^(.*)-repi\.(\d+)(?:\.dev\.(\d+)\.[0-9A-Za-z-]+(?:\.dirty)?)?$/.exec(value.trim());
+	if (!match) return undefined;
+	const upstreamVersion = match[1];
+	const revision = Number(match[2]);
+	const distance = match[3] === undefined ? 0 : Number(match[3]);
+	if (!valid(upstreamVersion) || !Number.isInteger(revision) || revision < 1 || !Number.isInteger(distance)) {
+		return undefined;
+	}
+	return {
+		upstreamVersion,
+		revision,
+		development: match[3] !== undefined,
+		distance,
+	};
+}
+
 export function isNewerRepiVersion(candidateVersion: string, currentVersion: string): boolean {
+	const candidateRepi = parseRepiVersion(candidateVersion);
+	const currentRepi = parseRepiVersion(currentVersion);
+	if (candidateRepi && currentRepi) {
+		const upstreamComparison = compare(candidateRepi.upstreamVersion, currentRepi.upstreamVersion);
+		if (upstreamComparison !== 0) return upstreamComparison > 0;
+		if (candidateRepi.revision !== currentRepi.revision) {
+			return candidateRepi.revision > currentRepi.revision;
+		}
+		if (candidateRepi.development !== currentRepi.development) {
+			return !candidateRepi.development;
+		}
+		if (candidateRepi.development && candidateRepi.distance !== currentRepi.distance) {
+			return candidateRepi.distance > currentRepi.distance;
+		}
+		return false;
+	}
+
 	const candidate = valid(candidateVersion.trim());
 	const current = valid(currentVersion.trim());
 	if (!candidate || !current) return candidateVersion.trim() !== currentVersion.trim();
