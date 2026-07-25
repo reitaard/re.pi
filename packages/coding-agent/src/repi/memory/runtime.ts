@@ -34,9 +34,12 @@ export function resolveKiokuMemoryLocation(cwd: string): {
 /** Process-owned Kioku lifecycle, independent of extension/session replacement. */
 export class KiokuMemoryRuntime {
 	private readonly managers = new Map<string, ManagerEntry>();
+	private readonly agentDir: string;
 	private config?: KiokuMemoryConfig;
 
-	constructor(private readonly agentDir = getAgentDir()) {}
+	constructor(agentDir = getAgentDir()) {
+		this.agentDir = agentDir;
+	}
 
 	setConfig(config: KiokuMemoryConfig): void {
 		this.config = { ...config };
