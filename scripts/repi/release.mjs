@@ -9,6 +9,7 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(scriptDir, "../..");
 const artifactsDir = join(rootDir, ".artifacts");
 const publish = process.argv.slice(2).includes("--publish");
+const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 
 function run(command, args, options = {}) {
 	const result = spawnSync(command, args, {
@@ -17,7 +18,8 @@ function run(command, args, options = {}) {
 		stdio: options.capture ? ["ignore", "pipe", "pipe"] : "inherit",
 	});
 	if (result.status !== 0) {
-		const detail = result.stderr?.trim() || result.stdout?.trim() || result.error?.message || `exit code ${result.status}`;
+		const detail =
+			result.stderr?.trim() || result.stdout?.trim() || result.error?.message || `exit code ${result.status}`;
 		throw new Error(`${command} ${args.join(" ")} failed: ${detail}`);
 	}
 	return result.stdout?.trim() ?? "";
@@ -25,6 +27,14 @@ function run(command, args, options = {}) {
 
 function git(args, options = {}) {
 	return run("git", args, { ...options, capture: options.capture ?? true });
+}
+
+function npm(args, options = {}) {
+	return run(npmCommand, args, options);
+}
+
+function node(args, options = {}) {
+	return run(process.execPath, args, options);
 }
 
 function ensureCleanAndPushed() {
@@ -36,11 +46,18 @@ function ensureCleanAndPushed() {
 	if (head !== remoteHead) throw new Error(`Push the release commit to ${upstream} before publishing`);
 }
 
+function buildReleasePackages() {
+	npm(["--prefix", "packages/tui", "run", "build"]);
+	npm(["--prefix", "packages/ai", "run", "build"]);
+	npm(["--prefix", "packages/agent", "run", "build"]);
+	npm(["--prefix", "packages/storage/sqlite-node", "run", "build"]);
+	npm(["--prefix", "packages/coding-agent", "run", "build"]);
+}
+
 function runReleaseChecks() {
-	run("node", ["--test", "scripts/repi-version.test.mjs", "scripts/repi-release-package.test.mjs"]);
-	run("npm", ["--prefix", "packages/ai", "run", "build:offline"]);
-	run("npm", ["--prefix", "packages/coding-agent", "run", "build"]);
-	run("npm", [
+	node(["--test", "scripts/repi-version.test.mjs", "scripts/repi-release-package.test.mjs"]);
+	buildReleasePackages();
+	npm([
 		"--prefix",
 		"packages/coding-agent",
 		"test",
@@ -67,12 +84,10 @@ function packageTarball(version) {
 function smokeTestTarball(tarball, expectedVersion, packageName) {
 	const prefix = mkdtempSync(join(tmpdir(), "repi-release-smoke-"));
 	try {
-		run("npm", ["install", "--prefix", prefix, "--ignore-scripts", tarball]);
+		npm(["install", "--prefix", prefix, "--ignore-scripts", tarball]);
 		const [scope, name] = packageName.startsWith("@") ? packageName.split("/") : [undefined, packageName];
-		const packageRoot = scope
-			? join(prefix, "node_modules", scope, name)
-			: join(prefix, "node_modules", name);
-		const output = run("node", [join(packageRoot, "dist", "recode-cli.js"), "--version"], { capture: true });
+		const packageRoot = scope ? join(prefix, "node_modules", scope, name) : join(prefix, "node_modules", name);
+		const output = node([join(packageRoot, "dist", "recode-cli.js"), "--version"], { capture: true });
 		if (!output.includes(expectedVersion)) {
 			throw new Error(`Packed Recode reported an unexpected version: ${output}`);
 		}
@@ -97,15 +112,15 @@ console.log(`Tag: ${buildInfo.releaseTag}`);
 runReleaseChecks();
 
 if (!publish) {
-	run("node", ["scripts/repi/prepare-release-package.mjs", "--pack", "--skip-build"]);
+	node(["scripts/repi/prepare-release-package.mjs", "--pack", "--skip-build"]);
 	const developmentTarball = packageTarball(buildInfo.version);
 	smokeTestTarball(developmentTarball, buildInfo.version, buildInfo.packageName);
 	console.log("Dry release passed. Run npm run repi:release -- --publish when the complete release is ready.");
 	process.exit(0);
 }
 
-run("npm", ["whoami"], { capture: true });
-const published = spawnSync("npm", ["view", `${buildInfo.packageName}@${releaseVersion}`, "version"], {
+npm(["whoami"], { capture: true });
+const published = spawnSync(npmCommand, ["view", `${buildInfo.packageName}@${releaseVersion}`, "version"], {
 	cwd: rootDir,
 	encoding: "utf8",
 	stdio: ["ignore", "pipe", "pipe"],
@@ -121,12 +136,12 @@ try {
 	if (!buildInfo.release || buildInfo.version !== releaseVersion) {
 		throw new Error(`Release tag did not produce the expected version: ${buildInfo.version}`);
 	}
-	run("npm", ["--prefix", "packages/coding-agent", "run", "build"]);
-	run("node", ["scripts/repi/prepare-release-package.mjs", "--pack", "--skip-build"]);
+	npm(["--prefix", "packages/coding-agent", "run", "build"]);
+	node(["scripts/repi/prepare-release-package.mjs", "--pack", "--skip-build"]);
 	const tarball = packageTarball(releaseVersion);
 	smokeTestTarball(tarball, releaseVersion, buildInfo.packageName);
 	git(["push", "origin", tag], { capture: false });
-	run("npm", ["publish", tarball, "--access", "public", "--tag", "latest"]);
+	npm(["publish", tarball, "--access", "public", "--tag", "latest"]);
 	console.log(`Published ${buildInfo.packageName}@${releaseVersion}`);
 	console.log("The Recode TUI update notice and `recode update` command can now resolve this release.");
 } catch (error) {
