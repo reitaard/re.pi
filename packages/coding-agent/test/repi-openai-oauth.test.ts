@@ -38,7 +38,7 @@ describe("RePi OpenAI OAuth provider", () => {
 			new Response(
 				JSON.stringify({
 					data: [
-						{ id: "gpt-5.6-sol" },
+						{ id: "gpt-5.6-sol", context_window: 400000, max_tokens: 64000 },
 						{ id: "gpt-5.6-terra" },
 						{ id: "gpt-5.6-luna" },
 						{ id: "gpt-5.5" },
@@ -67,6 +67,12 @@ describe("RePi OpenAI OAuth provider", () => {
 		});
 		expect(registeredProvider?.models).toHaveLength(6);
 		expect(registeredProvider?.models?.some((model) => model.id === "gpt-image-2")).toBe(false);
+
+		const sol = registeredProvider?.models?.find((model) => model.id === "gpt-5.6-sol");
+		expect(sol).toMatchObject({
+			contextWindow: 400000,
+			maxTokens: 64000,
+		});
 
 		const terra = registeredProvider?.models?.find((model) => model.id === "gpt-5.6-terra");
 		expect(terra).toMatchObject({
