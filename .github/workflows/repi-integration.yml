@@ -120,6 +120,9 @@ jobs:
           tail -n 160 "$RUNNER_TEMP/repi-tests.log"
           exit 1
 
+      - name: Validate release command syntax
+        run: node --check scripts/repi/release.mjs
+
       - name: Pack Recode npm artifact
         run: npm run repi:pack -- --skip-build
 
