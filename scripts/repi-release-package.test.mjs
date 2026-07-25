@@ -9,7 +9,12 @@ const source = {
 	bin: { pi: "dist/cli.js", recode: "dist/recode-cli.js" },
 	files: ["dist", "docs", "npm-shrinkwrap.json"],
 	scripts: { prepublishOnly: "dangerous source publish script" },
-	dependencies: { "@earendil-works/pi-ai": "^0.82.1" },
+	dependencies: {
+		"@earendil-works/pi-agent-core": "^0.82.1",
+		"@earendil-works/pi-ai": "^0.82.1",
+		"@earendil-works/pi-tui": "^0.82.1",
+		chalk: "5.6.2",
+	},
 };
 
 const buildInfo = {
@@ -35,7 +40,10 @@ test("builds an isolated Recode publish manifest", () => {
 	assert.deepEqual(manifest.piConfig, { configDir: ".pi", name: "recode" });
 	assert.deepEqual(manifest.scripts, {});
 	assert.deepEqual(manifest.files, ["dist", "docs"]);
-	assert.equal(manifest.dependencies["@earendil-works/pi-ai"], "^0.82.1");
+	assert.equal(manifest.dependencies["@earendil-works/pi-agent-core"], "0.82.1");
+	assert.equal(manifest.dependencies["@earendil-works/pi-ai"], "0.82.1");
+	assert.equal(manifest.dependencies["@earendil-works/pi-tui"], "0.82.1");
+	assert.equal(manifest.dependencies.chalk, "5.6.2");
 	assert.deepEqual(manifest.repi, {
 		schemaVersion: 1,
 		productName: "RePi",
