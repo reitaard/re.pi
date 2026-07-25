@@ -8,8 +8,15 @@ import { deriveRepiBuildInfo, formatRepiVersion } from "./version-core.mjs";
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(scriptDir, "../..");
 const artifactsDir = join(rootDir, ".artifacts");
-const publish = process.argv.slice(2).includes("--publish");
+const cliArgs = process.argv.slice(2);
+const publish = cliArgs.includes("--publish");
+const bootstrap = cliArgs.includes("--bootstrap");
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const recodeCommand = process.platform === "win32" ? "recode.cmd" : "recode";
+
+if (bootstrap && !publish) {
+	throw new Error("--bootstrap is only valid together with --publish");
+}
 
 function run(command, args, options = {}) {
 	const result = spawnSync(command, args, {
@@ -97,6 +104,29 @@ function smokeTestTarball(tarball, expectedVersion, packageName) {
 	}
 }
 
+function installBootstrapTarball(tarball, expectedVersion) {
+	console.log(`Installing tested Recode bootstrap ${expectedVersion}...`);
+	npm(["install", "-g", "--ignore-scripts", tarball]);
+	const output = run(recodeCommand, ["--version"], { capture: true });
+	if (!output.includes(expectedVersion)) {
+		throw new Error(`Global Recode bootstrap reported an unexpected version: ${output}`);
+	}
+	console.log(`Bootstrap active: ${output.replace(/\r?\n/g, " | ")}`);
+}
+
+function waitForLatestDistTag(packageName, expectedVersion) {
+	for (let attempt = 0; attempt < 15; attempt += 1) {
+		const result = spawnSync(npmCommand, ["view", packageName, "dist-tags.latest"], {
+			cwd: rootDir,
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		if (result.status === 0 && result.stdout.trim() === expectedVersion) return;
+		Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2000);
+	}
+	throw new Error(`Published package did not expose latest=${expectedVersion} within 30 seconds`);
+}
+
 ensureCleanAndPushed();
 let buildInfo = deriveRepiBuildInfo(rootDir);
 if (buildInfo.release) throw new Error(`HEAD is already release-tagged as ${buildInfo.releaseTag}`);
@@ -110,11 +140,11 @@ console.log(`RePi release candidate: ${releaseVersion}`);
 console.log(`Tag: ${buildInfo.releaseTag}`);
 
 runReleaseChecks();
+node(["scripts/repi/prepare-release-package.mjs", "--pack", "--skip-build"]);
+const developmentTarball = packageTarball(buildInfo.version);
+smokeTestTarball(developmentTarball, buildInfo.version, buildInfo.packageName);
 
 if (!publish) {
-	node(["scripts/repi/prepare-release-package.mjs", "--pack", "--skip-build"]);
-	const developmentTarball = packageTarball(buildInfo.version);
-	smokeTestTarball(developmentTarball, buildInfo.version, buildInfo.packageName);
 	console.log("Dry release passed. Run npm run repi:release -- --publish when the complete release is ready.");
 	process.exit(0);
 }
@@ -129,6 +159,8 @@ if (published.status === 0 && published.stdout.trim() === releaseVersion) {
 	throw new Error(`${buildInfo.packageName}@${releaseVersion} is already published`);
 }
 
+if (bootstrap) installBootstrapTarball(developmentTarball, buildInfo.version);
+
 const tag = buildInfo.releaseTag;
 git(["tag", "-a", tag, "-m", `RePi ${releaseVersion}`], { capture: false });
 try {
@@ -142,7 +174,11 @@ try {
 	smokeTestTarball(tarball, releaseVersion, buildInfo.packageName);
 	git(["push", "origin", tag], { capture: false });
 	npm(["publish", tarball, "--access", "public", "--tag", "latest"]);
+	waitForLatestDistTag(buildInfo.packageName, releaseVersion);
 	console.log(`Published ${buildInfo.packageName}@${releaseVersion}`);
+	if (bootstrap) {
+		console.log("The development bootstrap remains installed so the real TUI update notice can be tested now.");
+	}
 	console.log("The Recode TUI update notice and `recode update` command can now resolve this release.");
 } catch (error) {
 	const remoteTag = execFileSync("git", ["ls-remote", "--tags", "origin", `refs/tags/${tag}`], {
