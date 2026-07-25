@@ -4,7 +4,6 @@ import {
 	type Model,
 	type Models,
 	type ProviderHeaders,
-	type StreamOptions,
 } from "@earendil-works/pi-ai";
 import { type ProviderStreamOptions, stream, streamSimple } from "@earendil-works/pi-ai/compat";
 import type { ModelRegistry } from "../../core/model-registry.ts";
@@ -22,19 +21,7 @@ export function createHarnessModels(
 	);
 	if (selectedModels.length === 0) throw new Error(`No models configured for ${purpose}`);
 
-	const models = createModels({
-		prepareRequest: async (requestModel, options) => {
-			const resolved = await modelRegistry.getApiKeyAndHeaders(requestModel);
-			if (!resolved.ok) throw new Error(resolved.error);
-			const headers = { ...resolved.headers, ...options?.headers };
-			const preparedHeaders = beforeProviderHeaders ? await beforeProviderHeaders(headers) : headers;
-			return {
-				...options,
-				headers: Object.keys(preparedHeaders).length > 0 ? preparedHeaders : undefined,
-			} as StreamOptions;
-		},
-	});
-
+	const models = createModels();
 	const byProvider = new Map<string, Model<any>[]>();
 	for (const model of selectedModels) {
 		const providerModels = byProvider.get(model.provider) ?? [];
@@ -54,7 +41,16 @@ export function createHarnessModels(
 						resolve: async () => {
 							const resolved = await modelRegistry.getApiKeyAndHeaders(providerModels[0]!);
 							if (!resolved.ok) throw new Error(resolved.error);
-							return { auth: { apiKey: resolved.apiKey }, env: resolved.env };
+							const headers = beforeProviderHeaders
+								? await beforeProviderHeaders({ ...resolved.headers })
+								: resolved.headers;
+							return {
+								auth: {
+									apiKey: resolved.apiKey,
+									headers: Object.keys(headers).length > 0 ? headers : undefined,
+								},
+								env: resolved.env,
+							};
 						},
 					},
 				},
