@@ -8,9 +8,9 @@ export interface RepiRelease {
 	packageName: string;
 	version: string;
 	installSpec: string;
-	upstreamVersion?: string;
-	revision?: number;
-	releaseTag?: string;
+	upstreamVersion: string;
+	revision: number;
+	releaseTag: string;
 	note?: string;
 }
 
@@ -119,15 +119,20 @@ export async function getLatestRepiRelease(options: RepiReleaseLookupOptions = {
 	const upstreamVersion = typeof repi.upstreamVersion === "string" ? repi.upstreamVersion : undefined;
 	const revision = typeof repi.revision === "number" && Number.isInteger(repi.revision) ? repi.revision : undefined;
 	const releaseTag = typeof repi.releaseTag === "string" ? repi.releaseTag : undefined;
+	if (!upstreamVersion || !valid(upstreamVersion) || revision === undefined || revision < 1 || !releaseTag) {
+		return undefined;
+	}
+	if (version !== `${upstreamVersion}-repi.${revision}`) return undefined;
+	if (releaseTag !== `repi-v${upstreamVersion}-r${revision}`) return undefined;
 	const note = typeof repi.note === "string" && repi.note.trim() ? repi.note.trim() : undefined;
 
 	return {
 		packageName,
 		version,
 		installSpec: `${packageName}@${version}`,
-		...(upstreamVersion ? { upstreamVersion } : {}),
-		...(revision !== undefined ? { revision } : {}),
-		...(releaseTag ? { releaseTag } : {}),
+		upstreamVersion,
+		revision,
+		releaseTag,
 		...(note ? { note } : {}),
 	};
 }
