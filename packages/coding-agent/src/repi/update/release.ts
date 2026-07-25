@@ -3,6 +3,7 @@ import { compare, gt, valid } from "semver";
 const DEFAULT_REGISTRY_URL = "https://registry.npmjs.org";
 const DEFAULT_DIST_TAG = "latest";
 const DEFAULT_TIMEOUT_MS = 5000;
+const QUARANTINED_RELEASES = new Set(["0.82.1-repi.1"]);
 
 export interface RepiRelease {
 	packageName: string;
@@ -110,7 +111,7 @@ export async function getLatestRepiRelease(options: RepiReleaseLookupOptions = {
 	const payload: unknown = await response.json();
 	if (!isRecord(payload) || !isRecord(payload["dist-tags"]) || !isRecord(payload.versions)) return undefined;
 	const version = payload["dist-tags"][distTag];
-	if (typeof version !== "string" || !valid(version)) return undefined;
+	if (typeof version !== "string" || !valid(version) || QUARANTINED_RELEASES.has(version)) return undefined;
 	const manifest = payload.versions[version];
 	if (!isRecord(manifest) || manifest.name !== packageName || manifest.version !== version) return undefined;
 
