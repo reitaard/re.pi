@@ -14,6 +14,7 @@ const args = new Set(process.argv.slice(2));
 const shouldPack = args.has("--pack") || args.has("--publish");
 const shouldPublish = args.has("--publish");
 const skipBuild = args.has("--skip-build");
+const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 
 function run(command, commandArgs, options = {}) {
 	return execFileSync(command, commandArgs, {
@@ -42,7 +43,7 @@ if (shouldPublish && (!buildInfo.release || buildInfo.dirty)) {
 }
 
 if (!skipBuild) {
-	run("npm", ["--prefix", "packages/coding-agent", "run", "build"]);
+	run(npmCommand, ["--prefix", "packages/coding-agent", "run", "build"]);
 	buildInfo = deriveRepiBuildInfo(rootDir);
 }
 
@@ -76,7 +77,7 @@ console.log(`Stage: ${stageDir}`);
 
 if (shouldPack) {
 	mkdirSync(artifactsDir, { recursive: true });
-	const output = run("npm", ["pack", "--json", "--pack-destination", artifactsDir], {
+	const output = run(npmCommand, ["pack", "--json", "--pack-destination", artifactsDir], {
 		cwd: stageDir,
 		capture: true,
 	});
@@ -86,6 +87,6 @@ if (shouldPack) {
 }
 
 if (shouldPublish) {
-	run("npm", ["publish", "--access", "public", "--tag", "latest"], { cwd: stageDir });
+	run(npmCommand, ["publish", "--access", "public", "--tag", "latest"], { cwd: stageDir });
 	console.log(`Published ${releaseManifest.name}@${releaseManifest.version} with dist-tag latest`);
 }
