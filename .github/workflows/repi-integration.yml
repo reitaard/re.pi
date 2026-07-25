@@ -119,7 +119,8 @@ jobs:
               test/repi-kioku-config.test.ts \
               test/repi-kioku-memory.test.ts \
               test/repi-recode-header.test.ts \
-              test/repi-recode-footer.test.ts
+              test/repi-recode-footer.test.ts \
+              test/repi-tool-execution-status.test.ts
             coding_agent=$?
             npm --prefix packages/ai test -- test/provider-retry.test.ts
             ai=$?
