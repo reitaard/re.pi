@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { basename } from "node:path";
-import type { Api, Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
+import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "../../core/extensions/types.ts";
 import { SettledStatus, type SettledOutcome } from "../../modes/interactive/components/status-indicator.ts";
 import { RecodeFooter, type RecodeFooterState } from "./recode-footer.ts";
@@ -22,7 +23,9 @@ function selectedModel(ctx: { model: { id: string; provider: string } | undefine
 }
 
 function hasConversation(ctx: ExtensionContext): boolean {
-	return ctx.sessionManager.getEntries().some((entry) => entry.type === "message" || entry.type === "custom");
+	return ctx.sessionManager
+		.getEntries()
+		.some((entry) => entry.type === "message" || entry.type === "custom" || entry.type === "custom_message");
 }
 
 function footerStateFromContext(ctx: ExtensionContext): RecodeFooterState {
@@ -31,7 +34,7 @@ function footerStateFromContext(ctx: ExtensionContext): RecodeFooterState {
 		sessionManager: ctx.sessionManager,
 		modelRegistry: ctx.modelRegistry,
 		model: ctx.model as Model<Api> | undefined,
-		thinkingLevel: (ctx.thinkingLevel ?? "off") as ModelThinkingLevel,
+		thinkingLevel: ctx.thinkingLevel ?? "off",
 		getContextUsage: () => ctx.getContextUsage(),
 	};
 }
@@ -131,7 +134,7 @@ export function repiProductUi(pi: ExtensionAPI): void {
 				...footerState,
 				cwd: ctx.cwd,
 				model: event.model,
-				thinkingLevel: (ctx.thinkingLevel ?? footerState.thinkingLevel) as ModelThinkingLevel,
+				thinkingLevel: ctx.thinkingLevel ?? footerState.thinkingLevel,
 			};
 		}
 		if (ctx.mode === "tui" && visible) installHeader(ctx);
@@ -142,7 +145,7 @@ export function repiProductUi(pi: ExtensionAPI): void {
 		footerState = {
 			...footerState,
 			cwd: ctx.cwd,
-			thinkingLevel: event.level as ModelThinkingLevel,
+			thinkingLevel: event.level as ThinkingLevel,
 		};
 	});
 }
