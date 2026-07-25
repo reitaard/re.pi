@@ -55,18 +55,36 @@ describe("RePi npm release channel", () => {
 		});
 	});
 
-	it("rejects packages that do not carry stable RePi metadata", async () => {
+	it("rejects packages without coherent stable RePi provenance", async () => {
 		const wrongProduct = vi.fn(async () =>
 			registryResponse("0.82.1-repi.1", { repi: { productName: "Pi", channel: "stable" } }),
 		);
 		await expect(
 			getLatestRepiRelease({ packageName: PACKAGE_NAME, fetchImpl: wrongProduct }),
 		).resolves.toBeUndefined();
+
+		const wrongRevision = vi.fn(async () =>
+			registryResponse("0.82.1-repi.1", {
+				repi: {
+					productName: "RePi",
+					channel: "stable",
+					upstreamVersion: "0.82.1",
+					revision: 2,
+					releaseTag: "repi-v0.82.1-r2",
+				},
+			}),
+		);
+		await expect(
+			getLatestRepiRelease({ packageName: PACKAGE_NAME, fetchImpl: wrongRevision }),
+		).resolves.toBeUndefined();
 	});
 
-	it("treats the final release as newer than its development build", async () => {
+	it("orders tagged releases above development builds and by revision", async () => {
 		expect(isNewerRepiVersion("0.82.1-repi.1", "0.82.1-repi.1.dev.30.8bcb9316")).toBe(true);
 		expect(isNewerRepiVersion("0.82.1-repi.1", "0.82.1-repi.1")).toBe(false);
+		expect(isNewerRepiVersion("0.82.1-repi.2", "0.82.1-repi.1")).toBe(true);
+		expect(isNewerRepiVersion("0.82.1-repi.1", "0.82.1-repi.2.dev.1.abcdef12")).toBe(false);
+		expect(isNewerRepiVersion("0.83.0-repi.1", "0.82.1-repi.9")).toBe(true);
 
 		const fetchMock = vi.fn(async () => registryResponse("0.82.1-repi.1"));
 		await expect(
