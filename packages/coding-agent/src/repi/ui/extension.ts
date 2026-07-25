@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { basename } from "node:path";
 import type { Api, Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "../../core/extensions/types.ts";
+import { SettledStatus, type SettledOutcome } from "../../modes/interactive/components/status-indicator.ts";
 import { RecodeFooter, type RecodeFooterState } from "./recode-footer.ts";
 import { RecodeHeader, type RecodeHeaderDetails } from "./recode-header.ts";
 
@@ -37,6 +38,16 @@ function footerStateFromContext(ctx: ExtensionContext): RecodeFooterState {
 	};
 }
 
+function formatElapsedRuntime(startedAt: number): string {
+	const totalSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+	const hours = Math.floor(totalSeconds / 3600);
+	const minutes = Math.floor((totalSeconds % 3600) / 60);
+	const seconds = totalSeconds % 60;
+	if (hours > 0) return `· ${hours}h ${minutes.toString().padStart(2, "0")}m ${seconds.toString().padStart(2, "0")}s`;
+	if (minutes > 0) return `· ${minutes}m ${seconds.toString().padStart(2, "0")}s`;
+	return `· ${seconds}s`;
+}
+
 export function repiProductUi(pi: ExtensionAPI): void {
 	const version = process.env.REPI_VERSION ?? "development";
 	let visible = true;
@@ -46,6 +57,8 @@ export function repiProductUi(pi: ExtensionAPI): void {
 		cwd: displayCwd(process.cwd()),
 	};
 	let footerState: RecodeFooterState | undefined;
+	let runStartedAt = 0;
+	let settledOutcome: SettledOutcome = "completed";
 
 	const installHeader = (ctx: ExtensionContext): void => {
 		ctx.ui.setHeader((_tui, theme) => new RecodeHeader(version, () => visible, () => details, theme));
@@ -74,6 +87,7 @@ export function repiProductUi(pi: ExtensionAPI): void {
 		};
 		footerState = footerStateFromContext(ctx);
 		ctx.ui.setTitle(`Recode — ${basename(ctx.cwd) || "session"}`);
+		ctx.ui.setWidget("repi-settled-status", undefined, { placement: "aboveEditor" });
 		installHeader(ctx);
 		installFooter(ctx);
 	});
@@ -82,6 +96,29 @@ export function repiProductUi(pi: ExtensionAPI): void {
 		if (ctx.mode !== "tui" || !visible) return;
 		visible = false;
 		installHeader(ctx);
+	});
+
+	pi.on("agent_start", (_event, ctx) => {
+		if (ctx.mode !== "tui") return;
+		runStartedAt = Date.now();
+		settledOutcome = "completed";
+		ctx.ui.setWidget("repi-settled-status", undefined, { placement: "aboveEditor" });
+	});
+
+	pi.on("message_end", (event) => {
+		if (event.message.role !== "assistant") return;
+		if (event.message.stopReason === "aborted") settledOutcome = "cancelled";
+		if (event.message.stopReason === "error") settledOutcome = "failed";
+	});
+
+	pi.on("agent_settled", (_event, ctx) => {
+		if (ctx.mode !== "tui" || runStartedAt === 0) return;
+		const elapsed = formatElapsedRuntime(runStartedAt);
+		ctx.ui.setWidget(
+			"repi-settled-status",
+			() => new SettledStatus(settledOutcome, elapsed),
+			{ placement: "aboveEditor" },
+		);
 	});
 
 	pi.on("model_select", (event, ctx) => {
