@@ -71,6 +71,7 @@ function runReleaseChecks() {
 		"--",
 		"test/repi-update-release.test.ts",
 		"test/repi-update-command.test.ts",
+		"test/repi-update-notifier.test.ts",
 		"test/repi-open-provider.test.ts",
 		"test/repi-openai-oauth.test.ts",
 		"test/repi-kioku-config.test.ts",
