@@ -41,9 +41,8 @@ export function createHarnessModels(
 						resolve: async () => {
 							const resolved = await modelRegistry.getApiKeyAndHeaders(providerModels[0]!);
 							if (!resolved.ok) throw new Error(resolved.error);
-							const headers = beforeProviderHeaders
-								? await beforeProviderHeaders({ ...resolved.headers })
-								: resolved.headers;
+							const baseHeaders: ProviderHeaders = { ...(resolved.headers ?? {}) };
+							const headers = beforeProviderHeaders ? await beforeProviderHeaders(baseHeaders) : baseHeaders;
 							return {
 								auth: {
 									apiKey: resolved.apiKey,
