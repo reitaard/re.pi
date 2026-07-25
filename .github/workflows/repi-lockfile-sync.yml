@@ -40,3 +40,5 @@ jobs:
           git add package-lock.json
           git commit -m "build(repi): synchronize workspace lockfile"
           git push origin HEAD:repi/integrate-v0.82.1
+
+# One-time integration helper. Remove after the synchronized lockfile commit lands.
