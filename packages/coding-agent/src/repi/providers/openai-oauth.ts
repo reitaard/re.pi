@@ -78,14 +78,14 @@ function inferredReasoningMetadata(id: string): Pick<ProviderModelConfig, "reaso
 	};
 }
 
-function fallbackContextWindow(id: string): number {
+function inferredContextWindow(id: string): number | undefined {
 	if (/^gpt-5\.6(?:-|$)/i.test(id)) return 372000;
 	if (/^gpt-5(?:[.-]|$)/i.test(id)) return 272000;
-	return 32768;
+	return undefined;
 }
 
-function fallbackMaxTokens(id: string): number {
-	return /^gpt-5(?:[.-]|$)/i.test(id) ? 128000 : 8192;
+function inferredMaxTokens(id: string): number | undefined {
+	return /^gpt-5(?:[.-]|$)/i.test(id) ? 128000 : undefined;
 }
 
 function codexCatalogById(): Map<string, Model<Api>> {
@@ -111,8 +111,11 @@ function toProviderModel(model: DiscoveredModel, catalog: Map<string, Model<Api>
 		thinkingLevelMap,
 		input,
 		cost: ZERO_COST,
-		contextWindow: model.contextWindow ?? known?.contextWindow ?? fallbackContextWindow(model.id),
-		maxTokens: model.maxTokens ?? known?.maxTokens ?? fallbackMaxTokens(model.id),
+		// Precedence is deliberate: the proxy is authoritative when it reports
+		// metadata; RePi family overrides cover proxy aliases such as Sol/Terra/Luna;
+		// the upstream catalog remains the fallback for all other known models.
+		contextWindow: model.contextWindow ?? inferredContextWindow(model.id) ?? known?.contextWindow ?? 32768,
+		maxTokens: model.maxTokens ?? inferredMaxTokens(model.id) ?? known?.maxTokens ?? 8192,
 		compat: {
 			...known?.compat,
 			// The local OAuth proxy forwards complete stateless Responses requests,
