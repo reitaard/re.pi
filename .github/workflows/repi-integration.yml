@@ -82,16 +82,43 @@ jobs:
           npm --prefix packages/coding-agent run build
 
       - name: Test RePi layers
+        id: repi_tests
+        continue-on-error: true
         run: |
-          npm --prefix packages/coding-agent test -- \
-            test/repi-update-release.test.ts \
-            test/repi-update-command.test.ts \
-            test/repi-update-notifier.test.ts \
-            test/repi-open-provider.test.ts \
-            test/repi-openai-oauth.test.ts \
-            test/repi-kioku-config.test.ts \
-            test/repi-kioku-memory.test.ts
-          node --test scripts/repi-version.test.mjs scripts/repi-release-package.test.mjs
+          set +e
+          {
+            npm --prefix packages/coding-agent test -- \
+              test/repi-update-release.test.ts \
+              test/repi-update-command.test.ts \
+              test/repi-update-notifier.test.ts \
+              test/repi-open-provider.test.ts \
+              test/repi-openai-oauth.test.ts \
+              test/repi-kioku-config.test.ts \
+              test/repi-kioku-memory.test.ts
+            first=$?
+            node --test scripts/repi-version.test.mjs scripts/repi-release-package.test.mjs
+            second=$?
+            if [ "$first" -ne 0 ]; then exit "$first"; fi
+            exit "$second"
+          } > "$RUNNER_TEMP/repi-tests.log" 2>&1
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload focused test diagnostic
+        if: steps.repi_tests.outputs.exit_code != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: repi-tests-${{ matrix.os }}
+          path: ${{ runner.temp }}/repi-tests.log
+          if-no-files-found: error
+          retention-days: 2
+
+      - name: Stop after focused test failure
+        if: steps.repi_tests.outputs.exit_code != '0'
+        run: |
+          tail -n 160 "$RUNNER_TEMP/repi-tests.log"
+          exit 1
 
       - name: Pack Recode npm artifact
         run: npm run repi:pack -- --skip-build
