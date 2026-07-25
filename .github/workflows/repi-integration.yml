@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - repi/integrate-v0.82.1
+  pull_request:
+    branches:
+      - sync/upstream-v0.82.1
   workflow_dispatch:
 
 permissions:
@@ -45,9 +48,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build AI and Recode
+      - name: Build release package graph
         run: |
-          npm --prefix packages/ai run build:offline
+          npm --prefix packages/tui run build
+          npm --prefix packages/ai run build
+          npm --prefix packages/agent run build
+          npm --prefix packages/storage/sqlite-node run build
           npm --prefix packages/coding-agent run build
 
       - name: Test RePi layers
