@@ -1,0 +1,72 @@
+name: RePi Integration
+
+on:
+  push:
+    branches:
+      - repi/integrate-v0.82.1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: ${{ matrix.os }} / Node 22.23.1
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout RePi
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch authoritative upstream tags
+        run: |
+          git remote remove upstream 2>/dev/null || true
+          git remote add upstream https://github.com/earendil-works/pi.git
+          git fetch upstream --tags --force
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build AI and Recode
+        run: |
+          npm --prefix packages/ai run build:offline
+          npm --prefix packages/coding-agent run build
+
+      - name: Test RePi layers
+        run: |
+          npm --prefix packages/coding-agent test -- \
+            test/repi-update-release.test.ts \
+            test/repi-update-command.test.ts \
+            test/repi-open-provider.test.ts \
+            test/repi-openai-oauth.test.ts \
+            test/repi-kioku-config.test.ts \
+            test/repi-kioku-memory.test.ts
+          node --test scripts/repi-version.test.mjs scripts/repi-release-package.test.mjs
+
+      - name: Pack Recode npm artifact
+        run: npm run repi:pack -- --skip-build
+
+      - name: Smoke-install packed Recode
+        run: |
+          TARBALL="$(ls -1 .artifacts/*.tgz | tail -n 1)"
+          PREFIX="$RUNNER_TEMP/repi-smoke"
+          npm install --prefix "$PREFIX" --ignore-scripts "$TARBALL"
+          node "$PREFIX/node_modules/@reitaard/repi-coding-agent/dist/recode-cli.js" --version
