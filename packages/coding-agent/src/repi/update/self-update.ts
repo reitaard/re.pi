@@ -1,4 +1,9 @@
-import { getPackageDir } from "../../config.ts";
+import {
+	getPackageDir,
+	getSelfUpdateCommand,
+	getSelfUpdateUnavailableInstruction,
+	type SelfUpdateCommand,
+} from "../../config.ts";
 import { spawnProcess, spawnProcessSync, waitForChildProcess } from "../../utils/child-process.ts";
 import {
 	cleanupWindowsSelfUpdateQuarantine,
@@ -56,6 +61,13 @@ async function runInherited(command: string, args: string[]): Promise<void> {
 	if (code !== 0) throw new Error(`${formatCommand(command, args)} exited with code ${code ?? "unknown"}`);
 }
 
+async function runSelfUpdateCommand(command: SelfUpdateCommand): Promise<void> {
+	console.log(`Updating Recode with ${command.display}...`);
+	for (const step of command.steps ?? [command]) {
+		await runInherited(step.command, step.args);
+	}
+}
+
 function runningFromInstalledPackage(): boolean {
 	return getPackageDir().replace(/\\/g, "/").toLowerCase().includes("/node_modules/");
 }
@@ -87,6 +99,20 @@ function verifyPublishedVersion(expectedVersion: string): string | undefined {
 	return output.includes(expectedVersion) ? output : undefined;
 }
 
+function resolveSelfUpdateCommand(packageName: string, installSpec: string): SelfUpdateCommand {
+	const target = { packageName, installSpec };
+	const managedCommand = getSelfUpdateCommand(packageName, undefined, target);
+	if (managedCommand) return managedCommand;
+
+	if (!runningFromInstalledPackage()) {
+		const command = npmExecutable();
+		const args = ["install", "-g", "--ignore-scripts", "--min-release-age=0", installSpec];
+		return { command, args, display: formatCommand(command, args) };
+	}
+
+	throw new Error(getSelfUpdateUnavailableInstruction(packageName, undefined, target));
+}
+
 export async function handleRepiSelfUpdateCommand(args: string[]): Promise<RepiUpdateCommandResult> {
 	if (!shouldHandleRepiSelfUpdate(args)) return { handled: false, exitCode: 0 };
 
@@ -113,11 +139,9 @@ export async function handleRepiSelfUpdateCommand(args: string[]): Promise<RepiU
 			console.log();
 		}
 
-		const command = npmExecutable();
-		const installArgs = ["install", "-g", "--ignore-scripts", "--min-release-age=0", release.installSpec];
-		console.log(`Updating Recode with ${formatCommand(command, installArgs)}...`);
+		const command = resolveSelfUpdateCommand(packageName, release.installSpec);
 		prepareWindowsInstalledPackage();
-		await runInherited(command, installArgs);
+		await runSelfUpdateCommand(command);
 
 		const verified = verifyPublishedVersion(release.version);
 		if (verified) {
