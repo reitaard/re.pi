@@ -9,6 +9,7 @@ afterEach(() => {
 });
 
 function registryResponse(version: string, overrides: Record<string, unknown> = {}): Response {
+	const revision = Number(version.match(/-repi\.(\d+)$/)?.[1] ?? 1);
 	return new Response(
 		JSON.stringify({
 			"dist-tags": { latest: version },
@@ -20,9 +21,9 @@ function registryResponse(version: string, overrides: Record<string, unknown> = 
 						productName: "RePi",
 						channel: "stable",
 						upstreamVersion: "0.82.1",
-						revision: 1,
-						releaseTag: "repi-v0.82.1-r1",
-						note: "Provider and Kioku update.",
+						revision,
+						releaseTag: `repi-v0.82.1-r${revision}`,
+						note: "Complete Recode parity update.",
 					},
 					...overrides,
 				},
@@ -33,7 +34,7 @@ function registryResponse(version: string, overrides: Record<string, unknown> = 
 
 describe("RePi npm release channel", () => {
 	it("loads a validated stable RePi package from the npm registry", async () => {
-		const fetchMock = vi.fn(async () => registryResponse("0.82.1-repi.1"));
+		const fetchMock = vi.fn(async () => registryResponse("0.82.1-repi.2"));
 		const release = await getLatestRepiRelease({
 			packageName: PACKAGE_NAME,
 			registryUrl: "https://registry.example.test/",
@@ -46,31 +47,44 @@ describe("RePi npm release channel", () => {
 		);
 		expect(release).toEqual({
 			packageName: PACKAGE_NAME,
-			version: "0.82.1-repi.1",
-			installSpec: `${PACKAGE_NAME}@0.82.1-repi.1`,
+			version: "0.82.1-repi.2",
+			installSpec: `${PACKAGE_NAME}@0.82.1-repi.2`,
 			upstreamVersion: "0.82.1",
-			revision: 1,
-			releaseTag: "repi-v0.82.1-r1",
-			note: "Provider and Kioku update.",
+			revision: 2,
+			releaseTag: "repi-v0.82.1-r2",
+			note: "Complete Recode parity update.",
 		});
+	});
+
+	it("quarantines the incomplete first npm release", async () => {
+		const fetchMock = vi.fn(async () => registryResponse("0.82.1-repi.1"));
+		await expect(
+			getLatestRepiRelease({ packageName: PACKAGE_NAME, fetchImpl: fetchMock }),
+		).resolves.toBeUndefined();
+		await expect(
+			checkForRepiUpdate("0.82.1-repi.2.dev.1.abcdef12", {
+				packageName: PACKAGE_NAME,
+				fetchImpl: fetchMock,
+			}),
+		).resolves.toBeUndefined();
 	});
 
 	it("rejects packages without coherent stable RePi provenance", async () => {
 		const wrongProduct = vi.fn(async () =>
-			registryResponse("0.82.1-repi.1", { repi: { productName: "Pi", channel: "stable" } }),
+			registryResponse("0.82.1-repi.2", { repi: { productName: "Pi", channel: "stable" } }),
 		);
 		await expect(
 			getLatestRepiRelease({ packageName: PACKAGE_NAME, fetchImpl: wrongProduct }),
 		).resolves.toBeUndefined();
 
 		const wrongRevision = vi.fn(async () =>
-			registryResponse("0.82.1-repi.1", {
+			registryResponse("0.82.1-repi.2", {
 				repi: {
 					productName: "RePi",
 					channel: "stable",
 					upstreamVersion: "0.82.1",
-					revision: 2,
-					releaseTag: "repi-v0.82.1-r2",
+					revision: 3,
+					releaseTag: "repi-v0.82.1-r3",
 				},
 			}),
 		);
@@ -80,18 +94,18 @@ describe("RePi npm release channel", () => {
 	});
 
 	it("orders tagged releases above development builds and by revision", async () => {
-		expect(isNewerRepiVersion("0.82.1-repi.1", "0.82.1-repi.1.dev.30.8bcb9316")).toBe(true);
-		expect(isNewerRepiVersion("0.82.1-repi.1", "0.82.1-repi.1")).toBe(false);
-		expect(isNewerRepiVersion("0.82.1-repi.2", "0.82.1-repi.1")).toBe(true);
-		expect(isNewerRepiVersion("0.82.1-repi.1", "0.82.1-repi.2.dev.1.abcdef12")).toBe(false);
+		expect(isNewerRepiVersion("0.82.1-repi.2", "0.82.1-repi.2.dev.30.8bcb9316")).toBe(true);
+		expect(isNewerRepiVersion("0.82.1-repi.2", "0.82.1-repi.2")).toBe(false);
+		expect(isNewerRepiVersion("0.82.1-repi.3", "0.82.1-repi.2")).toBe(true);
+		expect(isNewerRepiVersion("0.82.1-repi.2", "0.82.1-repi.3.dev.1.abcdef12")).toBe(false);
 		expect(isNewerRepiVersion("0.83.0-repi.1", "0.82.1-repi.9")).toBe(true);
 
-		const fetchMock = vi.fn(async () => registryResponse("0.82.1-repi.1"));
+		const fetchMock = vi.fn(async () => registryResponse("0.82.1-repi.2"));
 		await expect(
-			checkForRepiUpdate("0.82.1-repi.1.dev.30.8bcb9316", {
+			checkForRepiUpdate("0.82.1-repi.2.dev.30.8bcb9316", {
 				packageName: PACKAGE_NAME,
 				fetchImpl: fetchMock,
 			}),
-		).resolves.toMatchObject({ version: "0.82.1-repi.1" });
+		).resolves.toMatchObject({ version: "0.82.1-repi.2" });
 	});
 });
