@@ -1,0 +1,105 @@
+import { gt, valid } from "semver";
+
+const DEFAULT_REGISTRY_URL = "https://registry.npmjs.org";
+const DEFAULT_DIST_TAG = "latest";
+const DEFAULT_TIMEOUT_MS = 5000;
+
+export interface RepiRelease {
+	packageName: string;
+	version: string;
+	installSpec: string;
+	upstreamVersion?: string;
+	revision?: number;
+	releaseTag?: string;
+	note?: string;
+}
+
+export interface RepiReleaseLookupOptions {
+	packageName?: string;
+	registryUrl?: string;
+	distTag?: string;
+	timeoutMs?: number;
+	fetchImpl?: typeof fetch;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
+}
+
+function normalizeRegistryUrl(value: string): string {
+	return value.trim().replace(/\/+$/, "");
+}
+
+function configuredPackageName(options: RepiReleaseLookupOptions): string {
+	const packageName = options.packageName ?? process.env.REPI_PACKAGE_NAME;
+	if (!packageName?.trim()) throw new Error("RePi update package is not configured");
+	return packageName.trim();
+}
+
+function configuredRegistryUrl(options: RepiReleaseLookupOptions): string {
+	return normalizeRegistryUrl(
+		options.registryUrl ?? process.env.REPI_UPDATE_REGISTRY ?? process.env.npm_config_registry ?? DEFAULT_REGISTRY_URL,
+	);
+}
+
+function configuredDistTag(options: RepiReleaseLookupOptions): string {
+	return (options.distTag ?? process.env.REPI_UPDATE_DIST_TAG ?? DEFAULT_DIST_TAG).trim() || DEFAULT_DIST_TAG;
+}
+
+export function isNewerRepiVersion(candidateVersion: string, currentVersion: string): boolean {
+	const candidate = valid(candidateVersion.trim());
+	const current = valid(currentVersion.trim());
+	if (!candidate || !current) return candidateVersion.trim() !== currentVersion.trim();
+	return gt(candidate, current);
+}
+
+export async function getLatestRepiRelease(options: RepiReleaseLookupOptions = {}): Promise<RepiRelease | undefined> {
+	if (process.env.PI_OFFLINE) return undefined;
+
+	const packageName = configuredPackageName(options);
+	const registryUrl = configuredRegistryUrl(options);
+	const distTag = configuredDistTag(options);
+	const fetchImpl = options.fetchImpl ?? fetch;
+	const response = await fetchImpl(`${registryUrl}/${encodeURIComponent(packageName)}`, {
+		headers: { accept: "application/json" },
+		signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+	});
+	if (!response.ok) return undefined;
+
+	const payload: unknown = await response.json();
+	if (!isRecord(payload) || !isRecord(payload["dist-tags"]) || !isRecord(payload.versions)) return undefined;
+	const version = payload["dist-tags"][distTag];
+	if (typeof version !== "string" || !valid(version)) return undefined;
+	const manifest = payload.versions[version];
+	if (!isRecord(manifest) || manifest.name !== packageName || manifest.version !== version) return undefined;
+
+	const repi = manifest.repi;
+	if (!isRecord(repi) || repi.productName !== "RePi" || repi.channel !== "stable") return undefined;
+	const upstreamVersion = typeof repi.upstreamVersion === "string" ? repi.upstreamVersion : undefined;
+	const revision = typeof repi.revision === "number" && Number.isInteger(repi.revision) ? repi.revision : undefined;
+	const releaseTag = typeof repi.releaseTag === "string" ? repi.releaseTag : undefined;
+	const note = typeof repi.note === "string" && repi.note.trim() ? repi.note.trim() : undefined;
+
+	return {
+		packageName,
+		version,
+		installSpec: `${packageName}@${version}`,
+		...(upstreamVersion ? { upstreamVersion } : {}),
+		...(revision !== undefined ? { revision } : {}),
+		...(releaseTag ? { releaseTag } : {}),
+		...(note ? { note } : {}),
+	};
+}
+
+export async function checkForRepiUpdate(
+	currentVersion = process.env.REPI_VERSION ?? "0.0.0",
+	options: RepiReleaseLookupOptions = {},
+): Promise<RepiRelease | undefined> {
+	if (process.env.PI_SKIP_REPI_VERSION_CHECK) return undefined;
+	try {
+		const release = await getLatestRepiRelease(options);
+		return release && isNewerRepiVersion(release.version, currentVersion) ? release : undefined;
+	} catch {
+		return undefined;
+	}
+}
