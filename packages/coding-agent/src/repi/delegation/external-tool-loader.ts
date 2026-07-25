@@ -1,5 +1,5 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { EventBus } from "../../core/event-bus.ts";
+import { createEventBus } from "../../core/event-bus.ts";
 import { loadExtensions } from "../../core/extensions/loader.ts";
 import type {
 	ExtensionAPI,
@@ -14,7 +14,7 @@ async function loadToolDefinitions(sourcePath: string, cwd: string): Promise<Map
 	let pending = extensionToolCache.get(sourcePath);
 	if (!pending) {
 		pending = (async () => {
-			const loaded = await loadExtensions([sourcePath], cwd, new EventBus());
+			const loaded = await loadExtensions([sourcePath], cwd, createEventBus());
 			const sourceErrors = loaded.errors.filter((error) => error.path === sourcePath);
 			if (sourceErrors.length > 0) {
 				throw new Error(
@@ -23,7 +23,7 @@ async function loadToolDefinitions(sourcePath: string, cwd: string): Promise<Map
 			}
 			const definitions = new Map<string, ToolDefinition>();
 			for (const extension of loaded.extensions) {
-				for (const [name, definition] of extension.tools) definitions.set(name, definition);
+				for (const [name, registered] of extension.tools) definitions.set(name, registered.definition);
 			}
 			return definitions;
 		})();
