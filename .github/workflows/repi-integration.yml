@@ -120,7 +120,8 @@ jobs:
               test/repi-kioku-memory.test.ts \
               test/repi-recode-header.test.ts \
               test/repi-recode-footer.test.ts \
-              test/repi-tool-execution-status.test.ts
+              test/repi-tool-execution-status.test.ts \
+              test/repi-named-worker.test.ts
             coding_agent=$?
             npm --prefix packages/ai test -- test/provider-retry.test.ts
             ai=$?
