@@ -1,4 +1,5 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
+import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { Api, Model, ModelThinkingLevel, Usage } from "@earendil-works/pi-ai";
 import { type Component, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { ContextUsage } from "../../core/extensions/types.ts";
@@ -9,8 +10,7 @@ import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import { formatRecodeThinkingLevel } from "./recode-thinking-label.ts";
 
 const SMART_CONTEXT_COMPACT_THRESHOLD_PERCENT = 40;
-const THINKING_LEVEL_ORDER: readonly ModelThinkingLevel[] = [
-	"off",
+const MODEL_THINKING_LEVEL_ORDER: readonly ModelThinkingLevel[] = [
 	"minimal",
 	"low",
 	"medium",
@@ -33,7 +33,7 @@ export interface RecodeFooterState {
 	sessionManager: ReadonlySessionManager;
 	modelRegistry: ModelRegistry;
 	model: Model<Api> | undefined;
-	thinkingLevel: ModelThinkingLevel;
+	thinkingLevel: ThinkingLevel;
 	getContextUsage: () => ContextUsage | undefined;
 }
 
@@ -88,10 +88,13 @@ function collectUsage(sessionManager: ReadonlySessionManager): UsageTotals {
 	return totals;
 }
 
-function availableThinkingLevels(model: Model<Api>): ModelThinkingLevel[] {
+function availableThinkingLevels(model: Model<Api>): ThinkingLevel[] {
 	if (!model.reasoning) return ["off"];
-	if (!model.thinkingLevelMap) return [...THINKING_LEVEL_ORDER];
-	return THINKING_LEVEL_ORDER.filter((level) => level === "off" || model.thinkingLevelMap?.[level] !== null);
+	if (!model.thinkingLevelMap) return ["off", ...MODEL_THINKING_LEVEL_ORDER];
+	return [
+		"off",
+		...MODEL_THINKING_LEVEL_ORDER.filter((level) => model.thinkingLevelMap?.[level] !== null),
+	];
 }
 
 function ansiForeground(text: string, hex: string, ansi256: number, theme: Theme): string {
