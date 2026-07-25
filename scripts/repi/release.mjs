@@ -11,6 +11,11 @@ const artifactsDir = join(rootDir, ".artifacts");
 const cliArgs = process.argv.slice(2);
 const publish = cliArgs.includes("--publish");
 const bootstrap = cliArgs.includes("--bootstrap");
+const requiredNodePrefix = "26.5.";
+
+if (!process.versions.node.startsWith(requiredNodePrefix)) {
+	throw new Error(`RePi releases require Node 26.5.x; current runtime is ${process.version}`);
+}
 
 if (bootstrap && !publish) {
 	throw new Error("--bootstrap is only valid together with --publish");
