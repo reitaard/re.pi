@@ -1,3 +1,4 @@
+import type { LoaderIndicatorOptions } from "@earendil-works/pi-tui";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 
 interface PaletteColor {
@@ -37,6 +38,9 @@ const LIGHT_WORKER_PALETTES: Readonly<Record<string, readonly PaletteColor[]>> =
 	],
 };
 
+const STAR_FRAMES = ["✦", "✧", "⋆", "✧"] as const;
+const DOT_FRAMES = [".", "..", "..."] as const;
+
 function ansiForeground(text: string, color: PaletteColor, activeTheme: Theme): string {
 	const ansi =
 		activeTheme.getColorMode() === "truecolor"
@@ -54,4 +58,29 @@ export function workerForeground(workerId: string, tone: WorkerTone, text: strin
 	const palette = workerPalette(workerId, activeTheme);
 	const index = tone === "identity" ? 2 : tone === "text" ? 1 : 3;
 	return ansiForeground(text, palette[index] ?? palette[0]!, activeTheme);
+}
+
+export function createRecodeWorkerIndicator(
+	workerId: string,
+	message: string,
+	activeTheme: Theme,
+): LoaderIndicatorOptions {
+	const characters = Array.from(message.replace(/[….]+$/, ""));
+	const radius = 4;
+	const frameCount = Math.max(12, Math.ceil((characters.length + radius * 2) / 2));
+	const palette = workerPalette(workerId, activeTheme);
+	const frames = Array.from({ length: frameCount }, (_, frameIndex) => {
+		const center = frameIndex * 2 - radius;
+		const rendered = characters
+			.map((character, index) => {
+				const distance = Math.abs(index - center);
+				const paletteIndex = distance === 0 ? 0 : distance <= 2 ? 1 : distance <= radius ? 2 : 3;
+				return ansiForeground(character, palette[paletteIndex] ?? palette[2]!, activeTheme);
+			})
+			.join("");
+		const dots = DOT_FRAMES[frameIndex % DOT_FRAMES.length] ?? "...";
+		const star = activeTheme.fg("accent", STAR_FRAMES[frameIndex % STAR_FRAMES.length] ?? "✦");
+		return `${star} ${rendered}${ansiForeground(dots, palette[1] ?? palette[0]!, activeTheme)}`;
+	});
+	return { frames, intervalMs: 90 };
 }
