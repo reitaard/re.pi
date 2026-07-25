@@ -82,4 +82,16 @@ if (process.env.PI_CODING_AGENT_SESSION_DIR && !process.env.RECODE_CODING_AGENT_
 }
 
 process.title = info.appName;
-await import("./cli.ts");
+process.env.PI_CODING_AGENT = "true";
+process.emitWarning = (() => {}) as typeof process.emitWarning;
+
+const [{ configureHttpDispatcher }, { main }, { repiExtensionFactories }] = await Promise.all([
+	import("./core/http-dispatcher.ts"),
+	import("./main.ts"),
+	import("./repi/extensions.ts"),
+]);
+
+// Match the upstream CLI bootstrap order while keeping RePi additions scoped to
+// this entrypoint.
+configureHttpDispatcher();
+await main(args, { extensionFactories: repiExtensionFactories });
