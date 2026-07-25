@@ -19,8 +19,19 @@ function isProviderError(error: unknown): error is ProviderError {
 	);
 }
 
+function isUsageLimitReachedError(error: ProviderError): boolean {
+	if (error.status !== 429) return false;
+	const message = error.message.toLowerCase();
+	return message.includes("usage_limit_reached") || message.includes("usage limit has been reached");
+}
+
 /** Mirrors the pinned OpenAI/Anthropic SDK retry policy; review when either SDK is upgraded. */
 function isRetryableProviderError(error: ProviderError): boolean {
+	// OAuth subscription windows can be hours or days long. The proxy already
+	// includes the reset timestamp in the error body, so retrying the same request
+	// only duplicates the error and consumes time without any chance of success.
+	if (isUsageLimitReachedError(error)) return false;
+
 	const shouldRetry = error.headers?.get("x-should-retry");
 	if (shouldRetry === "true") return true;
 	if (shouldRetry === "false") return false;
