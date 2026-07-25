@@ -11,6 +11,8 @@ export interface RepiUpdateCommandResult {
 	exitCode: number;
 }
 
+const SELF_TARGETS = new Set(["self", "recode", "pi"]);
+
 function positionalArguments(args: string[]): string[] {
 	const values: string[] = [];
 	for (let index = 0; index < args.length; index++) {
@@ -28,12 +30,16 @@ export function shouldHandleRepiSelfUpdate(args: string[]): boolean {
 	if (args[0] !== "update") return false;
 	const rest = args.slice(1);
 	if (rest.includes("-h") || rest.includes("--help") || rest.includes("--models")) return false;
-	if (rest.includes("--extensions") && !rest.includes("--self") && !rest.includes("--all")) return false;
 	if (rest.includes("--extension")) return false;
 
 	const positional = positionalArguments(rest);
-	if (positional.length === 0) return true;
-	return positional.every((value) => value === "self" || value === "recode" || value === "pi");
+	if (positional.some((value) => !SELF_TARGETS.has(value))) return false;
+	const selfRequested =
+		rest.includes("--self") ||
+		rest.includes("--all") ||
+		positional.length > 0 ||
+		(!rest.includes("--extensions") && positional.length === 0);
+	return selfRequested;
 }
 
 function npmExecutable(): string {
@@ -62,10 +68,12 @@ function prepareWindowsInstalledPackage(): void {
 }
 
 async function updateExtensionsFirst(originalArgs: string[]): Promise<void> {
-	if (!originalArgs.includes("--all")) return;
+	if (!originalArgs.includes("--all") && !originalArgs.includes("--extensions")) return;
 	const entrypoint = process.argv[1];
 	if (!entrypoint) throw new Error("Cannot locate the Recode entrypoint for extension updates");
-	const trustArgs = originalArgs.filter((arg) => arg === "--approve" || arg === "-a" || arg === "--no-approve" || arg === "-na");
+	const trustArgs = originalArgs.filter(
+		(arg) => arg === "--approve" || arg === "-a" || arg === "--no-approve" || arg === "-na",
+	);
 	await runInherited(process.execPath, [entrypoint, "update", "--extensions", ...trustArgs]);
 }
 
@@ -115,7 +123,9 @@ export async function handleRepiSelfUpdateCommand(args: string[]): Promise<RepiU
 		if (verified) {
 			console.log(`Updated Recode from ${currentVersion} to ${release.version}`);
 		} else {
-			console.log(`Installed Recode ${release.version}. Restart the terminal if the recode command still resolves to an older link.`);
+			console.log(
+				`Installed Recode ${release.version}. Restart the terminal if the recode command still resolves to an older link.`,
+			);
 		}
 		return { handled: true, exitCode: 0 };
 	} catch (error) {
