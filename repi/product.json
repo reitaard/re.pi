@@ -1,0 +1,13 @@
+{
+	"schemaVersion": 1,
+	"productName": "RePi",
+	"appName": "recode",
+	"appTitle": "Recode",
+	"packageName": "@reitaard/repi-coding-agent",
+	"configDir": ".pi",
+	"environmentPrefix": "PI",
+	"upstreamRemote": "upstream",
+	"upstreamTagPattern": "v[0-9]*",
+	"releaseTagPrefix": "repi-v",
+	"revisionMarker": "-r"
+}
