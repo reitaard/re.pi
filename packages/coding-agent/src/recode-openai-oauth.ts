@@ -77,14 +77,14 @@ function inferredReasoningMetadata(id: string): Pick<ProviderModelConfig, "reaso
 	};
 }
 
-function fallbackContextWindow(id: string): number {
+function inferredContextWindow(id: string): number | undefined {
 	if (/^gpt-5\.6(?:-|$)/i.test(id)) return 372000;
 	if (/^gpt-5(?:[.-]|$)/i.test(id)) return 272000;
-	return 32768;
+	return undefined;
 }
 
-function fallbackMaxTokens(id: string): number {
-	return /^gpt-5(?:[.-]|$)/i.test(id) ? 128000 : 8192;
+function inferredMaxTokens(id: string): number | undefined {
+	return /^gpt-5(?:[.-]|$)/i.test(id) ? 128000 : undefined;
 }
 
 function codexCatalogById(): Map<string, Model<Api>> {
@@ -95,9 +95,7 @@ function toProviderModel(model: DiscoveredModel, catalog: Map<string, Model<Api>
 	const known = catalog.get(model.id);
 	const inferred = inferredReasoningMetadata(model.id);
 	const reasoning = known?.reasoning ?? inferred.reasoning;
-	const thinkingLevelMap = known?.thinkingLevelMap
-		? { ...known.thinkingLevelMap }
-		: inferred.thinkingLevelMap;
+	const thinkingLevelMap = known?.thinkingLevelMap ? { ...known.thinkingLevelMap } : inferred.thinkingLevelMap;
 	const input: ProviderModelConfig["input"] = known?.input
 		? [...known.input]
 		: /^gpt-/i.test(model.id)
@@ -112,12 +110,10 @@ function toProviderModel(model: DiscoveredModel, catalog: Map<string, Model<Api>
 		thinkingLevelMap,
 		input,
 		cost: ZERO_COST,
-		contextWindow: model.contextWindow ?? known?.contextWindow ?? fallbackContextWindow(model.id),
-		maxTokens: model.maxTokens ?? known?.maxTokens ?? fallbackMaxTokens(model.id),
+		contextWindow: model.contextWindow ?? inferredContextWindow(model.id) ?? known?.contextWindow ?? 32768,
+		maxTokens: model.maxTokens ?? inferredMaxTokens(model.id) ?? known?.maxTokens ?? 8192,
 		compat: {
 			...known?.compat,
-			// The community proxy forwards complete, stateless Responses requests.
-			// Do not advertise the API-only 24h prompt-cache retention contract.
 			supportsLongCacheRetention: false,
 		},
 	};
@@ -145,8 +141,6 @@ export async function registerRecodeOpenAIOAuth(
 		name: "OpenAI OAuth",
 		baseUrl: normalizedBaseUrl,
 		api: "openai-responses",
-		// Recode's OpenAI client requires a non-empty local key, while authHeader=false
-		// ensures the proxy receives no fabricated Authorization header.
 		apiKey: "local",
 		authHeader: false,
 		models,
@@ -161,8 +155,7 @@ export async function recodeOpenAIOAuth(pi: ExtensionAPI): Promise<void> {
 	try {
 		await registerRecodeOpenAIOAuth(pi, baseUrl, STARTUP_DISCOVERY_TIMEOUT_MS);
 	} catch {
-		// This provider is optional. A stopped local proxy must not delay or break
-		// normal Recode startup; /openai-oauth surfaces the concrete error on demand.
+		// Optional provider: a stopped local proxy must not delay or break startup.
 	}
 
 	pi.registerCommand("openai-oauth", {
