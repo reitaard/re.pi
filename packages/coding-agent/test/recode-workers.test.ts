@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { createModels, fauxAssistantMessage, fauxProvider } from "@reitaard/repi-ai";
 import { visibleWidth } from "@reitaard/repi-tui";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createAgentSessionServices } from "../src/core/agent-session-services.ts";
+import { createAgentSessionServices, isDelegationEnabled } from "../src/core/agent-session-services.ts";
 import { createDelegateTool } from "../src/core/delegation/delegate-tool.ts";
 import { REPI_CREATOR_IDENTITY } from "../src/core/delegation/orchestration-identity.ts";
 import { WorkerChatController } from "../src/core/delegation/worker-chat.ts";
@@ -52,6 +52,15 @@ import {
 
 describe("recode worker TUI", () => {
 	const roots: string[] = [];
+
+	it("enables delegation by default and keeps an explicit environment opt-out", () => {
+		expect(isDelegationEnabled(undefined)).toBe(true);
+		expect(isDelegationEnabled("1")).toBe(true);
+		expect(isDelegationEnabled("true")).toBe(true);
+		expect(isDelegationEnabled("0")).toBe(false);
+		expect(isDelegationEnabled("false")).toBe(false);
+		expect(isDelegationEnabled("off")).toBe(false);
+	});
 
 	afterEach(() => {
 		for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });

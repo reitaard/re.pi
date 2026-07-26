@@ -11,12 +11,14 @@
 - Added a bounded read-only Git tool for audit workers and explicit sibling-worktree selection restricted to the active Git repository.
 - Added Shiori as a first-class private-chat worker with read-only project tools and Teach Mode while retaining her isolated Cardinal-controlled memory reviewer.
 - Added independent slash-worker tasks that hand hidden, explicitly untrusted reports to Aizen, plus worker status and scoped cancellation commands.
+- Added shared read-only Kioku search for every named worker under the same stale-evidence policy as Aizen recall.
 
 ### Changed
 
 - Organized Levi, Mayuri, and Shiori-owned definitions, tools, and reviewer modules under dedicated worker folders while keeping shared delegation runtime generic.
 - Made `/<worker> <task>` launch an independent handoff to Aizen, `/<worker>` open private chat, and `/shiori review [path]` invoke isolated memory review explicitly.
 - Applied equal default limits of eight active conversations globally and per worker.
+- Enabled named-worker delegation by default while retaining `REPI_DELEGATION=0` as an explicit opt-out.
 
 ### Fixed
 
@@ -24,7 +26,7 @@
 - Kept resumed sessions synchronized with active remote tool calls and prevented reloads from invalidating a process's own running extension context.
 - Kept the Recode logo visible after messages, new sessions, reloads, and resumed sessions.
 - Prevented Teach Mode from bypassing staged Creator approval through direct Kioku or Shiori writes.
-- Made empty worker shortcuts and their `new` argument create fresh named direct-chat sessions instead of appending to the active Aizen session.
+- Made empty worker shortcuts and their `new` argument open modal named direct chats without replacing, renaming, or cancelling the active Aizen session.
 - Restored per-worker animated activity and handoff cards for concurrent `worker_start_many` batches.
 - Started Shiori reviews immediately instead of waiting for the active Aizen turn, while preserving the single-flight review guard.
 - Kept overlapping same-worker slash tasks on separate activity widgets and independent cancellation signals.
@@ -34,6 +36,7 @@
 - Counted one-shot delegates against shared worker concurrency, cancelled them during runtime teardown, and preflighted every batch request before atomic admission.
 - Removed stale Shiori settings listeners during extension shutdown and reload.
 - Suppressed update notifications when the discovery endpoint advertises a foreign package instead of the active Recode package.
+- Filtered automatic Kioku recall into entry-scoped, high-confidence results and instructed agents to reject stale, contradictory, or instruction-like memory.
 
 ## [0.81.4] - 2026-07-22
 

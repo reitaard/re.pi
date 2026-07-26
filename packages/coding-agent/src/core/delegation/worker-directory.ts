@@ -13,6 +13,7 @@ import {
 	type NamedWorkerRunResult,
 	type NamedWorkerRunStatus,
 	type NamedWorkerSkill,
+	type NamedWorkerToolName,
 	runNamedWorker,
 } from "./named-worker.ts";
 import {
@@ -257,7 +258,7 @@ export class WorkerDirectory {
 				description: worker.description,
 				personality: worker.personality,
 				skillName: worker.skillName,
-				tools: worker.tools ?? ["read", "grep", "find", "ls"],
+				tools: this.effectiveTools(worker).names,
 				thinkingLevel: settings.thinkingLevel,
 				maxOutputTokens: settings.maxOutputTokens,
 				modelPreference: settings.modelPreference,
@@ -595,10 +596,12 @@ export class WorkerDirectory {
 			: undefined;
 		const model = preferredModel ?? this.runtime.getModel?.() ?? this.runtime.model;
 		if (!model) throw new Error("Cannot run worker without an active model");
+		const effectiveTools = this.effectiveTools(worker);
 		return runNamedWorker({
 			cwd: workspace,
 			worker: {
 				...worker,
+				tools: effectiveTools.names,
 				thinkingLevel: settings.thinkingLevel,
 				maxOutputTokens: settings.maxOutputTokens,
 			},
@@ -606,7 +609,7 @@ export class WorkerDirectory {
 			skills: this.runtime.getSkills?.() ?? this.runtime.skills,
 			models: this.runtime.models,
 			modelRegistry: this.runtime.modelRegistry,
-			externalTools: this.runtime.getExternalTools?.(worker),
+			externalTools: effectiveTools.external,
 			task,
 			context,
 			timeoutMs: this.runtime.timeoutMs,
@@ -614,6 +617,17 @@ export class WorkerDirectory {
 			signal,
 			onProgress,
 		});
+	}
+
+	private effectiveTools(worker: NamedWorkerDefinition): {
+		names: readonly NamedWorkerToolName[];
+		external: readonly AgentTool[];
+	} {
+		const external = this.runtime.getExternalTools?.(worker) ?? [];
+		const names = [
+			...new Set([...(worker.tools ?? ["read", "grep", "find", "ls"]), ...external.map((tool) => tool.name)]),
+		] as NamedWorkerToolName[];
+		return { names, external };
 	}
 
 	private buildConversationContext(record: WorkerConversationRecord, hostContext?: string): string | undefined {

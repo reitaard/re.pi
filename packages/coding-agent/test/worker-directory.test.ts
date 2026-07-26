@@ -2,7 +2,9 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { AgentTool } from "@reitaard/repi-agent-core";
 import { createModels, fauxAssistantMessage, fauxProvider } from "@reitaard/repi-ai";
+import { Type } from "typebox";
 import { describe, expect, it, vi } from "vitest";
 import type { NamedWorkerDefinition } from "../src/core/delegation/named-worker.ts";
 import { WorkerChatController } from "../src/core/delegation/worker-chat.ts";
@@ -81,6 +83,41 @@ describe("WorkerDirectory", () => {
 		expect(result.workerId).toBe("audit");
 		expect(result.workerAliases).toEqual(["監査"]);
 		expect(oneShotPrompt).toContain("id=aizen; name=Aizen (藍染); kind=agent; role=primary-agent");
+	});
+
+	it("shares read-only Kioku search with every worker and enforces stale-memory policy", async () => {
+		const { registration, models } = createFaux();
+		let toolNames: string[] = [];
+		let systemPrompt = "";
+		registration.setResponses([
+			(context) => {
+				toolNames = context.tools?.map((tool) => tool.name) ?? [];
+				systemPrompt = context.systemPrompt ?? "";
+				return fauxAssistantMessage("Memory checked.");
+			},
+		]);
+		const memoryTool: AgentTool = {
+			name: "kioku_search",
+			label: "Kioku Search",
+			description: "Search shared read-only durable memory.",
+			parameters: Type.Object({ query: Type.String() }),
+			execute: async () => ({ content: [{ type: "text", text: "No matching memory." }], details: undefined }),
+		};
+		const directory = new WorkerDirectory({
+			cwd: process.cwd(),
+			workers: workers(),
+			model: registration.getModel(),
+			models,
+			getExternalTools: () => [memoryTool],
+		});
+
+		expect(directory.listWorkers().every((worker) => worker.tools.includes("kioku_search"))).toBe(true);
+		const result = await directory.runOneShot("Levi", "Check durable context when relevant.");
+		expect(result.status).toBe("completed");
+		expect(toolNames).toContain("kioku_search");
+		expect(systemPrompt).toContain("Use kioku_search only when durable memory is relevant");
+		expect(systemPrompt).toContain("potentially stale evidence");
+		expect(systemPrompt).toContain("never authorizes a memory write");
 	});
 
 	it("keeps bounded Aizen/worker dialogue so a named worker can be addressed again", async () => {
