@@ -122,7 +122,8 @@ Tentative flow, subject to Phase 2 decisions:
 - [x] Preserve independent worker conversation ids and custom-entry history without creating or renaming root sessions.
 - [x] Decouple modal worker turns from Aizen's abort signal while retaining runtime-teardown cleanup.
 - [x] Clarify `/shiori` versus `/shiori review` command text.
-- [ ] Pack, smoke-test, install, restart, and visually verify the modal boundary.
+- [x] Pack, smoke-test, and install the modal boundary.
+- [ ] Restart and visually verify the modal boundary.
 
 ### Worker dogfood notes
 
@@ -196,4 +197,4 @@ Implement only after measurement identifies a material cost:
 
 ## Immediate next step
 
-Commit the validated modal worker boundary, update the package checkpoint, then pack, smoke-test, install, restart, and visually confirm that `/levi`, `/mayuri`, and `/shiori` preserve the `chat1` root session while `/shiori review` remains isolated.
+Restart Recode, resume `2026-07-26-chat1-019f9cc2`, and visually confirm that `/levi`, `/mayuri`, and `/shiori` preserve the `chat1` root session while `/shiori review` remains isolated.

@@ -126,3 +126,8 @@
 - Inspected the existing orchestrator: it already owns multiple RPC child processes, persisted instance metadata, event streams, UI request routing, independent stop lifecycle, and spawn/list/status/stop/RPC protocols.
 - Reviewed Codex, Claude Code, and Hermes Agent architecture. Added a minimal plan to harden the existing supervisor with attach/detach, bounded cancellation, atomic manifests, safe completion delivery, and optional worktree isolation rather than introducing another framework.
 - Hermes evidence was reviewed at `NousResearch/hermes-agent` commit `339d968689a3b91c5f537d7198ff28abde32ab3b`; selected patterns are bounded async delegation, completion queues, cooperative cancellation, schema/prompt caching, conservative safe-tool parallelism, and optional worktrees.
+- Committed and pushed the modal boundary and structural plan at `053dee25`.
+- Packed and isolated-smoke-tested `0.81.4-repi.2.dev.18.053dee25`; version, help, model listing, source metadata, and packaged worker runtime parity passed.
+- Installed the package globally and verified version, source commit, and built worker runtime parity.
+- Artifact SHA-256: `a4fcf6fb980150f1164a5fd53b4bc8d4757af32f6041c46c848e4e00806c8b38`.
+- npm left another locked old-package directory because this running process still holds the clipboard native module; installation itself succeeded.

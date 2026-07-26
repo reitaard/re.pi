@@ -12,9 +12,8 @@ The authoritative repository is the customized Recode monorepo derived from Pi.
 - Root package: `repi-monorepo`
 - Coding-agent package: `@reitaard/repi-coding-agent`
 - Source package baseline: `0.81.4`
-- Installed staged version: `0.81.4-repi.2.dev.16.89e8dc30`
-- Current committed branch tip: `84a9fbdc` (not yet packed/installed)
-- Current modal-worker changes are validated but uncommitted
+- Installed staged version: `0.81.4-repi.2.dev.18.053dee25`
+- Current committed branch tip: `053dee25`
 - CLI binary name: `recode`
 - Required Node version: `>=22.19.0`
 
@@ -50,7 +49,7 @@ The global package path:
 
 `C:\nvm4w\nodejs\node_modules\@reitaard\repi-coding-agent`
 
-is a normal self-contained npm installation, not a symlink. Its staged package metadata records source commit `89e8dc30957d4ab84835558e85de1966b9691e99`. The installed Coding Agent, TUI, Agent, and AI runtime trees were verified byte-for-byte against the feature-complete custom build, excluding npm-omitted `.gitignore` files.
+is a normal self-contained npm installation, not a symlink. Its staged package metadata records source commit `053dee253b694491abf899b6b94429327e477e81`. The installed Coding Agent, TUI, Agent, and AI runtime trees were verified byte-for-byte against the feature-complete custom build, excluding npm-omitted `.gitignore` files.
 
 ## Worker architecture
 
