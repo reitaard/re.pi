@@ -28,20 +28,21 @@ describe("built-in Recode OpenAI OAuth provider", () => {
 			},
 		} as unknown as ExtensionAPI;
 
-		const fetchMock = vi.fn(async () =>
-			new Response(
-				JSON.stringify({
-					data: [
-						{ id: "gpt-5.6-sol" },
-						{ id: "gpt-5.6-terra" },
-						{ id: "gpt-5.6-luna" },
-						{ id: "gpt-5.5" },
-						{ id: "gpt-5.4" },
-						{ id: "gpt-5.4-mini" },
-						{ id: "gpt-image-2" },
-					],
-				}),
-			),
+		const fetchMock = vi.fn(
+			async () =>
+				new Response(
+					JSON.stringify({
+						data: [
+							{ id: "gpt-5.6-sol" },
+							{ id: "gpt-5.6-terra" },
+							{ id: "gpt-5.6-luna" },
+							{ id: "gpt-5.5" },
+							{ id: "gpt-5.4" },
+							{ id: "gpt-5.4-mini" },
+							{ id: "gpt-image-2" },
+						],
+					}),
+				),
 		);
 		vi.stubGlobal("fetch", fetchMock);
 
@@ -103,7 +104,10 @@ describe("built-in Recode OpenAI OAuth provider", () => {
 			},
 			registerProvider: vi.fn(),
 		} as unknown as ExtensionAPI;
-		vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new Error("connection refused"))));
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => Promise.reject(new Error("connection refused"))),
+		);
 
 		await expect(recodeOpenAIOAuth(pi)).resolves.toBeUndefined();
 		expect(commandRegistered).toBe(true);
