@@ -12,12 +12,13 @@ const npmCli = process.env.npm_execpath;
 if (!npmCli) throw new Error("npm_execpath is unavailable; run this script through npm");
 
 function run(command, args, options = {}) {
-	return execFileSync(command, args, {
+	const output = execFileSync(command, args, {
 		cwd: options.cwd ?? root,
 		encoding: "utf8",
 		stdio: options.capture ? ["ignore", "pipe", "pipe"] : "inherit",
 		env: process.env,
-	}).trim();
+	});
+	return typeof output === "string" ? output.trim() : "";
 }
 
 function git(args) {
