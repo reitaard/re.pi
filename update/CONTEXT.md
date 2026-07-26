@@ -12,7 +12,9 @@ The authoritative repository is the customized Recode monorepo derived from Pi.
 - Root package: `repi-monorepo`
 - Coding-agent package: `@reitaard/repi-coding-agent`
 - Source package baseline: `0.81.4`
-- Installed staged version: `0.81.4-repi.2.dev.14.88ba9b4a`
+- Installed staged version: `0.81.4-repi.2.dev.16.89e8dc30`
+- Current committed branch tip: `84a9fbdc` (not yet packed/installed)
+- Current modal-worker changes are validated but uncommitted
 - CLI binary name: `recode`
 - Required Node version: `>=22.19.0`
 
@@ -48,7 +50,7 @@ The global package path:
 
 `C:\nvm4w\nodejs\node_modules\@reitaard\repi-coding-agent`
 
-is a normal self-contained npm installation, not a symlink. Its staged package metadata records source commit `88ba9b4a00a9264f8ec700bf5f80b8759d0834c2`. The installed Coding Agent, TUI, Agent, and AI runtime trees were verified byte-for-byte against the feature-complete custom build, excluding npm-omitted `.gitignore` files.
+is a normal self-contained npm installation, not a symlink. Its staged package metadata records source commit `89e8dc30957d4ab84835558e85de1966b9691e99`. The installed Coding Agent, TUI, Agent, and AI runtime trees were verified byte-for-byte against the feature-complete custom build, excluding npm-omitted `.gitignore` files.
 
 ## Worker architecture
 
@@ -64,6 +66,21 @@ The behavior-preserving worker-folder restructure is committed and pushed at `c6
 - `/worker status` exposes conversation ids and `/worker cancel <id>` provides scoped user cancellation.
 - Footer context usage reads the live compaction-aware session branch after every persisted AgentHarness model/tool-loop step; it shows `ctx ?` immediately after compaction and then the first available post-compaction usage without waiting for the outer turn.
 - Cache read, cache write, and cache-hit footer statistics use the same accent color as token traffic and context usage.
+- Private worker chats are modal conversations inside the current Aizen runtime. They retain independent worker conversation ids, history, cancellation, and custom-entry persistence without creating, renaming, replacing, or cancelling the root Aizen session.
+- Opening a worker modal does not inherit Aizen's abort signal. Runtime teardown still owns final worker cleanup through the shared directory.
+
+## Existing orchestrator foundation
+
+`packages/orchestrator` already implements most of the process-supervisor substrate needed for multiple full Aizen sessions:
+
+- `OrchestratorSupervisor` owns multiple live RPC child processes and persisted `InstanceRecord` metadata.
+- Each instance already has an id, label, cwd, status, session id/file, event subscribers, UI-request routing, and independent stop lifecycle.
+- The newline-delimited IPC protocol already supports spawn, list, status, stop, RPC, and streaming RPC attachment.
+- Unexpected child exits are isolated and persisted as instance errors.
+- Current restart recovery marks previously live children stopped; it does not reattach to orphaned processes.
+- Current JSON persistence rewrites the whole instance array synchronously and should be hardened atomically before becoming a durable session supervisor.
+
+The minimal next architecture should extend this package rather than adding another orchestrator.
 
 ## Historical session context
 

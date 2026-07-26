@@ -114,3 +114,15 @@
 - Installed the package globally as a normal non-symlink npm package and verified `recode --version` plus Coding Agent, AI, Agent, and TUI tree parity.
 - Artifact SHA-256: `c72252625f1a67349e1d2f9432540216a41bc0a8bfa4feaaa8a0c8d12b9b74f4`.
 - npm could not remove one temporary old-package directory because the running Recode process holds the native clipboard module open. The active package installed successfully; the stale process must be restarted before testing and the temporary directory can be retired afterward.
+
+## 2026-07-26 — Worker hardening and modal-session boundary
+
+- Normalized worker Git paths and installed `0.81.4-repi.2.dev.16.89e8dc30` (SHA-256 `c6f8df3836f042ac07c85438443c95c71cc03f0d47402af09b1fb7a6c252a0e2`).
+- Hardened shared capacity accounting, atomic batch preflight, one-shot cancellation, Shiori settings-listener cleanup, foreign update-notice suppression, and compact Levi/Mayuri activity text in committed tip `84a9fbdc`.
+- Replaced worker private-chat root-session creation with the existing custom modal UI.
+- Removed private-chat session renaming and Aizen abort-signal inheritance while preserving independent worker conversation ids, custom-entry restoration, scoped cancellation, and runtime-teardown cleanup.
+- Clarified that `/shiori` opens private chat and `/shiori review` performs current-session memory review.
+- Focused modal/memory validation passed: 23 tests across two files. Full `npm run check` passed.
+- Inspected the existing orchestrator: it already owns multiple RPC child processes, persisted instance metadata, event streams, UI request routing, independent stop lifecycle, and spawn/list/status/stop/RPC protocols.
+- Reviewed Codex, Claude Code, and Hermes Agent architecture. Added a minimal plan to harden the existing supervisor with attach/detach, bounded cancellation, atomic manifests, safe completion delivery, and optional worktree isolation rather than introducing another framework.
+- Hermes evidence was reviewed at `NousResearch/hermes-agent` commit `339d968689a3b91c5f537d7198ff28abde32ab3b`; selected patterns are bounded async delegation, completion queues, cooperative cancellation, schema/prompt caching, conservative safe-tool parallelism, and optional worktrees.

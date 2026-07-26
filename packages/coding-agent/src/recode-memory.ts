@@ -539,8 +539,8 @@ export async function recodeMemory(
 	});
 
 	pi.registerCommand("shiori", {
-		description: `${RECODE_SHIORI_DISPLAY_NAME} private chat, independent tasks, and isolated Kioku review`,
-		argumentHint: "[new|review [path]|task]",
+		description: `Open ${RECODE_SHIORI_DISPLAY_NAME} private chat; use /shiori review for current-session memory review`,
+		argumentHint: "[new|review [path]|<task>]",
 		getArgumentCompletions: (prefix) => {
 			const options = [
 				{

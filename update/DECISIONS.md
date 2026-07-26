@@ -56,6 +56,24 @@ Upstream analysis compares the recorded Pi baseline tree with both the committed
 
 The release line starts from exact commit `c5ab200b`. Upstream Pi changes are classified from common baseline `1f9e846c` and reported without source mutation. No custom path is replaced merely to claim a newer upstream version. A normal npm package may replace the development symlink only after isolated and visual parity tests.
 
+## D-009 — Worker private chats are modal, not root sessions
+
+**Status:** Accepted
+
+Levi, Mayuri, and Shiori private chats run as modal, independently cancellable worker conversations inside the current Aizen runtime. They keep their own conversation ids and custom-entry history but never call root-session replacement or rename the Aizen session. One-shot tasks remain independent and deliver explicitly untrusted handoffs.
+
+## D-010 — Extend the existing orchestrator for full-session concurrency
+
+**Status:** Accepted
+
+Multiple full Aizen sessions will use `packages/orchestrator` as the single supervisor foundation. Each background session is an isolated RPC child process with attach/detach, bounded admission, scoped cancellation, persisted ownership metadata, and optional verified worktree isolation. Named workers remain lightweight and do not become processes by default.
+
+## D-011 — Optimize from measurements and reuse existing boundaries
+
+**Status:** Accepted
+
+Latency work starts with stage-level measurements. Prefer schema/prompt caching, lazy loading, event-driven waits, and conservative parallel read-only tools. Do not add SQLite, deep delegation, multi-platform gateways, or automatic background review until measurements establish need.
+
 ## Pending decisions
 
 - Whether a later `recode upstream prepare` command should create an isolated integration worktree

@@ -118,6 +118,11 @@ Tentative flow, subject to Phase 2 decisions:
 - [x] Apply one global eight-conversation default equally to Levi, Mayuri, and Shiori; retain one active Shiori review.
 - [x] Add behavior, concurrency, cancellation, handoff, and session-restoration tests.
 - [x] Build, pack, smoke-test, and install only after review.
+- [x] Keep private worker chats inside the current Aizen runtime as modal conversations.
+- [x] Preserve independent worker conversation ids and custom-entry history without creating or renaming root sessions.
+- [x] Decouple modal worker turns from Aizen's abort signal while retaining runtime-teardown cleanup.
+- [x] Clarify `/shiori` versus `/shiori review` command text.
+- [ ] Pack, smoke-test, install, restart, and visually verify the modal boundary.
 
 ### Worker dogfood notes
 
@@ -128,6 +133,67 @@ Tentative flow, subject to Phase 2 decisions:
 - A post-refactor Levi audit launched from the still-installed `c1fd1121` runtime reproduced that old `C:\\c` failure; no automatic retry was made. Source commit `c6b4dd13` contains the tested fix, but it will not affect the tool host until the next reviewed installation.
 - Later optimization should measure scheduling, harness setup, skill loading, provider start, and first useful output separately.
 
+## Structural hardening — full Aizen session supervision
+
+The existing `packages/orchestrator` is the foundation. Do not add a second orchestration framework.
+
+### S0 — Preserve the simple foreground path
+
+- [x] Keep one foreground Aizen runtime in the ordinary TUI.
+- [x] Keep named workers as lightweight in-process conversations; do not turn every worker into an OS process.
+- [ ] Establish latency baselines for startup, harness setup, provider first token, tool dispatch, persistence, and final rendering before changing architecture.
+
+### S1 — Harden the existing supervisor
+
+- [ ] Treat each full background Aizen session as one existing orchestrator RPC child process.
+- [ ] Extend `InstanceRecord` with explicit run state (`idle`, `running`, `waiting-input`, `completed`, `cancelled`, `error`) and parent/session lineage.
+- [ ] Replace whole-file synchronous instance rewrites with atomic temp-write/rename persistence and bounded corruption recovery; retain JSON until measured scale justifies SQLite.
+- [ ] Add per-instance `AbortController`/RPC cancellation and bounded global concurrency with fail-fast admission.
+- [ ] Persist only safe metadata: instance id, PID/process identity receipt, cwd/worktree, session id/file, status, timestamps, and bounded output tail. Never persist credentials.
+- [ ] Define ownership receipts so restart recovery never kills or adopts an unverifiable process.
+
+### S2 — Attach/detach without duplicate runtimes
+
+- [ ] Add explicit `attach`, `detach`, `cancel`, and `send` protocol operations over the existing `rpc_stream` transport.
+- [ ] Keep child lifetime owned by the supervisor; closing a TUI detaches rather than stops the child.
+- [ ] Permit only one interactive UI/approval owner per instance while allowing read-only event subscribers.
+- [ ] Route permission prompts and required user input to the attached owner; mark detached blocked sessions `waiting-input`.
+- [ ] Add a compact session picker showing label, id, workspace, state, elapsed time, and pending input.
+- [ ] Keep ordinary `/resume` as an explicit foreground replacement; use the supervisor picker for concurrently live full sessions.
+
+### S3 — Workspace safety
+
+- [ ] Default read-only/background analysis to the selected workspace without creating a worktree.
+- [ ] Require explicit isolated sibling worktrees for concurrent write-capable full sessions.
+- [ ] Reuse the existing Git common-directory guard; reject unrelated repositories, traversal, dirty destructive setup, and ambiguous ownership.
+- [ ] Never auto-merge, reset, stash, or delete a worktree. Cleanup requires verified ownership and no uncommitted work.
+
+### S4 — Completion delivery
+
+- [ ] Queue background completion events and inject them only as fresh, explicitly untrusted handoffs at a safe foreground reasoning boundary.
+- [ ] Never mutate prior Aizen turns or inject private worker transcripts.
+- [ ] Keep bounded result summaries plus links/ids to full persisted session transcripts.
+
+## Latency optimization order
+
+Implement only after measurement identifies a material cost:
+
+1. Cache immutable worker/tool schemas and stable system-prompt prefixes.
+2. Reuse model/provider registries and parsed static configuration inside a process.
+3. Avoid follow-up `get_state` calls except for commands that can change persisted identity; the orchestrator already follows this rule.
+4. Parallelize only independent read-only or path-disjoint tool batches; preserve barriers around writes, prompts, approvals, and interactive tools.
+5. Load expensive skills/tools lazily when the worker or command actually needs them.
+6. Keep recent context and stable prompt prefixes cache-friendly; put volatile recall/handoff material afterward.
+7. Prefer bounded queues, event-driven waits, and incremental output over polling.
+8. Do not add SQLite, deep nested delegation, a multi-platform gateway, or automatic background memory review without measured need.
+
+## External architecture evidence
+
+- Codex: app-server agent threads and a picker are the model for inspectable subagent/modal navigation; switching primary sessions still replaces the primary runtime.
+- Claude Code: a supervisor owning independent background session processes is the model for full attach/detach.
+- Hermes Agent (`NousResearch/hermes-agent`, reviewed at `339d9686`): reuse bounded asynchronous delegation, independent cancellation, completion queues, cached tool schemas, conservative safe-tool parallelism, stable prompt caching, and optional worktrees. Do not copy its broad gateway, deep delegation, or automatic memory machinery.
+- OpenClaw-derived browser orchestration remains a separate guarded browser-control boundary; reuse lifecycle concepts, not browser-specific control code.
+
 ## Immediate next step
 
-Restart Recode so the process loads `88ba9b4a`, then verify live post-compaction context updates, cache-stat colors, independent multi-worker execution, Shiori direct chat/review separation, and cleanup of npm's locked temporary old-package directory.
+Commit the validated modal worker boundary, update the package checkpoint, then pack, smoke-test, install, restart, and visually confirm that `/levi`, `/mayuri`, and `/shiori` preserve the `chat1` root session while `/shiori review` remains isolated.

@@ -431,11 +431,10 @@ async function sendDirectMessage(
 	const widgetKey = workerActivityWidgetKey(worker.id);
 	workerLoader(ctx, worker, "direct", turnNumber);
 	try {
-		const turn = await chat.send(worker.id, prompt, ctx.signal);
+		const turn = await chat.send(worker.id, prompt);
 		settleWorkerActivity(
 			() => ctx.ui.setWidget(widgetKey, undefined),
 			() => {
-				pi.setSessionName(`${worker.displayName} direct chat`);
 				pi.appendEntry(WORKER_HANDOFF_ENTRY, handoffMessage(turn, "direct", prompt), {
 					persistImmediately: true,
 				});
@@ -535,22 +534,27 @@ function clearWorkerHeader(ctx: Pick<ExtensionContext, "ui">): void {
 }
 
 async function startFreshWorkerDirectSession(
+	pi: ExtensionAPI,
 	chat: WorkerChatController,
 	directory: WorkerDirectory,
+	teach: WorkerTeachSupport,
 	ctx: ExtensionCommandContext,
+	agentDir: string,
 	workerReference: string,
 ): Promise<void> {
 	const worker = directory.resolveWorker(workerReference);
-	chat.close(worker.id);
-	await ctx.newSession({
-		setup: async (sessionManager) => {
-			sessionManager.appendSessionInfo(`${worker.displayName} direct chat`);
-			sessionManager.appendCustomEntry(WORKER_DIRECT_SESSION_ENTRY, {
+	if (chat.close(worker.id)) {
+		pi.appendEntry(
+			WORKER_DIRECT_RESET_ENTRY,
+			{
 				workerId: worker.id,
-				open: true,
-			} satisfies WorkerDirectSessionEntry);
-		},
-	});
+				workerName: identity(worker),
+				createdAt: Date.now(),
+			} satisfies WorkerDirectResetEntry,
+			{ persistImmediately: true },
+		);
+	}
+	await openDirectChat(pi, chat, directory, teach, ctx, agentDir, worker.id);
 }
 
 async function openDirectChat(
@@ -563,9 +567,8 @@ async function openDirectChat(
 	workerReference: string,
 ): Promise<void> {
 	const worker = directory.resolveWorker(workerReference);
-	pi.setSessionName(`${worker.displayName} direct chat`);
 	try {
-		while (!ctx.signal?.aborted) {
+		while (true) {
 			await showWorkerInHeader(directory, agentDir, ctx, worker.id);
 			const message = await ctx.ui.custom<string | undefined>((_tui, _activeTheme, _keybindings, done) => {
 				const descriptor = directory.listWorkers().find((candidate) => candidate.id === worker.id);
@@ -590,11 +593,6 @@ async function openDirectChat(
 			await sendDirectMessage(pi, chat, directory, teach, ctx, agentDir, worker.id, message);
 		}
 	} finally {
-		pi.appendEntry(
-			WORKER_DIRECT_SESSION_ENTRY,
-			{ workerId: worker.id, open: false } satisfies WorkerDirectSessionEntry,
-			{ persistImmediately: true },
-		);
 		clearWorkerHeader(ctx);
 	}
 }
@@ -779,7 +777,7 @@ async function showWorkerPage(
 		if (chat.getConversationId(selected.workerId)) {
 			await openDirectChat(pi, chat, directory, teach, ctx, agentDir, selected.workerId);
 		} else {
-			await startFreshWorkerDirectSession(chat, directory, ctx, selected.workerId);
+			await startFreshWorkerDirectSession(pi, chat, directory, teach, ctx, agentDir, selected.workerId);
 		}
 	}
 }
@@ -1277,7 +1275,15 @@ export async function recodeWorkers(
 				return;
 			}
 			if (request.action === "new" || !chat.getConversationId(SHIORI_WORKER_ID)) {
-				await startFreshWorkerDirectSession(chat, directory, request.context, SHIORI_WORKER_ID);
+				await startFreshWorkerDirectSession(
+					pi,
+					chat,
+					directory,
+					teach,
+					request.context,
+					agentDir,
+					SHIORI_WORKER_ID,
+				);
 			} else {
 				await openDirectChat(pi, chat, directory, teach, request.context, agentDir, SHIORI_WORKER_ID);
 			}
@@ -1313,7 +1319,6 @@ export async function recodeWorkers(
 		const directSession = getWorkerDirectSessionRequest(ctx.sessionManager.getBranch());
 		if (directSession?.open) {
 			const worker = directory.resolveWorker(directSession.workerId);
-			pi.setSessionName(`${worker.displayName} direct chat`);
 			await showWorkerInHeader(directory, agentDir, ctx, worker.id);
 			queueMicrotask(() => {
 				void openDirectChat(pi, chat, directory, teach, ctx, agentDir, worker.id).catch((error: unknown) => {
@@ -1321,12 +1326,6 @@ export async function recodeWorkers(
 				});
 			});
 			return;
-		}
-		const latest = directory.getStatus().sort((left, right) => right.updatedAt - left.updatedAt)[0];
-		if (latest) {
-			const worker = directory.resolveWorker(latest.workerId);
-			pi.setSessionName(`${worker.displayName} direct chat`);
-			await showWorkerInHeader(directory, agentDir, ctx, worker.id);
 		}
 	});
 
@@ -1396,7 +1395,7 @@ export async function recodeWorkers(
 					const message = messageParts.join(" ").trim();
 					if (message)
 						await sendDirectMessage(pi, chat, directory, teach, ctx, agentDir, workerReference, message);
-					else await startFreshWorkerDirectSession(chat, directory, ctx, workerReference);
+					else await startFreshWorkerDirectSession(pi, chat, directory, teach, ctx, agentDir, workerReference);
 					return;
 				}
 				if (command === "close" && workerReference) {
@@ -1438,7 +1437,7 @@ export async function recodeWorkers(
 				try {
 					const message = args.trim();
 					if (message === "new") {
-						await startFreshWorkerDirectSession(chat, directory, ctx, worker.id);
+						await startFreshWorkerDirectSession(pi, chat, directory, teach, ctx, agentDir, worker.id);
 					} else if (message) {
 						void launchWorkerTaskToAizen(pi, directory, ctx, worker.id, message).catch((error: unknown) => {
 							ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
@@ -1446,7 +1445,7 @@ export async function recodeWorkers(
 					} else if (chat.getConversationId(worker.id)) {
 						await openDirectChat(pi, chat, directory, teach, ctx, agentDir, worker.id);
 					} else {
-						await startFreshWorkerDirectSession(chat, directory, ctx, worker.id);
+						await startFreshWorkerDirectSession(pi, chat, directory, teach, ctx, agentDir, worker.id);
 					}
 				} catch (error: unknown) {
 					ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");

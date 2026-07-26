@@ -35,7 +35,6 @@ import {
 import { initTheme, theme } from "../src/modes/interactive/theme/theme.ts";
 import {
 	formatCreatorMessage,
-	getWorkerDirectSessionRequest,
 	launchWorkerTaskToAizen,
 	recodeWorkers,
 	renderRoster,
@@ -157,32 +156,28 @@ describe("recode worker TUI", () => {
 		const leviCommand = result.extensions[0].commands.get("levi");
 		if (!leviCommand) throw new Error("levi command missing");
 		for (const args of ["new", ""]) {
-			const freshSession = SessionManager.create(cwd, join(root, `fresh-${args || "empty"}`));
-			const newSession = vi.fn(async (options?: Parameters<ExtensionCommandContext["newSession"]>[0]) => {
-				await options?.setup?.(freshSession);
-				return { cancelled: false };
-			});
+			const newSession = vi.fn();
+			const custom = vi.fn(async () => undefined);
 			await leviCommand.handler(args, {
+				cwd,
+				isIdle: () => false,
 				newSession,
-				ui: { notify: vi.fn() },
+				ui: { custom, notify: vi.fn(), setWidget: vi.fn() },
 			} as unknown as ExtensionCommandContext);
-			expect(newSession).toHaveBeenCalledOnce();
-			expect(freshSession.getSessionName()).toBe("Levi direct chat");
-			expect(getWorkerDirectSessionRequest(freshSession.getBranch())).toEqual({
-				workerId: "audit",
-				open: true,
-			});
+			expect(newSession).not.toHaveBeenCalled();
+			expect(custom).toHaveBeenCalledOnce();
 		}
 
-		const shioriSession = SessionManager.create(cwd, join(root, "fresh-shiori"));
+		const shioriNewSession = vi.fn();
+		const shioriCustom = vi.fn(async () => undefined);
 		await new Promise<void>((resolve, reject) => {
 			const request: RecodeShioriCommandRequest = {
 				action: "new",
 				context: {
-					newSession: async (options?: Parameters<ExtensionCommandContext["newSession"]>[0]) => {
-						await options?.setup?.(shioriSession);
-						return { cancelled: false };
-					},
+					cwd,
+					isIdle: () => false,
+					newSession: shioriNewSession,
+					ui: { custom: shioriCustom, notify: vi.fn(), setWidget: vi.fn() },
 				} as unknown as ExtensionCommandContext,
 				handled: false,
 				resolve,
@@ -191,8 +186,8 @@ describe("recode worker TUI", () => {
 			eventBus.emit(RECODE_SHIORI_COMMAND_REQUEST, request);
 			expect(request.handled).toBe(true);
 		});
-		expect(shioriSession.getSessionName()).toBe("Shiori direct chat");
-		expect(getWorkerDirectSessionRequest(shioriSession.getBranch())).toEqual({ workerId: "shiori", open: true });
+		expect(shioriNewSession).not.toHaveBeenCalled();
+		expect(shioriCustom).toHaveBeenCalledOnce();
 
 		const waitForIdle = vi.fn(async () => {});
 		const custom = vi.fn(async () => undefined);
