@@ -163,3 +163,10 @@
 - Packed and isolated-smoke-tested `0.81.4-repi.2.dev.24.eae21614`; version, help, model listing, source metadata, and compiled parity for delegation, worker directory, memory, modal chat, and updater guards passed.
 - Installed the exact artifact globally and verified the same runtime parity.
 - Artifact SHA-256: `913ddc4fc79955ef7a1b75c289724d196554966945217f3483ebd53ec8d8b077`.
+
+## 2026-07-27 — Release certification and VPS rollout
+
+- Creator paused structural supervisor work and explicitly authorized release-candidate construction plus VPS inventory/update.
+- Confirmed clean pushed `repi/preserve-custom` commit `659d9fcd7ebc7dc963df79060e71a426c942d30d`, descended from `c5ab200b`.
+- The first full local-release attempt passed `npm run check` but failed before tests because Windows `cmd.exe` cannot execute `./test.sh` directly.
+- Corrected the cross-platform local-release runner to invoke `bash ./test.sh`; no release artifact from the failed attempt was accepted.

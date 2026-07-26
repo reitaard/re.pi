@@ -214,7 +214,7 @@ if (!options.skipCheck) {
 }
 
 if (!options.skipTest) {
-	run("./test.sh", [], { cwd: repoRoot });
+	run("bash", ["./test.sh"], { cwd: repoRoot });
 }
 
 for (const pkg of packages) {

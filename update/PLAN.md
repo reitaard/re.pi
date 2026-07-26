@@ -231,6 +231,7 @@ The repository already has one intended release path: `scripts/local-release.mjs
 - [x] Confirm a deterministic Termux Node archive exists.
 - [x] Confirm GitHub release assets receive SHA-256 checksums and a source archive.
 - [ ] Prove every path builds from `repi/preserve-custom`, retains the exact feature-complete Recode runtime, and enables delegation by default.
+- [x] Make the full local-release test runner execute `test.sh` through Bash on Windows instead of handing it to `cmd.exe`.
 - [ ] Reconcile release documentation with workflow reality: the current binary workflow stages/publishes GitHub assets but does not contain the documented npm trusted-publishing job.
 - [ ] Verify the release/tag script cannot accidentally release incomplete `main` or a raw upstream-derived tree.
 
