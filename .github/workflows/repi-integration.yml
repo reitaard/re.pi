@@ -15,13 +15,14 @@ permissions:
 jobs:
   parity-patch:
     name: Apply exact legacy parity patch
-    if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
+    if: github.event_name == 'pull_request' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout RePi
+      - name: Checkout RePi head branch
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.head_ref }}
 
       - name: Check whether patch is needed
         id: parity
@@ -75,7 +76,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add packages/coding-agent/src repi/.exact-ui-parity-applied
           git commit -m "fix(repi): restore exact legacy startup and LSP parity"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_HEAD_REF}"
 
   validate:
     name: ${{ matrix.os }} / Node 26.5.0
