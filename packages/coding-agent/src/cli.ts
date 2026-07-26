@@ -29,18 +29,21 @@ if (args[0] === "telegram") {
 		process.exitCode = 1;
 	});
 } else {
-	const [{ RecodeMemoryRuntime }, { main }, { recodeMemory }, { recodeOpenProvider }] = await Promise.all([
-		import("./core/recode-memory/recode-memory-runtime.ts"),
-		import("./main.ts"),
-		import("./recode-memory.ts"),
-		import("./recode-open-provider.ts"),
-	]);
+	const [{ RecodeMemoryRuntime }, { main }, { recodeMemory }, { recodeOpenProvider }, { recodeOpenAIOAuth }] =
+		await Promise.all([
+			import("./core/recode-memory/recode-memory-runtime.ts"),
+			import("./main.ts"),
+			import("./recode-memory.ts"),
+			import("./recode-open-provider.ts"),
+			import("./recode-openai-oauth.ts"),
+		]);
 
 	const memoryRuntime = new RecodeMemoryRuntime();
 
 	void main(args, {
 		extensionFactories: [
 			{ name: "recode-open-provider", factory: recodeOpenProvider },
+			{ name: "recode-openai-oauth", factory: recodeOpenAIOAuth },
 			{ name: "recode-memory", factory: (pi) => recodeMemory(pi, memoryRuntime) },
 		],
 	}).finally(() => memoryRuntime.close());
