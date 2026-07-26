@@ -20,24 +20,6 @@ import type {
 	RecodeShioriModelPreference,
 	RecodeShioriRouting,
 } from "./core/recode-memory/recode-memory-types.ts";
-import {
-	RECODE_SHIORI_DISPLAY_NAME,
-	RECODE_SHIORI_MESSAGE_ENTRY,
-	type RecodeShioriMemoryCandidate,
-	type RecodeShioriMessageEntry,
-} from "./core/recode-memory/recode-shiori.ts";
-import {
-	RECODE_SHIORI_SETTINGS_REQUEST,
-	RECODE_SHIORI_SETTINGS_UPDATE,
-	type RecodeShioriSettingsRequest,
-	type RecodeShioriSettingsSnapshot,
-	type RecodeShioriSettingsUpdate,
-} from "./core/recode-memory/recode-shiori-control.ts";
-import {
-	archiveRecodeShioriDeskItem,
-	discardRecodeShioriDeskItem,
-	placeOnRecodeShioriDesk,
-} from "./core/recode-memory/recode-shiori-desk.ts";
 import { wrapRecodeCreatorMessage } from "./core/recode-teach/recode-creator-message.ts";
 import {
 	extractRecodeTeachCandidate,
@@ -46,6 +28,24 @@ import {
 	recodeTeachPrompt,
 } from "./core/recode-teach/recode-teach-controller.ts";
 import type { SessionManager } from "./core/session-manager.ts";
+import {
+	RECODE_SHIORI_SETTINGS_REQUEST,
+	RECODE_SHIORI_SETTINGS_UPDATE,
+	type RecodeShioriSettingsRequest,
+	type RecodeShioriSettingsSnapshot,
+	type RecodeShioriSettingsUpdate,
+} from "./core/workers/shiori/control.ts";
+import {
+	archiveRecodeShioriDeskItem,
+	discardRecodeShioriDeskItem,
+	placeOnRecodeShioriDesk,
+} from "./core/workers/shiori/desk.ts";
+import {
+	RECODE_SHIORI_DISPLAY_NAME,
+	RECODE_SHIORI_MESSAGE_ENTRY,
+	type RecodeShioriMemoryCandidate,
+	type RecodeShioriMessageEntry,
+} from "./core/workers/shiori/reviewer.ts";
 import { keyHint } from "./modes/interactive/components/keybinding-hints.ts";
 import {
 	type RecodeMemorySettingId,

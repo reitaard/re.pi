@@ -1,5 +1,5 @@
 import { Container, type SettingItem, SettingsList } from "@reitaard/repi-tui";
-import { RECODE_SHIORI_DISPLAY_NAME } from "../../../core/recode-memory/recode-shiori.ts";
+import { RECODE_SHIORI_DISPLAY_NAME } from "../../../core/workers/shiori/reviewer.ts";
 import { getSettingsListTheme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 

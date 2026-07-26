@@ -1,8 +1,8 @@
 import { createModels } from "@reitaard/repi-ai";
 import { describe, expect, it } from "vitest";
 import { WorkerDirectory } from "../src/core/delegation/worker-directory.ts";
-import { REPI_NAMED_WORKERS } from "../src/core/delegation/worker-registry.ts";
 import { createWorkerControlTools } from "../src/core/delegation/worker-tools.ts";
+import { REPI_NAMED_WORKERS } from "../src/core/workers/registry.ts";
 
 describe("worker completion and failure policy", () => {
 	it("gives local reasoning workers enough completion budget to reach final text", () => {

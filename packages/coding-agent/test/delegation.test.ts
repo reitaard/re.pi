@@ -7,7 +7,7 @@ import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { createDelegateTool } from "../src/core/delegation/delegate-tool.ts";
 import { type NamedWorkerDefinition, runNamedWorker } from "../src/core/delegation/named-worker.ts";
-import { REPI_NAMED_WORKERS } from "../src/core/delegation/worker-registry.ts";
+import { REPI_NAMED_WORKERS } from "../src/core/workers/registry.ts";
 
 let providerCount = 0;
 

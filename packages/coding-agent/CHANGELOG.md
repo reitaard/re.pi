@@ -10,8 +10,13 @@
 - Added `worker_start_many` for two to eight concurrent independent worker conversations, including multiple conversations using the same named worker.
 - Added a bounded read-only Git tool for audit workers and explicit sibling-worktree selection restricted to the active Git repository.
 
+### Changed
+
+- Organized Levi, Mayuri, and Shiori-owned definitions, tools, and reviewer modules under dedicated worker folders while keeping shared delegation runtime generic.
+
 ### Fixed
 
+- Accepted MSYS-style Windows paths when routing delegated workers to sibling Git worktrees.
 - Kept resumed sessions synchronized with active remote tool calls and prevented reloads from invalidating a process's own running extension context.
 - Kept the Recode logo visible after messages, new sessions, reloads, and resumed sessions.
 - Prevented Teach Mode from bypassing staged Creator approval through direct Kioku or Shiori writes.

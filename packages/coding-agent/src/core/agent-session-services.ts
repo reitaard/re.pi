@@ -9,7 +9,6 @@ import {
 	createDelegateTool,
 	createWorkerControlTools,
 	ensureWorkerStorage,
-	REPI_NAMED_WORKERS,
 	WorkerDirectory,
 } from "./delegation/index.ts";
 import type { ExtensionContext, SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
@@ -25,6 +24,7 @@ import type { SessionManager } from "./session-manager.ts";
 import { SettingsManager } from "./settings-manager.ts";
 import { createPackageManageToolDefinition } from "./tools/package-manage.ts";
 import { createToolDefinitionFromAgentTool, wrapToolDefinition } from "./tools/tool-definition-wrapper.ts";
+import { REPI_NAMED_WORKERS } from "./workers/registry.ts";
 
 const DELEGATION_ENV = "REPI_DELEGATION";
 const MAYURI_WEB_TOOL_NAMES = ["web_search", "fetch_content", "get_search_content"] as const;

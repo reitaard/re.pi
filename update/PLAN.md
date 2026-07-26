@@ -104,6 +104,29 @@ Tentative flow, subject to Phase 2 decisions:
 - [x] Preserve Mayuri's librarian skill and strengthen Levi's audit instructions around Git evidence.
 - [x] Add focused concurrency, workspace-boundary, and Git fail-closed tests.
 
+## Worker architecture and behavior
+
+- [x] Restore per-worker batch activity and handoff rendering.
+- [x] Move Levi, Mayuri, and Shiori-owned code under `core/workers/<name>` without behavior changes.
+- [x] Keep generic conversation, delegation, cancellation, storage, and workspace guards under `core/delegation`.
+- [x] Let worker definitions own their specialized tool factories instead of importing Levi from the generic runtime.
+- [x] Accept native and MSYS-style Windows paths for sibling-worktree routing.
+- [ ] Register Shiori as a first-class direct-chat worker while retaining her isolated reviewer.
+- [ ] Make slash worker tasks bypass Aizen execution and hand results to Aizen at the next safe runtime boundary.
+- [ ] Keep dedicated worker chats private and preserve Teach Mode.
+- [ ] Remove Shiori review's idle wait while retaining one process-wide review lock.
+- [ ] Apply one global eight-conversation default equally to Levi, Mayuri, and Shiori; retain one active Shiori review.
+- [ ] Add behavior, concurrency, cancellation, handoff, and session-restoration tests.
+- [ ] Build, pack, smoke-test, and install only after review.
+
+### Worker dogfood notes
+
+- Three Levi audits overlapped successfully, reducing approximately 896 seconds of combined runtime to 375 seconds wall time.
+- Individual audit latency of 214–375 seconds is too high for narrow code reviews.
+- Audit evidence was useful but missed one current tool and one existing concurrency test; prompt scope and evidence verification need tightening.
+- Alternate-worktree audit startup exposed an MSYS Windows path-conversion defect before model execution.
+- Later optimization should measure scheduling, harness setup, skill loading, provider start, and first useful output separately.
+
 ## Immediate next step
 
-Validate and commit the fail-closed updater and read-only planner on `repi/preserve-custom`, then implement staged lockstep packaging.
+Commit the behavior-preserving worker-folder boundary, then add Shiori's direct-chat identity and independent slash-worker handoff behavior in separately tested changes.

@@ -150,6 +150,14 @@ function statusFromResult(result: NamedWorkerRunResult): WorkerConversationStatu
 	return result.status;
 }
 
+function resolveWorkspacePath(workspace: string): string {
+	const normalized =
+		process.platform === "win32" && /^\/[a-zA-Z](?:\/|$)/.test(workspace)
+			? `${workspace[1]!.toUpperCase()}:${workspace.slice(2)}`
+			: workspace;
+	return realpathSync(resolve(normalized));
+}
+
 function gitCommonDirectory(workspace: string): string | undefined {
 	const result = spawnProcessSync(
 		"git",
@@ -262,8 +270,8 @@ export class WorkerDirectory {
 	}
 
 	resolveWorkspace(requestedWorkspace = this.cwd): string {
-		const activeWorkspace = realpathSync(resolve(this.cwd));
-		const requested = realpathSync(resolve(requestedWorkspace));
+		const activeWorkspace = resolveWorkspacePath(this.cwd);
+		const requested = resolveWorkspacePath(requestedWorkspace);
 		if (requested === activeWorkspace) return requested;
 		const activeCommonDirectory = gitCommonDirectory(activeWorkspace);
 		const requestedCommonDirectory = gitCommonDirectory(requested);

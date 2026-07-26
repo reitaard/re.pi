@@ -1,6 +1,6 @@
 import type { AgentTool } from "@reitaard/repi-agent-core";
 import { Type } from "typebox";
-import { spawnProcessSync } from "../../utils/child-process.ts";
+import { spawnProcessSync } from "../../../utils/child-process.ts";
 
 const READ_ONLY_GIT_COMMANDS = new Set([
 	"branch",

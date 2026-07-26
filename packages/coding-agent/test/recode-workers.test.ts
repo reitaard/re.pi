@@ -9,7 +9,6 @@ import { createDelegateTool } from "../src/core/delegation/delegate-tool.ts";
 import { REPI_CREATOR_IDENTITY } from "../src/core/delegation/orchestration-identity.ts";
 import { WorkerChatController } from "../src/core/delegation/worker-chat.ts";
 import { type WorkerConversationTurnResult, WorkerDirectory } from "../src/core/delegation/worker-directory.ts";
-import { REPI_NAMED_WORKERS } from "../src/core/delegation/worker-registry.ts";
 import {
 	applyWorkerSettingsConfig,
 	normalizeWorkerSettingsConfig,
@@ -21,6 +20,7 @@ import type { ExtensionCommandContext } from "../src/core/extensions/types.ts";
 import { DefaultResourceLoader } from "../src/core/resource-loader.ts";
 import { type SessionEntry, SessionManager } from "../src/core/session-manager.ts";
 import { createToolDefinitionFromAgentTool } from "../src/core/tools/tool-definition-wrapper.ts";
+import { REPI_NAMED_WORKERS } from "../src/core/workers/registry.ts";
 import {
 	createRecodeWorkerIndicator,
 	creatorForeground,

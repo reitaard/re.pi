@@ -41,7 +41,6 @@ export {
 	getActiveWorkerHeaderState,
 	setActiveWorkerHeaderState,
 } from "./worker-header-state.ts";
-export { REPI_NAMED_WORKERS } from "./worker-registry.ts";
 export {
 	ensureWorkerStorage,
 	inspectWorkerStorage,

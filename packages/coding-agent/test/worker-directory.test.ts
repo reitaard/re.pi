@@ -301,6 +301,12 @@ describe("WorkerDirectory", () => {
 			});
 
 			expect(directory.resolveWorkspace(sibling)).toBe(realpathSync(sibling));
+			if (process.platform === "win32") {
+				const msysSibling = sibling
+					.replaceAll("\\", "/")
+					.replace(/^([a-zA-Z]):/, (_match, drive: string) => `/${drive.toLowerCase()}`);
+				expect(directory.resolveWorkspace(msysSibling)).toBe(realpathSync(sibling));
+			}
 			expect(() => directory.resolveWorkspace(unrelated)).toThrow("another worktree of the same Git repository");
 		} finally {
 			rmSync(parent, { recursive: true, force: true });

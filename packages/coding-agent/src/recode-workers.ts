@@ -47,14 +47,6 @@ import type {
 import { admitRecodeCardinalMemory } from "./core/recode-memory/recode-cardinal.ts";
 import { RecodeMemoryManager } from "./core/recode-memory/recode-memory-manager.ts";
 import type { RecodeMemoryConfig, RecodeShioriRouting } from "./core/recode-memory/recode-memory-types.ts";
-import { RECODE_SHIORI_DISPLAY_NAME } from "./core/recode-memory/recode-shiori.ts";
-import {
-	RECODE_SHIORI_SETTINGS_REQUEST,
-	RECODE_SHIORI_SETTINGS_UPDATE,
-	type RecodeShioriSettingsRequest,
-	type RecodeShioriSettingsSnapshot,
-	type RecodeShioriSettingsUpdate,
-} from "./core/recode-memory/recode-shiori-control.ts";
 import {
 	extractRecodeTeachCandidate,
 	RecodeTeachController,
@@ -62,6 +54,14 @@ import {
 	recodeTeachPrompt,
 } from "./core/recode-teach/recode-teach-controller.ts";
 import type { SessionEntry } from "./core/session-manager.ts";
+import {
+	RECODE_SHIORI_SETTINGS_REQUEST,
+	RECODE_SHIORI_SETTINGS_UPDATE,
+	type RecodeShioriSettingsRequest,
+	type RecodeShioriSettingsSnapshot,
+	type RecodeShioriSettingsUpdate,
+} from "./core/workers/shiori/control.ts";
+import { RECODE_SHIORI_DISPLAY_NAME } from "./core/workers/shiori/reviewer.ts";
 import {
 	type RecodeTeachSettingId,
 	RecodeTeachSettingsComponent,

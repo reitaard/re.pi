@@ -1,10 +1,14 @@
 import type { Model } from "@reitaard/repi-ai";
-import type { ModelRegistry } from "../model-registry.ts";
-import type { SessionEntry, SessionManager } from "../session-manager.ts";
-import { admitRecodeCardinalMemory } from "./recode-cardinal.ts";
-import type { RecodeMemoryManager } from "./recode-memory-manager.ts";
-import type { RecodeMemoryConfig, RecodeMemoryScope, RecodeShioriRouting } from "./recode-memory-types.ts";
-import { runRecodeShioriHarness } from "./recode-shiori-harness.ts";
+import type { ModelRegistry } from "../../model-registry.ts";
+import { admitRecodeCardinalMemory } from "../../recode-memory/recode-cardinal.ts";
+import type { RecodeMemoryManager } from "../../recode-memory/recode-memory-manager.ts";
+import type {
+	RecodeMemoryConfig,
+	RecodeMemoryScope,
+	RecodeShioriRouting,
+} from "../../recode-memory/recode-memory-types.ts";
+import type { SessionEntry, SessionManager } from "../../session-manager.ts";
+import { runRecodeShioriHarness } from "./harness.ts";
 
 export const RECODE_SHIORI_CHECKPOINT = "recode-shiori-checkpoint";
 export const RECODE_SHIORI_DISPLAY_NAME = "Shiori (\u681e)";

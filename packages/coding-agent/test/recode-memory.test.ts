@@ -7,15 +7,15 @@ import type { ExtensionContext } from "../src/core/extensions/types.ts";
 import { chunkRecodeMemory } from "../src/core/recode-memory/recode-memory-chunker.ts";
 import { RecodeMemoryManager } from "../src/core/recode-memory/recode-memory-manager.ts";
 import { RecodeMemoryRuntime, resolveRecodeMemoryLocation } from "../src/core/recode-memory/recode-memory-runtime.ts";
+import { DefaultResourceLoader } from "../src/core/resource-loader.ts";
 import {
 	RECODE_SHIORI_SETTINGS_REQUEST,
 	RECODE_SHIORI_SETTINGS_UPDATE,
 	type RecodeShioriSettingsRequest,
 	type RecodeShioriSettingsSnapshot,
 	type RecodeShioriSettingsUpdate,
-} from "../src/core/recode-memory/recode-shiori-control.ts";
-import { archiveRecodeShioriDeskItem, placeOnRecodeShioriDesk } from "../src/core/recode-memory/recode-shiori-desk.ts";
-import { DefaultResourceLoader } from "../src/core/resource-loader.ts";
+} from "../src/core/workers/shiori/control.ts";
+import { archiveRecodeShioriDeskItem, placeOnRecodeShioriDesk } from "../src/core/workers/shiori/desk.ts";
 import {
 	formatRecodeMemoryFooter,
 	normalizeRecodeMemoryConfig,

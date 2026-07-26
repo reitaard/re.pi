@@ -1,4 +1,8 @@
-import type { RecodeMemoryConfig, RecodeShioriModelPreference, RecodeShioriRouting } from "./recode-memory-types.ts";
+import type {
+	RecodeMemoryConfig,
+	RecodeShioriModelPreference,
+	RecodeShioriRouting,
+} from "../../recode-memory/recode-memory-types.ts";
 
 export const RECODE_SHIORI_SETTINGS_REQUEST = "recode:shiori-settings:request";
 export const RECODE_SHIORI_SETTINGS_UPDATE = "recode:shiori-settings:update";

@@ -11,8 +11,8 @@ import {
 } from "@reitaard/repi-tui";
 import type { WorkerConversationSnapshot, WorkerDescriptor } from "../../../core/delegation/worker-directory.ts";
 import type { WorkerStorageState } from "../../../core/delegation/worker-storage.ts";
-import { RECODE_SHIORI_DISPLAY_NAME } from "../../../core/recode-memory/recode-shiori.ts";
-import type { RecodeShioriSettingsSnapshot } from "../../../core/recode-memory/recode-shiori-control.ts";
+import type { RecodeShioriSettingsSnapshot } from "../../../core/workers/shiori/control.ts";
+import { RECODE_SHIORI_DISPLAY_NAME } from "../../../core/workers/shiori/reviewer.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { workerForeground } from "./recode-worker-indicator.ts";

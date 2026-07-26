@@ -3,14 +3,14 @@ import type { Model } from "@reitaard/repi-ai";
 import { getAgentDir } from "../../config.ts";
 import type { ModelRegistry } from "../model-registry.ts";
 import type { SessionManager } from "../session-manager.ts";
-import { RecodeMemoryManager } from "./recode-memory-manager.ts";
-import type { RecodeMemoryConfig, RecodeMemoryScope } from "./recode-memory-types.ts";
 import {
 	executeRecodeShiori,
 	executeRecodeShioriFileReview,
 	type RecodeShioriMemoryCandidate,
 	type RecodeShioriProgressEvent,
-} from "./recode-shiori.ts";
+} from "../workers/shiori/reviewer.ts";
+import { RecodeMemoryManager } from "./recode-memory-manager.ts";
+import type { RecodeMemoryConfig, RecodeMemoryScope } from "./recode-memory-types.ts";
 
 interface ManagerEntry {
 	manager: RecodeMemoryManager;

@@ -14,7 +14,6 @@ import type { AssistantMessage, Model, Models } from "@reitaard/repi-ai";
 import { createHarnessModels } from "../harness-models.ts";
 import type { ModelRegistry } from "../model-registry.ts";
 import { createFindTool, createGrepTool, createLsTool, createReadTool } from "../tools/index.ts";
-import { createWorkerGitReadTool } from "./worker-git-tool.ts";
 import { createWorkspaceToolCallGuard } from "./workspace-guard.ts";
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 4_096;
@@ -55,6 +54,8 @@ export interface NamedWorkerDefinition {
 	skillName?: string;
 	/** Read-only tools available to this worker. Defaults to read, grep, find, and ls. */
 	tools?: readonly NamedWorkerToolName[];
+	/** Worker-owned tool implementations created inside the selected workspace. */
+	createTools?: (cwd: string) => readonly AgentTool[];
 	/** Worker reasoning level. Defaults to off for low latency. */
 	thinkingLevel?: ThinkingLevel;
 	/** Maximum generated tokens for one delegated result. */
@@ -181,11 +182,13 @@ export function getNamedWorkerReferences(
 }
 
 function createWorkerTools(
+	worker: NamedWorkerDefinition,
 	cwd: string,
 	names: readonly NamedWorkerToolName[],
 	externalTools: readonly AgentTool[] = [],
 ): AgentTool[] {
 	const externalToolsByName = new Map(externalTools.map((tool) => [tool.name, tool]));
+	const workerToolsByName = new Map((worker.createTools?.(cwd) ?? []).map((tool) => [tool.name, tool]));
 	return names.map((name) => {
 		switch (name) {
 			case "read":
@@ -196,8 +199,11 @@ function createWorkerTools(
 				return createFindTool(cwd);
 			case "ls":
 				return createLsTool(cwd);
-			case "git_read":
-				return createWorkerGitReadTool(cwd);
+			case "git_read": {
+				const tool = workerToolsByName.get(name);
+				if (!tool) throw new Error(`Required worker-owned tool is unavailable: ${name}`);
+				return tool;
+			}
 			case "web_search":
 			case "fetch_content":
 			case "get_search_content": {
@@ -358,7 +364,7 @@ export async function runNamedWorker(options: RunNamedWorkerOptions): Promise<Na
 	};
 	const models = options.models ?? createHarnessModels(requestModel, options.modelRegistry!, "named workers");
 	const toolNames = options.worker.tools ?? (["read", "grep", "find", "ls"] as const);
-	const tools = createWorkerTools(options.cwd, toolNames, options.externalTools);
+	const tools = createWorkerTools(options.worker, options.cwd, toolNames, options.externalTools);
 	const harness = new AgentHarness({
 		env: new NodeExecutionEnv({ cwd: options.cwd }),
 		session: new Session(new InMemorySessionStorage()),

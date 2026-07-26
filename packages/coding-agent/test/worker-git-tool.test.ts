@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createWorkerGitReadTool } from "../src/core/delegation/worker-git-tool.ts";
+import { createWorkerGitReadTool } from "../src/core/workers/levi/git-read-tool.ts";
 
 const tempDirectories: string[] = [];
 
