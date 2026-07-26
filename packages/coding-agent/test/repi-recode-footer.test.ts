@@ -1,11 +1,10 @@
 import { stripVTControlCharacters } from "node:util";
 import type { Api, Model, Usage } from "@earendil-works/pi-ai";
 import { beforeEach, describe, expect, it } from "vitest";
+import type { AgentSession } from "../src/core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../src/core/footer-data-provider.ts";
-import type { ModelRegistry } from "../src/core/model-registry.ts";
-import type { ReadonlySessionManager } from "../src/core/session-manager.ts";
+import { FooterComponent } from "../src/modes/interactive/components/footer.ts";
 import { initTheme, theme } from "../src/modes/interactive/theme/theme.ts";
-import { RecodeFooter, type RecodeFooterState } from "../src/repi/ui/recode-footer.ts";
 
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
 
@@ -44,36 +43,34 @@ function model(): Model<Api> {
 	};
 }
 
-function createState(): RecodeFooterState {
-	const sessionManager = {
-		getEntries: () => [
-			{
-				type: "message",
-				message: {
-					role: "assistant",
-					content: [],
-					api: "openai-responses",
-					provider: "openai-oauth",
-					model: "gpt-5.6-sol",
-					usage: usage(),
-					stopReason: "stop",
-					timestamp: Date.now(),
+function createSession(options: { withUsage?: boolean; percent?: number } = {}): AgentSession {
+	const entries = options.withUsage === false
+		? []
+		: [
+				{
+					type: "message",
+					message: {
+						role: "assistant",
+						content: [],
+						api: "openai-responses",
+						provider: "openai-oauth",
+						model: "gpt-5.6-sol",
+						usage: usage(),
+						stopReason: "stop",
+						timestamp: Date.now(),
+					},
 				},
-			},
-		],
-		getSessionName: () => undefined,
-	} as unknown as ReadonlySessionManager;
-	const modelRegistry = {
-		isUsingOAuth: () => true,
-	} as unknown as ModelRegistry;
+			];
 	return {
-		cwd: "C:\\Users\\re_Lax\\Desktop\\chat7\\re.pi",
-		sessionManager,
-		modelRegistry,
-		model: model(),
-		thinkingLevel: "medium",
-		getContextUsage: () => ({ tokens: 24800, contextWindow: 372000, percent: 6.666 }),
-	};
+		state: { model: model(), thinkingLevel: "medium" },
+		sessionManager: {
+			getEntries: () => entries,
+			getCwd: () => "C:\\Users\\re_Lax\\Desktop\\chat7\\re.pi",
+			getSessionName: () => undefined,
+		},
+		modelRuntime: { isUsingOAuth: () => true },
+		getContextUsage: () => ({ tokens: 24800, contextWindow: 372000, percent: options.percent ?? 6.666 }),
+	} as unknown as AgentSession;
 }
 
 function createFooterData(): ReadonlyFooterDataProvider {
@@ -92,9 +89,8 @@ function createFooterData(): ReadonlyFooterDataProvider {
 describe("Recode footer parity", () => {
 	beforeEach(() => initTheme("dark"));
 
-	it("renders path, usage, OAuth model state, and extension statuses", () => {
-		const state = createState();
-		const footer = new RecodeFooter(() => state, createFooterData(), theme);
+	it("renders the exact old Recode usage, context, model and status layout", () => {
+		const footer = new FooterComponent(createSession(), createFooterData());
 		const lines = footer.render(120).map(stripVTControlCharacters);
 
 		expect(lines).toHaveLength(3);
@@ -104,25 +100,32 @@ describe("Recode footer parity", () => {
 		expect(lines[1]).toContain("R800");
 		expect(lines[1]).toContain("W20");
 		expect(lines[1]).toContain("$0.125 (sub)");
-		expect(lines[1]).toContain("ctx 25k 6.7%");
-		expect(lines[1]).toContain("(openai-oauth) gpt-5.6-sol • thinking medium");
+		expect(lines[1]).toContain("6.7%/372k (auto)");
+		expect(lines[1]).toContain("(openai-oauth) gpt-5.6-sol • medium");
+		expect(lines[1]).not.toContain("ctx ");
+		expect(lines[1]).not.toContain("thinking medium");
 		expect(lines[2]).toBe("Browser · ready Kioku (記憶): project");
 	});
 
-	it("shows the compaction hint at the Recode threshold", () => {
-		const state = createState();
-		state.getContextUsage = () => ({ tokens: 150000, contextWindow: 372000, percent: 40.4 });
-		const footer = new RecodeFooter(() => state, createFooterData(), theme);
-		const text = footer.render(140).map(stripVTControlCharacters).join("\n");
-
-		expect(text).toContain("ctx 150k 40.4% (compact?)");
+	it("matches the empty-session footer from the restored 0.81.4 screen", () => {
+		const footer = new FooterComponent(createSession({ withUsage: false, percent: 0 }), createFooterData());
+		const line = stripVTControlCharacters(footer.render(120)[1]!);
+		expect(line).toContain("0.0%/372k (auto)");
+		expect(line).toContain("(openai-oauth) gpt-5.6-sol • medium");
 	});
 
-	it("uses the fixed Recode footer color in light and dark themes", () => {
-		const state = createState();
-		const dark = new RecodeFooter(() => state, createFooterData(), theme).render(120)[0]!;
+	it("removes only the auto marker when automatic compaction is disabled", () => {
+		const footer = new FooterComponent(createSession({ percent: 40.4 }), createFooterData());
+		footer.setAutoCompactEnabled(false);
+		const text = footer.render(140).map(stripVTControlCharacters).join("\n");
+		expect(text).toContain("40.4%/372k");
+		expect(text).not.toContain("(auto)");
+	});
+
+	it("uses the Recode footer color in light and dark themes", () => {
+		const dark = new FooterComponent(createSession(), createFooterData()).render(120)[0]!;
 		initTheme("light");
-		const light = new RecodeFooter(() => state, createFooterData(), theme).render(120)[0]!;
+		const light = new FooterComponent(createSession(), createFooterData()).render(120)[0]!;
 
 		expect(dark).toContain("\x1b[38;");
 		expect(light).toContain("\x1b[38;");
