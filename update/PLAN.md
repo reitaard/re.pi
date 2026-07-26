@@ -263,11 +263,11 @@ The repository already has one intended release path: `scripts/local-release.mjs
 
 - [ ] Primary Windows machine canary.
 - [ ] Work PC canary from the exact same artifact.
-- [ ] VPS inventory and backup under a separately authorized SSH task; it is currently behind AgentHarness.
-- [ ] VPS upgrade from the exact certified Linux/npm artifact, followed by version, startup, provider, session, and rollback checks.
+- [x] VPS inventory and backup under a separately authorized SSH task; previous `/usr/local/bin/recode -> /opt/repi/v0.81.4/recode` symlink target recorded under `/opt/recode/rollback`.
+- [x] VPS upgrade from the exact certified npm artifact into `/opt/recode/0.81.4-repi.2.dev.27.9e818840`, followed by version, help, model-listing, source metadata, update-guard, non-symlink wrapper, and rollback-path checks.
 - [ ] Termux rollout only from the certified Termux archive.
 - [ ] Never clone/build independently on deployment machines unless performing an explicitly approved source-development task.
 
 ## Immediate next step
 
-Restart to activate `0.81.4-repi.2.dev.24.eae21614`, then confirm default delegation, shared read-only worker Kioku, strict memory handling, and modal worker isolation. Continue auditing release scripts against R0/R1 without publishing or connecting to remote machines.
+Restart local Recode to activate `0.81.4-repi.2.dev.27.9e818840`, then confirm default delegation, shared read-only worker Kioku, strict memory handling, and modal worker isolation. Continue release hardening by separating Windows-incompatible historical tests from true blockers and restoring reviewed npm trusted publishing before any public release.

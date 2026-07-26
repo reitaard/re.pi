@@ -175,3 +175,14 @@
 - Focused validation passed: 101 tests across system prompt, Aizen runtime/profile, retry/queue, no-tools, memory, workers, and worker directory suites.
 - Full `npm run check` passed after the fixes.
 - Remaining unrestricted `test.sh` failures on this Windows host include symlink privilege, chmod/read-only semantics, path separators, timing, stale platform-specific expectations, and broader historical tests. They are not accepted as a green release gate, but they are now documented as separate release hardening work.
+- Committed and pushed release-candidate fixes at `9e818840`.
+- Packed, isolated-smoke-tested, and locally installed `0.81.4-repi.2.dev.27.9e818840` from source `9e818840f33478847e8cc5fb376b61f7fc5fd366`.
+- Artifact SHA-256: `44773d6c6c72f4a32ee6eeed82fa779c285d5d122ac136c94bc64285f6c801fb`.
+- VPS inventory found `vmi3286400` running Ubuntu Linux x64, Node `v20.20.2`, and `/usr/local/bin/recode -> /opt/repi/v0.81.4/recode` at version `0.81.4`.
+- Transferred the exact certified tarball to the VPS and verified the same SHA-256 remotely.
+- Installed private Node `v26.5.0` under `/opt/node-v26.5.0-linux-x64` after verifying Node's upstream SHA-256.
+- Installed Recode under `/opt/recode/0.81.4-repi.2.dev.27.9e818840` without modifying `/root/.pi/agent` user data.
+- Removed the old `/usr/local/bin/recode` symlink and replaced it with a regular wrapper file that executes the certified package through private Node 26.
+- Verified VPS `recode --version`, `recode --help`, `recode --list-models`, package source metadata, private Node version, non-symlink command wrapper, and foreign-package update refusal.
+- Preserved `/opt/repi/v0.81.4` and recorded the previous symlink target under `/opt/recode/rollback/recode-bin-before-0.81.4-repi.2.dev.27.9e818840.txt` for rollback.
+- `/root/repi` was not present on the VPS.

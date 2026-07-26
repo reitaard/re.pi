@@ -12,8 +12,8 @@ The authoritative repository is the customized Recode monorepo derived from Pi.
 - Root package: `repi-monorepo`
 - Coding-agent package: `@reitaard/repi-coding-agent`
 - Source package baseline: `0.81.4`
-- Installed staged version: `0.81.4-repi.2.dev.24.eae21614`
-- Installed runtime source commit: `eae21614`
+- Installed staged version: `0.81.4-repi.2.dev.27.9e818840`
+- Installed runtime source commit: `9e818840`
 - CLI binary name: `recode`
 - Required Node version: `>=22.19.0`
 
@@ -49,7 +49,7 @@ The global package path:
 
 `C:\nvm4w\nodejs\node_modules\@reitaard\repi-coding-agent`
 
-is a normal self-contained npm installation, not a symlink. Its staged package metadata records source commit `eae21614f1347e37df96b0446296feba03d8cb5e`. The installed Coding Agent, TUI, Agent, and AI runtime trees were verified byte-for-byte against the feature-complete custom build, excluding npm-omitted `.gitignore` files.
+is a normal self-contained npm installation, not a symlink. Its staged package metadata records source commit `9e818840f33478847e8cc5fb376b61f7fc5fd366`. The installed Coding Agent, TUI, Agent, and AI runtime trees were verified byte-for-byte against the feature-complete custom build, excluding npm-omitted `.gitignore` files.
 
 ## Worker architecture
 
@@ -99,7 +99,7 @@ The minimal next architecture should extend this package rather than adding anot
 - Existing foundations are `scripts/local-release.mjs`, `scripts/build-binaries.sh`, `scripts/build-termux-release.sh`, and `.github/workflows/build-binaries.yml`.
 - Current binary targets are Windows x64/arm64 and Linux x64/arm64; Termux uses a deterministic Node archive containing workspace tarballs and an installer.
 - The GitHub workflow creates checksummed binary/source assets and an approval-gated GitHub release. Contrary to the current `AGENTS.md` release description, this branch's workflow presently has no npm trusted-publishing job; that gap must be resolved before release.
-- The VPS is behind the current AgentHarness implementation. No SSH connection or remote mutation is authorized as part of local hardening; remote inventory and rollout will be a separate approved phase.
+- VPS `root@157.173.127.84` is upgraded to `0.81.4-repi.2.dev.27.9e818840` from the certified local tarball. `/usr/local/bin/recode` is a regular wrapper file, not a symlink, and uses private Node `/opt/node-v26.5.0-linux-x64`. The previous `/opt/repi/v0.81.4/recode` install remains present as rollback.
 
 ## Historical session context
 
