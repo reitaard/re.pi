@@ -81,16 +81,40 @@ jobs:
       - name: Validate restored footer
         run: npm --prefix packages/coding-agent test -- test/repi-recode-footer.test.ts
 
-      - name: Commit patched source locally
+      - name: Stage patched source
         shell: bash
         run: |
           mkdir -p repi
           printf 'Applied and build-validated remotely on Node 26.5.0.\n' > repi/.exact-ui-parity-applied
-          git diff --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add packages/coding-agent/src repi/.exact-ui-parity-applied
-          git commit -m "fix(repi): restore exact legacy startup and LSP parity"
+          git status --short
+
+      - name: Commit patched source locally
+        id: commit
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          git commit -m "fix(repi): restore exact legacy startup and LSP parity" > "$RUNNER_TEMP/parity-commit.log" 2>&1
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/parity-commit.log"
+          exit 0
+
+      - name: Upload commit diagnostic
+        if: steps.commit.outputs.exit_code != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: repi-parity-commit-errors
+          path: ${{ runner.temp }}/parity-commit.log
+          if-no-files-found: error
+          retention-days: 2
+
+      - name: Stop after local commit failure
+        if: steps.commit.outputs.exit_code != '0'
+        run: exit 1
 
       - name: Push validated staging branch
         id: push
