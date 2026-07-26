@@ -117,7 +117,7 @@ Tentative flow, subject to Phase 2 decisions:
 - [x] Remove Shiori review's idle wait while retaining one process-wide review lock.
 - [x] Apply one global eight-conversation default equally to Levi, Mayuri, and Shiori; retain one active Shiori review.
 - [x] Add behavior, concurrency, cancellation, handoff, and session-restoration tests.
-- [ ] Build, pack, smoke-test, and install only after review.
+- [x] Build, pack, smoke-test, and install only after review.
 
 ### Worker dogfood notes
 
@@ -130,4 +130,4 @@ Tentative flow, subject to Phase 2 decisions:
 
 ## Immediate next step
 
-Review and commit the Shiori/slash-handoff behavior boundary, then build, pack, smoke-test, install, and restart only after explicit approval.
+Restart Recode so the process loads `88ba9b4a`, then verify live post-compaction context updates, cache-stat colors, independent multi-worker execution, Shiori direct chat/review separation, and cleanup of npm's locked temporary old-package directory.

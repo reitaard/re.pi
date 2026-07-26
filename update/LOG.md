@@ -99,3 +99,18 @@
 - Added equal eight-conversation global/per-worker defaults, atomic over-capacity batch rejection, unique same-worker activity widgets, `/worker status`, and scoped `/worker cancel <id>`.
 - Focused validation currently passes: 61 tests across seven worker, memory, and Shiori files; full `npm run check` passed before the final cancellation/UI refinements and will be rerun at the phase boundary.
 - A Levi dogfood audit could not start because the currently installed `c1fd1121` runtime still has the old MSYS workspace bug (`lstat 'C:\\c'`). The source fix is in `c6b4dd13`; no automatic retry or fallback audit was performed.
+- Committed and pushed first-class Shiori and independent slash handoffs at `fbe4f5a2`.
+
+## 2026-07-26 — Live footer and worker installation
+
+- Confirmed from the active session JSONL that compaction succeeded while the footer reverted from `ctx ?` to stale pre-compaction `ctx 187k 50.2%`.
+- Identified the mismatch: cumulative footer statistics read live session entries, but context estimation read AgentHarness state synchronized only at the outer turn boundary.
+- Changed context estimation to use the live compaction-aware session branch after every persisted model/tool-loop step.
+- Colored `R`, `W`, and `CH` cache statistics with the token/context accent color.
+- Added regressions for immediate post-compaction unknown state, live post-compaction usage before outer-turn synchronization, and cache-stat colors.
+- Committed and pushed the footer fix at `88ba9b4a`.
+- Focused footer/compaction validation passed: 36 tests with 2 skipped; full `npm run check` and commit hooks passed.
+- Packed and isolated-smoke-tested `0.81.4-repi.2.dev.14.88ba9b4a`; version, help, model listing, metadata, worker files, and all four custom runtime trees passed.
+- Installed the package globally as a normal non-symlink npm package and verified `recode --version` plus Coding Agent, AI, Agent, and TUI tree parity.
+- Artifact SHA-256: `c72252625f1a67349e1d2f9432540216a41bc0a8bfa4feaaa8a0c8d12b9b74f4`.
+- npm could not remove one temporary old-package directory because the running Recode process holds the native clipboard module open. The active package installed successfully; the stale process must be restarted before testing and the temporary directory can be retired afterward.
