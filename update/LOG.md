@@ -59,3 +59,11 @@
 - Added fail-closed package identity checks so `recode update` cannot replace `@reitaard/repi-coding-agent` with upstream Pi.
 - Added read-only `recode upstream status|plan [target] [--json]` to the feature-complete line.
 - Recorded historical session `019f9cc2-c15d-7b26-8fdb-5865e17273ee` and deferred worker restructuring until after release stability.
+- Added a self-contained local packer that stages a Git-derived top-level version and bundles exact custom AI, Agent, TUI, and runtime dependencies.
+- Built committed model catalogs offline so packaging did not rewrite generated source.
+- Isolated artifact smoke tests passed for version, help, model listing, upstream planning, and selected custom runtime hashes.
+- Verified complete packaged Coding Agent, TUI, Agent, and AI runtime trees against built source; only npm-excluded `.gitignore` files differed.
+- Installed normal global package `@reitaard/repi-coding-agent@0.81.4-repi.2.dev.7.d9e9359f`; global path is no longer a package symlink.
+- Verified the final global runtime trees exactly match the custom build.
+- Verified live `recode update --self` refuses `@earendil-works/pi-coding-agent` and exits cleanly with status 1.
+- Final artifact SHA-256: `8408643910b3a1841d5a100239eb095047eb5c6487a0a0f864d731e12e67dbae`.

@@ -11,7 +11,8 @@ The authoritative repository is the customized Recode monorepo derived from Pi.
 - Legacy OAuth worktree: `C:\Users\re_Lax\Desktop\chat7\re.pi-0.81.4-oauth`
 - Root package: `repi-monorepo`
 - Coding-agent package: `@reitaard/repi-coding-agent`
-- Current package version: `0.81.4`
+- Source package baseline: `0.81.4`
+- Installed staged version: `0.81.4-repi.2.dev.7.d9e9359f`
 - CLI binary name: `recode`
 - Required Node version: `>=22.19.0`
 
@@ -47,7 +48,7 @@ The global package path:
 
 `C:\nvm4w\nodejs\node_modules\@reitaard\repi-coding-agent`
 
-is a symlink to this checkout's `packages/coding-agent` directory. Therefore, the current command runs this source checkout's built `dist` files.
+is a normal self-contained npm installation, not a symlink. Its staged package metadata records source commit `d9e9359f76e5c96790ef030eb60ba96f838aca41`. The installed Coding Agent, TUI, Agent, and AI runtime trees were verified byte-for-byte against the feature-complete custom build.
 
 ## Historical session context
 
@@ -60,7 +61,7 @@ The custom-first line starts from the exact currently installed source `c5ab200b
 
 The earlier published `@reitaard/repi-coding-agent@0.82.1-repi.1` is quarantined because it does not preserve full custom UI/runtime parity.
 
-## Existing self-update behavior
+## Self-update behavior
 
 Relevant implementation:
 
@@ -71,15 +72,15 @@ Relevant implementation:
 
 Current behavior:
 
-1. Query `https://pi.dev/api/latest-version`.
-2. Use the returned package name and version.
-3. Detect the global package manager.
-4. Uninstall the current package when the returned package name differs.
-5. Install the returned published package globally.
+1. Query the configured update endpoint.
+2. Require the returned package identity to equal `@reitaard/repi-coding-agent`.
+3. Refuse before package-manager mutation when the service returns upstream Pi or any foreign package.
+4. Allow extension-only updates independently.
+5. Provide read-only `recode upstream status|plan` source comparison commands.
 
 At investigation time, the endpoint returned upstream package `@earendil-works/pi-coding-agent` version `0.82.1`. That package exposes the `pi` binary rather than `recode`.
 
-Consequently, running the current `recode update` is not a source-checkout update. It risks replacing the linked fork package and removing the `recode` command while leaving this repository unchanged.
+The fail-closed identity guard was validated against the live endpoint: `recode update --self` reports the foreign package and exits cleanly with status 1 without changing the global installation.
 
 ## MCP and research access
 

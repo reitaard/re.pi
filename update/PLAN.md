@@ -89,10 +89,11 @@ Tentative flow, subject to Phase 2 decisions:
 - [x] Preserve the restored global checkout while integration proceeds elsewhere.
 - [x] Add fail-closed Recode package identity checks.
 - [x] Add read-only three-way upstream status/plan commands.
-- [ ] Add Git-derived staged package versioning without editing runtime custom files.
-- [ ] Build and test all customized workspace packages together.
-- [ ] Pack and smoke-test an isolated normal npm installation.
-- [ ] Visually verify exact UI/theme/runtime parity before replacing the symlink.
+- [x] Add Git-derived staged package versioning without editing runtime custom files.
+- [x] Build and test all customized workspace packages together.
+- [x] Pack and smoke-test an isolated normal npm installation.
+- [x] Verify all installed Coding Agent, TUI, Agent, and AI runtime trees byte-for-byte against the custom build.
+- [ ] Obtain a final user visual confirmation after restart; automated pseudo-TTY startup is unavailable in the non-TTY tool host.
 
 ## Deferred worker project
 
