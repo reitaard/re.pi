@@ -268,4 +268,4 @@ The repository already has one intended release path: `scripts/local-release.mjs
 
 ## Immediate next step
 
-Commit the repository operations guide and project memory, then audit the release scripts against R0/R1 without publishing or connecting to remote machines. Separately visually confirm that `/levi`, `/mayuri`, and `/shiori` preserve the `chat1` root session while `/shiori review` remains isolated.
+Restart to activate `0.81.4-repi.2.dev.24.eae21614`, then confirm default delegation, shared read-only worker Kioku, strict memory handling, and modal worker isolation. Continue auditing release scripts against R0/R1 without publishing or connecting to remote machines.

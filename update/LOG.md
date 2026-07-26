@@ -158,4 +158,8 @@
 - Strengthened automatic and explicit memory prompts so recalled content is treated as potentially stale evidence below current Creator instructions and verified state.
 - Added shared read-only `kioku_search` to every worker through the directory's host-provided external-tool boundary; no write tool or Cardinal bypass was added.
 - Changed delegation from environment opt-in to default-on with explicit `REPI_DELEGATION=0|false|no|off` opt-out, and added release certification coverage for that default.
-- Focused memory and worker validation passed: 42 tests across three files.
+- Focused memory and worker validation passed: 42 tests across three files; 14 additional AgentSession/runtime tests passed with 3 environment-gated skips.
+- Committed shared worker memory/default delegation at `535afb7c` and durable operations/release documentation at `eae21614`.
+- Packed and isolated-smoke-tested `0.81.4-repi.2.dev.24.eae21614`; version, help, model listing, source metadata, and compiled parity for delegation, worker directory, memory, modal chat, and updater guards passed.
+- Installed the exact artifact globally and verified the same runtime parity.
+- Artifact SHA-256: `913ddc4fc79955ef7a1b75c289724d196554966945217f3483ebd53ec8d8b077`.
