@@ -185,4 +185,4 @@
 - Removed the old `/usr/local/bin/recode` symlink and replaced it with a regular wrapper file that executes the certified package through private Node 26.
 - Verified VPS `recode --version`, `recode --help`, `recode --list-models`, package source metadata, private Node version, non-symlink command wrapper, and foreign-package update refusal.
 - Preserved `/opt/repi/v0.81.4` and recorded the previous symlink target under `/opt/recode/rollback/recode-bin-before-0.81.4-repi.2.dev.27.9e818840.txt` for rollback.
-- `/root/repi` was not present on the VPS.
+- `/root/repi` was not present on the VPS; the source checkout is `/root/re.pi`, on branch `agent-harness`, with existing modified worker/delegation files and untracked `ops/`, `recodeupvps.sh`, and a backup file. It was treated as reference-only and was not used for the installed artifact.
