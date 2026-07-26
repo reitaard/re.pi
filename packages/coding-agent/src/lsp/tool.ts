@@ -2,7 +2,7 @@
 
 import { access, readFile, stat } from "node:fs/promises";
 import * as path from "node:path";
-import { Text } from "@reitaard/repi-tui";
+import { Text } from "@earendil-works/pi-tui";
 import { type Static, Type } from "typebox";
 import type { ToolDefinition } from "../core/extensions/types.ts";
 import { generateUnifiedPatch } from "../core/tools/edit-diff.ts";

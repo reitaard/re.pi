@@ -220,11 +220,11 @@ export class FooterComponent implements Component {
 		}
 
 		// Apply the original Recode footer color consistently to both sides.
-		const footerStatsLeft = theme.fg("footer", statsLeft);
+		const footerStatsLeft = theme.fg("dim", statsLeft);
 		const remainder = statsLine.slice(statsLeft.length); // padding + rightSide
-		const footerRemainder = theme.fg("footer", remainder);
+		const footerRemainder = theme.fg("dim", remainder);
 
-		const pwdLine = truncateToWidth(theme.fg("footer", pwd), width, theme.fg("footer", "..."));
+		const pwdLine = truncateToWidth(theme.fg("dim", pwd), width, theme.fg("dim", "..."));
 		const lines = [pwdLine, footerStatsLeft + footerRemainder];
 
 		// Add extension statuses on a single line, sorted by key alphabetically
@@ -235,7 +235,7 @@ export class FooterComponent implements Component {
 				.map(([, text]) => sanitizeStatusText(text));
 			const statusLine = sortedStatuses.join(" ");
 			// Truncate to terminal width with the original Recode footer ellipsis.
-			lines.push(truncateToWidth(statusLine, width, theme.fg("footer", "...")));
+			lines.push(truncateToWidth(statusLine, width, theme.fg("dim", "...")));
 		}
 
 		return lines;

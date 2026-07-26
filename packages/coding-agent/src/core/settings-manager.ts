@@ -59,6 +59,13 @@ export interface WarningSettings {
 	anthropicExtraUsage?: boolean; // default: true
 }
 
+export interface LspSettings {
+	enabled?: boolean; // default: true
+	lspmux?: boolean; // default: true
+	projectOnly?: boolean; // default: false (unrestricted)
+	servers?: Record<string, boolean>; // per-server override; false disables
+}
+
 export type DefaultProjectTrust = "ask" | "always" | "never";
 
 export type TransportSetting = Transport;
@@ -122,6 +129,7 @@ export interface Settings {
 	showHardwareCursor?: boolean; // Show terminal cursor while still positioning it for IME
 	markdown?: MarkdownSettings;
 	warnings?: WarningSettings;
+	lsp?: LspSettings;
 	sessionDir?: string; // Custom session storage directory (same format as --session-dir CLI flag)
 	httpProxy?: string; // Proxy URL applied as HTTP_PROXY and HTTPS_PROXY for Pi-managed HTTP clients
 	httpIdleTimeoutMs?: number; // HTTP header/body idle timeout in milliseconds; 0 disables it
@@ -807,6 +815,44 @@ export class SettingsManager {
 		}
 		this.globalSettings.retry.enabled = enabled;
 		this.markModified("retry", "enabled");
+		this.save();
+	}
+
+	getLspSettings(): Required<Pick<LspSettings, "enabled" | "lspmux" | "projectOnly">> & Pick<LspSettings, "servers"> {
+		return {
+			enabled: this.settings.lsp?.enabled ?? true,
+			lspmux: this.settings.lsp?.lspmux ?? true,
+			projectOnly: this.settings.lsp?.projectOnly ?? false,
+			servers: { ...(this.settings.lsp?.servers ?? {}) },
+		};
+	}
+
+	setLspEnabled(enabled: boolean): void {
+		this.globalSettings.lsp ??= {};
+		this.globalSettings.lsp.enabled = enabled;
+		this.markModified("lsp", "enabled");
+		this.save();
+	}
+
+	setLspmuxEnabled(enabled: boolean): void {
+		this.globalSettings.lsp ??= {};
+		this.globalSettings.lsp.lspmux = enabled;
+		this.markModified("lsp", "lspmux");
+		this.save();
+	}
+
+	setLspProjectOnly(enabled: boolean): void {
+		this.globalSettings.lsp ??= {};
+		this.globalSettings.lsp.projectOnly = enabled;
+		this.markModified("lsp", "projectOnly");
+		this.save();
+	}
+
+	setLspServerEnabled(server: string, enabled: boolean): void {
+		this.globalSettings.lsp ??= {};
+		this.globalSettings.lsp.servers ??= {};
+		this.globalSettings.lsp.servers[server] = enabled;
+		this.markModified("lsp", "servers");
 		this.save();
 	}
 

@@ -4,12 +4,7 @@ import { appendFile, mkdir, readdir, readFile, realpath, stat, writeFile } from 
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { chunkKiokuMemory, kiokuDocumentId } from "./chunker.ts";
 import { KiokuMemoryStore } from "./store.ts";
-import type {
-	KiokuMemoryConfig,
-	KiokuMemoryScope,
-	KiokuMemorySearchResult,
-	KiokuMemoryStatus,
-} from "./types.ts";
+import type { KiokuMemoryConfig, KiokuMemoryScope, KiokuMemorySearchResult, KiokuMemoryStatus } from "./types.ts";
 
 interface MemoryFile {
 	scope: KiokuMemoryScope;
@@ -195,12 +190,7 @@ export class KiokuMemoryManager {
 		return this.store.search(query, scope, Math.floor(Math.max(1, Math.min(limit, 20))), this.projectRoot);
 	}
 
-	async write(
-		scope: KiokuMemoryScope,
-		text: string,
-		daily = false,
-		tags: string[] = [],
-	): Promise<string> {
+	async write(scope: KiokuMemoryScope, text: string, daily = false, tags: string[] = []): Promise<string> {
 		if (scope === "project" && !this.includeProject) {
 			throw new Error("Project memory is unavailable until this project is trusted");
 		}
@@ -248,7 +238,12 @@ export class KiokuMemoryManager {
 		const root = scope === "project" ? this.projectRoot : this.globalRoot;
 		const path = resolve(root, requestedPath);
 		const lexicalRelative = relative(root, path);
-		if (!lexicalRelative || lexicalRelative.startsWith("..") || isAbsolute(lexicalRelative) || basename(path) === "") {
+		if (
+			!lexicalRelative ||
+			lexicalRelative.startsWith("..") ||
+			isAbsolute(lexicalRelative) ||
+			basename(path) === ""
+		) {
 			throw new Error("Memory path must stay inside its memory root");
 		}
 

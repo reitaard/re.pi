@@ -1,4 +1,4 @@
-import type { Component } from "@reitaard/repi-tui";
+import type { Component } from "@earendil-works/pi-tui";
 import type { ToolRenderContext, ToolRenderResultOptions } from "../core/extensions/types.ts";
 import { getTextOutput, shortenPath } from "../core/tools/render-utils.ts";
 import { CachedOutputBlock } from "../modes/interactive/components/cached-output-block.ts";
@@ -52,7 +52,7 @@ function formatLspResultLines(
 	isError: boolean,
 ): string {
 	const output = getTextOutput(result, false).trim();
-	if (isError) return `${theme.fg("toolErrorStatus", "×")} ${theme.fg("error", output || "LSP request failed")}`;
+	if (isError) return `${theme.fg("error", "×")} ${theme.fg("error", output || "LSP request failed")}`;
 
 	const locations = result.details?.locations;
 	if (!locations) return output ? theme.fg("toolOutput", output) : "";
@@ -65,13 +65,13 @@ function formatLspResultLines(
 		byFile.set(location.file, group);
 	}
 	if (locations.length === 0) {
-		return `${theme.fg("toolSuccessStatus", "✓")} ${theme.fg("toolOutput", `0 ${action} found`)}`;
+		return `${theme.fg("success", "✓")} ${theme.fg("toolOutput", `0 ${action} found`)}`;
 	}
 
 	const groups = [...byFile.entries()];
 	const visibleGroups = options.expanded ? groups : groups.slice(0, 3);
 	const resultLabel = action === "references" ? action : `${action}${locations.length === 1 ? "" : "s"}`;
-	let text = `${theme.fg("toolSuccessStatus", "✓")} ${theme.fg("toolOutput", `${locations.length} ${resultLabel} in ${groups.length} file${groups.length === 1 ? "" : "s"}`)}`;
+	let text = `${theme.fg("success", "✓")} ${theme.fg("toolOutput", `${locations.length} ${resultLabel} in ${groups.length} file${groups.length === 1 ? "" : "s"}`)}`;
 	for (let groupIndex = 0; groupIndex < visibleGroups.length; groupIndex++) {
 		const [file, fileLocations] = visibleGroups[groupIndex];
 		const isLastVisibleFile = groupIndex === visibleGroups.length - 1 && groups.length === visibleGroups.length;
@@ -119,7 +119,7 @@ export function renderLspResult(
 	if (request.character !== undefined) requestLines.push(theme.fg("dim", `character ${request.character} (0-based)`));
 	if (request.symbol) requestLines.push(theme.fg("dim", `symbol: ${request.symbol}`));
 	if (request.query) requestLines.push(theme.fg("dim", `query: ${request.query}`));
-	const stateIcon = context.isError ? theme.fg("toolErrorStatus", "×") : theme.fg("toolSuccessStatus", "✓");
+	const stateIcon = context.isError ? theme.fg("error", "×") : theme.fg("success", "✓");
 	const body = formatLspResultLines(result, options, theme, context.isError).split("\n");
 	return {
 		render(width: number): string[] {
@@ -131,7 +131,7 @@ export function renderLspResult(
 						{ label: theme.fg("toolTitle", "Response"), lines: body },
 					],
 					width,
-					borderColor: context.isError ? "toolErrorStatus" : "borderMuted",
+					borderColor: context.isError ? "error" : "borderMuted",
 				},
 				theme,
 			);

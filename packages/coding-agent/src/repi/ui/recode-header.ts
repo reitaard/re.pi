@@ -119,12 +119,7 @@ export class RecodeHeader implements Component {
 	private readonly getDetails: () => RecodeHeaderDetails;
 	private readonly theme: Theme;
 
-	constructor(
-		version: string,
-		isVisible: () => boolean,
-		getDetails: () => RecodeHeaderDetails,
-		theme: Theme,
-	) {
+	constructor(version: string, isVisible: () => boolean, getDetails: () => RecodeHeaderDetails, theme: Theme) {
 		this.version = version;
 		this.isVisible = isVisible;
 		this.getDetails = getDetails;
@@ -148,7 +143,9 @@ export class RecodeHeader implements Component {
 	private renderTopBorder(width: number): string {
 		const title = ` re.pi v${this.version} `;
 		const styledTitle = ` ${this.theme.bold(textColor(0, "re.pi"))} ${textColor(2, `v${this.version}`)} `;
-		return lineColor(0, "╭") + styledTitle + gradientRule(`${"─".repeat(Math.max(0, width - visibleWidth(title) - 2))}╮`);
+		return (
+			lineColor(0, "╭") + styledTitle + gradientRule(`${"─".repeat(Math.max(0, width - visibleWidth(title) - 2))}╮`)
+		);
 	}
 
 	private renderBottomBorder(width: number): string {

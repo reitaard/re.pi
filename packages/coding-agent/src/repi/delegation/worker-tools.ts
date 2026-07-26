@@ -12,7 +12,10 @@ function workerReferenceSchema(directory: WorkerDirectory) {
 	const workers = directory.getWorkerDefinitions();
 	const references = workers.flatMap(getNamedWorkerReferences);
 	const mapping = workers.map((worker) => `${worker.id}=${formatNamedWorkerIdentity(worker)}`).join(", ");
-	return Type.String({ description: `Worker id or display name. Prefer canonical ids. Available: ${mapping}.`, enum: references });
+	return Type.String({
+		description: `Worker id or display name. Prefer canonical ids. Available: ${mapping}.`,
+		enum: references,
+	});
 }
 
 function failurePolicy(turn: WorkerConversationTurnResult): string {
@@ -54,7 +57,9 @@ export function createWorkerControlTools(directory: WorkerDirectory): AgentTool<
 	const statusSchema = Type.Object({
 		conversationId: Type.Optional(Type.String({ description: "Specific full conversation id; omit to list all" })),
 	});
-	const conversationSchema = Type.Object({ conversationId: Type.String({ description: "Full worker conversation id" }) });
+	const conversationSchema = Type.Object({
+		conversationId: Type.String({ description: "Full worker conversation id" }),
+	});
 
 	const listTool: AgentTool<typeof listSchema, { workers: WorkerDescriptor[] }> = {
 		name: "worker_list",

@@ -1,5 +1,6 @@
 import type { InlineExtension } from "../core/extensions/types.ts";
 import { repiWorkers } from "./delegation/extension.ts";
+import { repiLsp } from "./lsp/extension.ts";
 import { kiokuMemory } from "./memory/extension.ts";
 import { KiokuMemoryRuntime } from "./memory/runtime.ts";
 import { repiOpenProvider } from "./providers/open-provider.ts";
@@ -14,6 +15,7 @@ export const repiExtensionFactories: InlineExtension[] = [
 	{ name: "repi-product-ui", factory: repiProductUi, hidden: true },
 	{ name: "repi-update-notifier", factory: repiUpdateNotifier, hidden: true },
 	{ name: "repi-workers", factory: repiWorkers, hidden: true },
+	{ name: "repi-lsp", factory: repiLsp, hidden: true },
 	{ name: "repi-open-provider", factory: repiOpenProvider },
 	{ name: "repi-openai-oauth", factory: repiOpenAIOAuth },
 	{ name: "repi-kioku-memory", factory: (pi) => kiokuMemory(pi, kiokuRuntime) },

@@ -92,6 +92,7 @@ import { isInstallTelemetryEnabled } from "../../core/telemetry.ts";
 import type { TruncationResult } from "../../core/tools/truncate.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../../core/trust-manager.ts";
 import { getUsageCostBreakdown } from "../../core/usage-totals.ts";
+import { getLspLifecycleStatuses, loadLspConfig } from "../../lsp/index.ts";
 import { getChangelogPath, getNewEntries, normalizeChangelogLinks, parseChangelog } from "../../utils/changelog.ts";
 import { copyToClipboard, readClipboardText } from "../../utils/clipboard.ts";
 import { extensionForImageMimeType, readClipboardImage } from "../../utils/clipboard-image.ts";
@@ -143,6 +144,7 @@ import { TrustSelectorComponent } from "./components/trust-selector.ts";
 import { UserMessageComponent } from "./components/user-message.ts";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.ts";
 import { editInExternalEditor } from "./external-editor.ts";
+import { getConfiguredMcpServerNames } from "./mcp-startup-summary.ts";
 import { getModelSearchText } from "./model-search.ts";
 import {
 	getAvailableThemes,
@@ -356,6 +358,7 @@ export class InteractiveMode {
 	private changelogMarkdown: string | undefined = undefined;
 	private startupNoticesShown = false;
 	private anthropicSubscriptionWarningShown = false;
+	private mcpStartupStatus: string | undefined = undefined;
 
 	// Status line tracking (for mutating immediately-sequential status updates)
 	private lastStatusSpacer: Spacer | undefined = undefined;
@@ -1440,6 +1443,8 @@ export class InteractiveMode {
 			}
 			return theme.fg("dim", `  ${labels.join(", ")}`);
 		};
+		const formatDottedList = (items: string[], dotColor: ThemeColor = "success"): string =>
+			items.map((item) => `${theme.fg(dotColor, "  ●")} ${theme.fg("dim", item)}`).join("\n");
 		const addLoadedSection = (
 			name: string,
 			collapsedBody: string,
@@ -1462,13 +1467,10 @@ export class InteractiveMode {
 		const themesResult = this.session.resourceLoader.getThemes();
 		const extensions =
 			options?.extensions ??
-			this.session.resourceLoader
-				.getExtensions()
-				.extensions.filter((extension) => !extension.hidden)
-				.map((extension) => ({
-					path: extension.path,
-					sourceInfo: extension.sourceInfo,
-				}));
+			this.session.resourceLoader.getExtensions().extensions.map((extension) => ({
+				path: extension.path,
+				sourceInfo: extension.sourceInfo,
+			}));
 		const sourceInfos = new Map<string, SourceInfo>();
 		for (const extension of extensions) {
 			if (extension.sourceInfo) {
@@ -1545,8 +1547,65 @@ export class InteractiveMode {
 					formatPackagePath: (item) =>
 						this.formatExtensionDisplayPath(this.getShortPath(item.path, item.sourceInfo)),
 				});
-				const extensionCompactList = formatCompactList(this.getCompactExtensionLabels(extensions));
+				const extensionCompactList = formatDottedList(this.getCompactExtensionLabels(extensions));
 				addLoadedSection("Extensions", extensionCompactList, extList, "mdHeading");
+
+				const hasMcpAdapter = extensions.some(
+					(extension) =>
+						extension.sourceInfo?.source.replace(/^npm:/, "").split("@")[0] === "pi-mcp-adapter" ||
+						extension.path.replace(/\\/g, "/").includes("/pi-mcp-adapter/"),
+				);
+				if (hasMcpAdapter) {
+					const serverNames = getConfiguredMcpServerNames(this.sessionManager.getCwd(), getAgentDir());
+					const status = this.mcpStartupStatus?.replace(/\u001b\[[0-9;]*m/g, "");
+					const counts = status?.match(/MCP:\s*(\d+)\/(\d+)\s+servers/i);
+					const mcpDotColor: ThemeColor = status?.toLowerCase().includes("failed")
+						? "error"
+						: counts && counts[1] === counts[2]
+							? "success"
+							: "muted";
+					const serverList =
+						serverNames.length === 0 ? theme.fg("muted", "  None") : formatDottedList(serverNames, mcpDotColor);
+					const statusLine = status ? `\n${theme.fg("muted", `  ${status}`)}` : "";
+					addLoadedSection("MCPs", `${serverList}${statusLine}`, `${serverList}${statusLine}`, "mdHeading");
+				}
+			}
+
+			const lspCwd = this.sessionManager.getCwd();
+			const lspControls = this.settingsManager.getLspSettings();
+			const lspConfig = loadLspConfig(lspCwd, getAgentDir(), lspControls);
+			const lspEntries = Object.entries(lspConfig.servers);
+			const disabledLspServers = Object.entries(lspControls.servers ?? {})
+				.filter(([, enabled]) => !enabled)
+				.map(([name]) => name);
+			if (!lspControls.enabled) {
+				addLoadedSection("LSPs", theme.fg("muted", "  Disabled"));
+			} else if (lspEntries.length === 0 && disabledLspServers.length === 0) {
+				addLoadedSection("LSPs", theme.fg("muted", "  None"));
+			} else {
+				const lifecycleStatuses = new Map(
+					getLspLifecycleStatuses(lspCwd, lspConfig).map((status) => [status.name, status]),
+				);
+				const lspList = [
+					...lspEntries.map(([name]) => {
+						const state = lifecycleStatuses.get(name)?.state ?? "unstarted";
+						const dotColor: ThemeColor =
+							state === "error"
+								? "error"
+								: state === "backoff"
+									? "error"
+									: state === "ready"
+										? "success"
+										: "muted";
+						return `${theme.fg(dotColor, "  ●")} ${theme.fg("dim", name)} ${theme.fg("muted", state)}`;
+					}),
+					...disabledLspServers
+						.filter((name) => !lspConfig.servers[name])
+						.map(
+							(name) => `${theme.fg("error", "  ●")} ${theme.fg("dim", name)} ${theme.fg("muted", "disabled")}`,
+						),
+				].join("\n");
+				addLoadedSection("LSPs", lspList);
 			}
 
 			// Show loaded themes (excluding built-in)
@@ -1835,6 +1894,10 @@ export class InteractiveMode {
 	 */
 	private setExtensionStatus(key: string, text: string | undefined): void {
 		this.footerDataProvider.setExtensionStatus(key, text);
+		if (key === "mcp") {
+			this.mcpStartupStatus = text;
+			this.showLoadedResources();
+		}
 		this.ui.requestRender();
 	}
 

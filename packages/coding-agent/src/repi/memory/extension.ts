@@ -5,11 +5,7 @@ import { getAgentDir } from "../../config.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../core/extensions/types.ts";
 import type { KiokuMemoryManager } from "./manager.ts";
 import { KiokuMemoryRuntime } from "./runtime.ts";
-import type {
-	KiokuMemoryConfig,
-	KiokuMemoryScopeSelection,
-	KiokuMemorySearchResult,
-} from "./types.ts";
+import type { KiokuMemoryConfig, KiokuMemoryScopeSelection, KiokuMemorySearchResult } from "./types.ts";
 
 const KIOKU_DISPLAY_NAME = "Kioku (記憶)";
 
@@ -52,8 +48,7 @@ export function normalizeKiokuMemoryConfig(parsed: unknown): KiokuMemoryConfig {
 	return {
 		enabled: typeof parsed.enabled === "boolean" ? parsed.enabled : DEFAULT_KIOKU_MEMORY_CONFIG.enabled,
 		scope,
-		autoRecall:
-			typeof parsed.autoRecall === "boolean" ? parsed.autoRecall : DEFAULT_KIOKU_MEMORY_CONFIG.autoRecall,
+		autoRecall: typeof parsed.autoRecall === "boolean" ? parsed.autoRecall : DEFAULT_KIOKU_MEMORY_CONFIG.autoRecall,
 		globalAccess,
 		globalAutoRecall: globalAccess && requestedGlobalAutoRecall,
 		maxResults: boundedInteger(parsed.maxResults, DEFAULT_KIOKU_MEMORY_CONFIG.maxResults, 1, 20),

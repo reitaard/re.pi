@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { basename } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "../../core/extensions/types.ts";
-import { SettledStatus, type SettledOutcome } from "../../modes/interactive/components/status-indicator.ts";
+import { type SettledOutcome, SettledStatus } from "../../modes/interactive/components/status-indicator.ts";
 import { getActiveWorkerHeaderState } from "../delegation/worker-header-state.ts";
 import { RecodeHeader, type RecodeHeaderDetails } from "./recode-header.ts";
 
@@ -13,7 +13,9 @@ function displayCwd(cwd: string): string {
 	return normalized;
 }
 
-function selectedModel(ctx: { model: { id: string; provider: string } | undefined }): Pick<RecodeHeaderDetails, "model" | "provider"> {
+function selectedModel(ctx: {
+	model: { id: string; provider: string } | undefined;
+}): Pick<RecodeHeaderDetails, "model" | "provider"> {
 	return {
 		model: ctx.model?.id ?? "No model selected",
 		provider: ctx.model?.provider ?? "unknown",
@@ -94,11 +96,9 @@ export function repiProductUi(pi: ExtensionAPI): void {
 	pi.on("agent_settled", (_event, ctx) => {
 		if (ctx.mode !== "tui" || runStartedAt === 0) return;
 		const elapsed = formatElapsedRuntime(runStartedAt);
-		ctx.ui.setWidget(
-			"repi-settled-status",
-			() => new SettledStatus(settledOutcome, elapsed),
-			{ placement: "aboveEditor" },
-		);
+		ctx.ui.setWidget("repi-settled-status", () => new SettledStatus(settledOutcome, elapsed), {
+			placement: "aboveEditor",
+		});
 	});
 
 	pi.on("model_select", (event, ctx) => {

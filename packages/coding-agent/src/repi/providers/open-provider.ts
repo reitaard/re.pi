@@ -155,7 +155,9 @@ export async function registerRepiOpenProvider(
 
 	const nativeModels = await discoverNativeModels(baseUrl, headers, timeoutMs);
 	const nativeById = new Map(nativeModels.map((model) => [model.id, model]));
-	const discovered = parseModels(await response.json()).filter((model) => isChatModel(model, nativeById.get(model.id)));
+	const discovered = parseModels(await response.json()).filter((model) =>
+		isChatModel(model, nativeById.get(model.id)),
+	);
 	if (discovered.length === 0) throw new Error("Open Provider returned no chat models");
 
 	const models: ProviderModelConfig[] = discovered.map((model) => {
