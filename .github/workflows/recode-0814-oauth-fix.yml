@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - fix/recode-0.81.4-oauth-only
+  pull_request:
+    branches:
+      - rollback/recode-0.81.4-pre-oauth
   workflow_dispatch:
 
 permissions:
@@ -71,5 +74,3 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "fix(oauth): port working proxy behavior to Recode 0.81.4"
           git push --force origin HEAD:refs/heads/fix/recode-0.81.4-oauth-only
-
-# trigger
