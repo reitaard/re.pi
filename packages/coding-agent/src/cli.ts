@@ -8,6 +8,7 @@
 import { APP_NAME } from "./config.ts";
 import { installPiPackageCompatibilityHooks } from "./core/extensions/pi-package-compat.ts";
 import { configureHttpDispatcher } from "./core/http-dispatcher.ts";
+import { handlePackageCommand } from "./package-manager-cli.ts";
 import { handleRepiUpstreamCommand } from "./recode/update/upstream-plan.ts";
 
 process.title = APP_NAME;
@@ -23,8 +24,14 @@ configureHttpDispatcher();
 const args = process.argv.slice(2);
 
 const upstreamResult = handleRepiUpstreamCommand(args);
+const selfUpdateOnly =
+	args[0] === "update" &&
+	!args.slice(1).some((arg) => arg === "--extensions" || arg === "--all" || arg === "--extension") &&
+	!args.slice(1).some((arg) => !arg.startsWith("-") && arg !== "self" && arg !== "pi");
 if (upstreamResult.handled) {
 	process.exitCode = upstreamResult.exitCode;
+} else if (selfUpdateOnly) {
+	await handlePackageCommand(args);
 } else if (args[0] === "telegram") {
 	const { runRecodeTelegramGateway } = await import("./recode-telegram-gateway.ts");
 
