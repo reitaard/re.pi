@@ -38,14 +38,12 @@ function writeJson(path, value) {
 }
 
 function packWorkspace(packagePath, destination) {
-	const output = runNpm(
-		["pack", resolve(root, packagePath), "--ignore-scripts", "--json", "--pack-destination", destination],
+	const filename = runNpm(
+		["pack", resolve(root, packagePath), "--ignore-scripts", "--silent", "--pack-destination", destination],
 		root,
 		true,
 	);
-	const records = JSON.parse(output);
-	const filename = records[0]?.filename;
-	if (typeof filename !== "string" || !filename) throw new Error(`npm pack did not return a filename for ${packagePath}`);
+	if (!filename) throw new Error(`npm pack did not return a filename for ${packagePath}`);
 	return resolve(destination, filename);
 }
 
@@ -110,10 +108,12 @@ const finalManifest = {
 };
 writeJson(join(stage, "package.json"), finalManifest);
 
-const packedOutput = runNpm(["pack", ".", "--ignore-scripts", "--json", "--pack-destination", outputRoot], stage, true);
-const packedRecords = JSON.parse(packedOutput);
-const packedFilename = packedRecords[0]?.filename;
-if (typeof packedFilename !== "string" || !packedFilename) throw new Error("npm pack did not return the Recode artifact filename");
+const packedFilename = runNpm(
+	["pack", ".", "--ignore-scripts", "--silent", "--pack-destination", outputRoot],
+	stage,
+	true,
+);
+if (!packedFilename) throw new Error("npm pack did not return the Recode artifact filename");
 const artifact = resolve(outputRoot, packedFilename);
 
 process.stdout.write(`Prepared ${finalManifest.name}@${version}\n`);
