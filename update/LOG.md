@@ -131,3 +131,13 @@
 - Installed the package globally and verified version, source commit, and built worker runtime parity.
 - Artifact SHA-256: `a4fcf6fb980150f1164a5fd53b4bc8d4757af32f6041c46c848e4e00806c8b38`.
 - npm left another locked old-package directory because this running process still holds the clipboard native module; installation itself succeeded.
+
+## 2026-07-27 — Kioku retrieval audit
+
+- Confirmed automatic recall arrives at the correct `before_agent_start` boundary but retrieved irrelevant memory for generic continuation prompts.
+- Identified four causes: raw-prompt OR FTS, no automatic acceptance threshold, overlapping multi-fact chunks, and global-only recall caused by resuming the legacy OAuth-worktree session with no project memory.
+- Found stale global facts claiming the package is still symlinked and that self-update can still replace Recode; no memory was silently deleted or rewritten.
+- Changed canonical list memory chunking to one durable entry per chunk while retaining bounded overlapping chunks for prose documents.
+- Added an index-version hash so existing documents rebuild under the new chunker after restart.
+- Added conservative local automatic reranking: conversational stop-word removal, minimum term coverage, project preference, and a three-entry cap. Explicit search remains broad.
+- Focused memory validation passed: 15 tests.

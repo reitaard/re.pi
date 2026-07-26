@@ -23,9 +23,32 @@ export function chunkRecodeMemory(
 	content: string,
 ): RecodeMemoryChunk[] {
 	const lines = content.replace(/\r\n/g, "\n").split("\n");
+	const entryStarts = lines.flatMap((line, index) => (/^\s*-\s+/.test(line) ? [index] : []));
+	const prefixIsOnlyMetadata = lines
+		.slice(0, entryStarts[0] ?? lines.length)
+		.every((line) => !line.trim() || /^\s*#/.test(line));
+	if (entryStarts.length > 0 && prefixIsOnlyMetadata) {
+		return entryStarts.flatMap((start, index) => {
+			const end = entryStarts[index + 1] ?? lines.length;
+			const rawText = lines.slice(start, end).join("\n").trim();
+			if (!rawText) return [];
+			return [
+				{
+					id: chunkId(documentId, start + 1, rawText),
+					documentId,
+					scope,
+					path,
+					lineStart: start + 1,
+					lineEnd: end,
+					text: rawText,
+					tokenCount: estimateTokens(rawText),
+				},
+			];
+		});
+	}
+
 	const chunks: RecodeMemoryChunk[] = [];
 	let start = 0;
-
 	while (start < lines.length) {
 		let end = start;
 		let size = 0;
@@ -33,7 +56,6 @@ export function chunkRecodeMemory(
 			size += lines[end].length + 1;
 			end += 1;
 		}
-
 		const rawText = lines.slice(start, end).join("\n").trim();
 		if (rawText) {
 			chunks.push({
@@ -47,7 +69,6 @@ export function chunkRecodeMemory(
 				tokenCount: estimateTokens(rawText),
 			});
 		}
-
 		if (end >= lines.length) break;
 		let overlap = 0;
 		let nextStart = end;
@@ -57,6 +78,5 @@ export function chunkRecodeMemory(
 		}
 		start = nextStart;
 	}
-
 	return chunks;
 }

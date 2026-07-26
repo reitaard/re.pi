@@ -195,6 +195,28 @@ Implement only after measurement identifies a material cost:
 - Hermes Agent (`NousResearch/hermes-agent`, reviewed at `339d9686`): reuse bounded asynchronous delegation, independent cancellation, completion queues, cached tool schemas, conservative safe-tool parallelism, stable prompt caching, and optional worktrees. Do not copy its broad gateway, deep delegation, or automatic memory machinery.
 - OpenClaw-derived browser orchestration remains a separate guarded browser-control boundary; reuse lifecycle concepts, not browser-specific control code.
 
+## Memory retrieval hardening
+
+### Observed defects
+
+- Automatic recall runs at `before_agent_start`, so delivery timing is correct.
+- It previously searched only the raw current prompt with an OR-based FTS query, accepted every returned match, and injected up to six results.
+- `MEMORY.md` was split into overlapping character windows, causing repeated chunks containing unrelated facts.
+- The resumed historical session's active project is the legacy OAuth worktree, which has no project memory; global auto-recall therefore dominates even though implementation work occurs in `re.pi`.
+- Global memory contains stale symlink/update facts and lacks the latest installed-package, modal-worker, and supervisor decisions.
+
+### Minimal correction
+
+- [x] Chunk canonical bullet-based memory files by individual durable entry; retain bounded character chunks for general prose documents.
+- [x] Version the chunking hash so existing indexed documents reindex automatically after restart.
+- [x] Keep explicit search broad and unchanged.
+- [x] For automatic recall, remove conversational stop words, retrieve a bounded candidate set, require one match for a single specific term or two matches for broader prompts, prefer project results, and inject at most three entries.
+- [x] Add regressions proving a generic “continue” prompt injects nothing and targeted package-manager recall still succeeds.
+- [ ] Add provenance and explicit supersession metadata before attempting automatic contradiction removal.
+- [ ] Review stale global entries with the Creator before removing or replacing durable memory.
+- [ ] Launch future implementation sessions from `C:\Users\re_Lax\Desktop\chat7\re.pi` so project memory corresponds to the authoritative checkout.
+- [ ] Measure automatic retrieval candidate count, accepted count, duration, and injected characters before considering embeddings or model-based reranking.
+
 ## Immediate next step
 
-Restart Recode, resume `2026-07-26-chat1-019f9cc2`, and visually confirm that `/levi`, `/mayuri`, and `/shiori` preserve the `chat1` root session while `/shiori review` remains isolated.
+Validate and package the conservative memory retrieval change, then restart from the authoritative `re.pi` directory. Separately visually confirm that `/levi`, `/mayuri`, and `/shiori` preserve the `chat1` root session while `/shiori review` remains isolated.

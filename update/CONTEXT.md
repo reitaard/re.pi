@@ -81,6 +81,15 @@ The behavior-preserving worker-folder restructure is committed and pushed at `c6
 
 The minimal next architecture should extend this package rather than adding another orchestrator.
 
+## Memory retrieval audit
+
+- Automatic Kioku recall is correctly timed at `before_agent_start`, immediately before each agent turn.
+- The prior retrieval path used raw-prompt OR FTS, no acceptance threshold, six results, and overlapping 1,600-character chunks. Generic continuation prompts could therefore inject unrelated global memory.
+- Canonical memory entries are now isolated into per-entry chunks and automatic injection is locally filtered to at most three high-coverage results. Explicit memory search remains broad.
+- The chunk-index version is part of each document hash so the next runtime initialization rebuilds existing chunks without a database migration.
+- This resumed session's active project is `C:\Users\re_Lax\Desktop\chat7\re.pi-0.81.4-oauth`; its project Kioku root is empty. The authoritative implementation checkout is `C:\Users\re_Lax\Desktop\chat7\re.pi`, so future sessions should launch there for relevant project auto-recall.
+- Global `MEMORY.md` contains obsolete symlink/update facts. They require explicit Creator-reviewed cleanup rather than silent deletion.
+
 ## Historical session context
 
 - Session ID: `019f9cc2-c15d-7b26-8fdb-5865e17273ee`

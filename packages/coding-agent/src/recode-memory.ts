@@ -246,6 +246,97 @@ export function resolveAutomaticMemoryScope(
 	return undefined;
 }
 
+const AUTOMATIC_MEMORY_MAX_RESULTS = 3;
+const AUTOMATIC_MEMORY_STOP_WORDS = new Set([
+	"about",
+	"again",
+	"alright",
+	"also",
+	"and",
+	"are",
+	"because",
+	"been",
+	"before",
+	"but",
+	"can",
+	"continue",
+	"could",
+	"did",
+	"does",
+	"for",
+	"from",
+	"get",
+	"got",
+	"had",
+	"has",
+	"have",
+	"how",
+	"into",
+	"just",
+	"more",
+	"now",
+	"okay",
+	"our",
+	"should",
+	"than",
+	"that",
+	"the",
+	"their",
+	"them",
+	"then",
+	"there",
+	"these",
+	"they",
+	"this",
+	"those",
+	"what",
+	"when",
+	"where",
+	"which",
+	"who",
+	"why",
+	"will",
+	"with",
+	"would",
+	"yes",
+	"you",
+	"your",
+]);
+
+function automaticMemoryTerms(prompt: string): string[] {
+	return [
+		...new Set(
+			(prompt.toLowerCase().match(/[\p{L}\p{N}_-]{3,}/gu) ?? []).filter(
+				(term) => !AUTOMATIC_MEMORY_STOP_WORDS.has(term),
+			),
+		),
+	].slice(0, 16);
+}
+
+export function selectAutomaticMemoryResults(
+	prompt: string,
+	candidates: readonly RecodeMemorySearchResult[],
+	limit = AUTOMATIC_MEMORY_MAX_RESULTS,
+): RecodeMemorySearchResult[] {
+	const terms = automaticMemoryTerms(prompt);
+	if (terms.length === 0) return [];
+	const requiredMatches = terms.length === 1 ? 1 : 2;
+	return candidates
+		.map((candidate) => {
+			const searchable = candidate.text.toLowerCase();
+			const matches = terms.reduce((count, term) => count + (searchable.includes(term) ? 1 : 0), 0);
+			return {
+				candidate,
+				matches,
+				rank: matches / terms.length + candidate.score * 0.05 + (candidate.scope === "project" ? 0.05 : 0),
+			};
+		})
+		.filter((item) => item.matches >= requiredMatches)
+		.sort((left, right) => right.rank - left.rank || right.candidate.updatedAt - left.candidate.updatedAt)
+		.slice(0, Math.max(1, Math.min(limit, AUTOMATIC_MEMORY_MAX_RESULTS)))
+		.map((item) => item.candidate);
+}
+
 const Scope = Type.Union([Type.Literal("global"), Type.Literal("project")]);
 const SearchScope = Type.Union([Scope, Type.Literal("both")]);
 
@@ -374,9 +465,16 @@ export async function recodeMemory(
 			config.enabled && event.prompt.trim().length >= 8
 				? resolveAutomaticMemoryScope(config, ctx.isProjectTrusted())
 				: undefined;
-		const results = scope
-			? await (await getManager(ctx.cwd, ctx.isProjectTrusted())).search(event.prompt, config.maxResults, scope)
-			: [];
+		const automaticQuery = automaticMemoryTerms(event.prompt).join(" ");
+		const candidates =
+			scope && automaticQuery
+				? await (await getManager(ctx.cwd, ctx.isProjectTrusted())).search(
+						automaticQuery,
+						Math.min(20, Math.max(config.maxResults * 3, AUTOMATIC_MEMORY_MAX_RESULTS)),
+						scope,
+					)
+				: [];
+		const results = selectAutomaticMemoryResults(event.prompt, candidates, config.maxResults);
 		if (!teachEnabled && results.length === 0) return;
 		return {
 			...(teachEnabled ? { systemPrompt: `${event.systemPrompt}\n\n${recodeTeachPrompt(teach.owner)}` } : {}),

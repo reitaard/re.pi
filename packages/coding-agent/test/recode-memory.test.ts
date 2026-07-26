@@ -23,6 +23,7 @@ import {
 	normalizeRecodeMemoryConfig,
 	recodeMemory,
 	resolveAutomaticMemoryScope,
+	selectAutomaticMemoryResults,
 } from "../src/recode-memory.ts";
 
 const roots: string[] = [];
@@ -295,6 +296,48 @@ describe("re.code core memory", () => {
 		expect(chunks[1].lineStart).toBeLessThanOrEqual(chunks[0].lineEnd);
 		expect(chunks.at(-1)?.lineEnd).toBe(120);
 		expect(chunks.every((chunk) => chunk.tokenCount > 0 && chunk.id.length === 24)).toBe(true);
+	});
+
+	it("chunks canonical memory lists by entry instead of overlapping unrelated facts", () => {
+		const chunks = chunkRecodeMemory(
+			"document",
+			"global",
+			"MEMORY.md",
+			"# Memory\n\n- #fact [[package]] Use pnpm.\n\n- #decision [[session]] Keep workers modal.\n",
+		);
+
+		expect(chunks).toHaveLength(2);
+		expect(chunks[0]).toMatchObject({ lineStart: 3, lineEnd: 4 });
+		expect(chunks[0]?.text).toContain("Use pnpm");
+		expect(chunks[0]?.text).not.toContain("workers modal");
+		expect(chunks[1]?.text).toContain("workers modal");
+	});
+
+	it("injects automatic memory conservatively while leaving explicit search broad", () => {
+		const candidates = [
+			{
+				id: "package",
+				scope: "global",
+				path: "MEMORY.md",
+				text: "- #fact [[package-manager]] Prefer pnpm for package installs.",
+				score: 0.8,
+				updatedAt: 10,
+			},
+			{
+				id: "clipboard",
+				scope: "global",
+				path: "MEMORY.md",
+				text: "- #fact [[clipboard]] Clipboard images support PNG.",
+				score: 0.9,
+				updatedAt: 20,
+			},
+		] as never[];
+
+		expect(selectAutomaticMemoryResults("alright, if you got it continue", candidates)).toEqual([]);
+		expect(selectAutomaticMemoryResults("Which package manager should install packages?", candidates)).toEqual([
+			candidates[0],
+		]);
+		expect(selectAutomaticMemoryResults("Optimize memory context retrieval", candidates)).toEqual([]);
 	});
 
 	it("indexes, searches, updates, and removes Markdown memory incrementally", async () => {
