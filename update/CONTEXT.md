@@ -13,7 +13,7 @@ The authoritative repository is the customized Recode monorepo derived from Pi.
 - Coding-agent package: `@reitaard/repi-coding-agent`
 - Source package baseline: `0.81.4`
 - Installed staged version: `0.81.4-repi.2.dev.18.053dee25`
-- Current committed branch tip: `053dee25`
+- Installed runtime source commit: `053dee25`
 - CLI binary name: `recode`
 - Required Node version: `>=22.19.0`
 
