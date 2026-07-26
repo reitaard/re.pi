@@ -12,7 +12,7 @@ The authoritative repository is the customized Recode monorepo derived from Pi.
 - Root package: `repi-monorepo`
 - Coding-agent package: `@reitaard/repi-coding-agent`
 - Source package baseline: `0.81.4`
-- Installed staged version: `0.81.4-repi.2.dev.7.d9e9359f`
+- Installed staged version: `0.81.4-repi.2.dev.9.b4b58fc9`
 - CLI binary name: `recode`
 - Required Node version: `>=22.19.0`
 
@@ -48,7 +48,7 @@ The global package path:
 
 `C:\nvm4w\nodejs\node_modules\@reitaard\repi-coding-agent`
 
-is a normal self-contained npm installation, not a symlink. Its staged package metadata records source commit `d9e9359f76e5c96790ef030eb60ba96f838aca41`. The installed Coding Agent, TUI, Agent, and AI runtime trees were verified byte-for-byte against the feature-complete custom build.
+is a normal self-contained npm installation, not a symlink. Its staged package metadata records source commit `b4b58fc949c3d800ce4e29aca9f905c8b3556bb9`. The installed Coding Agent, TUI, Agent, and AI runtime trees were verified byte-for-byte against the feature-complete custom build.
 
 ## Historical session context
 

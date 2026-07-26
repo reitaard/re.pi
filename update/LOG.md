@@ -77,3 +77,6 @@
 - Added explicit alternate workspace selection restricted to worktrees sharing the active Git common directory.
 - Preserved Mayuri's librarian specialization and strengthened Levi's Git-evidence audit prompt.
 - Focused worker tests pass, including simultaneous running-state proof and sibling/unrelated worktree boundaries.
+- Installed final worker-capable package `0.81.4-repi.2.dev.9.b4b58fc9` from source commit `b4b58fc949c3d800ce4e29aca9f905c8b3556bb9`.
+- Verified the installed worker-capable Coding Agent, TUI, Agent, and AI trees exactly match the custom build.
+- Final worker-capable artifact SHA-256: `b15220d1a5975d06dbeede5350503bca633c121cc1e519633cf0caa6720d956a`.
