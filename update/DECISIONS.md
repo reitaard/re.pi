@@ -60,7 +60,7 @@ The release line starts from exact commit `c5ab200b`. Upstream Pi changes are cl
 
 **Status:** Accepted
 
-Levi, Mayuri, and Shiori private chats run as modal, independently cancellable worker conversations inside the current Aizen runtime. They keep their own conversation ids and custom-entry history but never call root-session replacement or rename the Aizen session. One-shot tasks remain independent and deliver explicitly untrusted handoffs.
+Levi, Mayuri, and Shiori private chats run as modal, independently cancellable worker conversations inside the current Aizen runtime. They keep their own conversation ids and custom-entry history but never call root-session replacement or rename the Aizen session. One-shot tasks remain independent and deliver explicitly untrusted handoffs. Delegation is enabled by default with an explicit environment opt-out. All workers share read-only Kioku search under the stale-evidence policy; memory admission remains unavailable to worker tools.
 
 ## D-010 — Extend the existing orchestrator for full-session concurrency
 
@@ -73,6 +73,12 @@ Multiple full Aizen sessions will use `packages/orchestrator` as the single supe
 **Status:** Accepted
 
 Latency work starts with stage-level measurements. Prefer schema/prompt caching, lazy loading, event-driven waits, and conservative parallel read-only tools. Do not add SQLite, deep delegation, multi-platform gateways, or automatic background review until measurements establish need.
+
+## D-012 — One certified release serves every deployment
+
+**Status:** Accepted
+
+Windows, Linux, Termux, the primary machine, work PC, and VPS must consume artifacts from one reviewed source commit and release manifest. Extend the existing local-release, binary, Termux, and GitHub workflow; do not clone and rebuild independently on each deployment machine. Remote rollout occurs only after local certification and explicit authorization, with inventory and rollback evidence.
 
 ## Pending decisions
 

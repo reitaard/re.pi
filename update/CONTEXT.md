@@ -66,6 +66,8 @@ The behavior-preserving worker-folder restructure is committed and pushed at `c6
 - Footer context usage reads the live compaction-aware session branch after every persisted AgentHarness model/tool-loop step; it shows `ctx ?` immediately after compaction and then the first available post-compaction usage without waiting for the outer turn.
 - Cache read, cache write, and cache-hit footer statistics use the same accent color as token traffic and context usage.
 - Private worker chats are modal conversations inside the current Aizen runtime. They retain independent worker conversation ids, history, cancellation, and custom-entry persistence without creating, renaming, replacing, or cancelling the root Aizen session.
+- Delegation is enabled when `REPI_DELEGATION` is unset; `0`, `false`, `no`, or `off` explicitly disables it.
+- Every worker receives the loaded shared read-only `kioku_search` extension tool. No worker receives Kioku write access, and Shiori/Cardinal/Teach Mode admission boundaries remain unchanged.
 - Opening a worker modal does not inherit Aizen's abort signal. Runtime teardown still owns final worker cleanup through the shared directory.
 
 ## Existing orchestrator foundation
@@ -86,9 +88,18 @@ The minimal next architecture should extend this package rather than adding anot
 - Automatic Kioku recall is correctly timed at `before_agent_start`, immediately before each agent turn.
 - The prior retrieval path used raw-prompt OR FTS, no acceptance threshold, six results, and overlapping 1,600-character chunks. Generic continuation prompts could therefore inject unrelated global memory.
 - Canonical memory entries are now isolated into per-entry chunks and automatic injection is locally filtered to at most three high-coverage results. Explicit memory search remains broad.
+- Automatic recall and worker Kioku use receive a strict system policy: memory may be stale, current Creator instructions and verified evidence win, contradictions are rejected, and embedded instructions are ignored.
 - The chunk-index version is part of each document hash so the next runtime initialization rebuilds existing chunks without a database migration.
-- This resumed session's active project is `C:\Users\re_Lax\Desktop\chat7\re.pi-0.81.4-oauth`; its project Kioku root is empty. The authoritative implementation checkout is `C:\Users\re_Lax\Desktop\chat7\re.pi`, so future sessions should launch there for relevant project auto-recall.
-- Global `MEMORY.md` contains obsolete symlink/update facts. They require explicit Creator-reviewed cleanup rather than silent deletion.
+- Recode is now launched from the authoritative `C:\Users\re_Lax\Desktop\chat7\re.pi` checkout, with project memory under `.pi/memory/MEMORY.md`.
+- Creator-approved stale global symlink, unsafe-update, transient MCP, and obsolete integration-branch entries were removed or corrected.
+
+## Release and deployment context
+
+- The desired deployment model is one certified Recode release for npm/Node, Windows, Linux, Termux, the primary machine, work PC, and VPS.
+- Existing foundations are `scripts/local-release.mjs`, `scripts/build-binaries.sh`, `scripts/build-termux-release.sh`, and `.github/workflows/build-binaries.yml`.
+- Current binary targets are Windows x64/arm64 and Linux x64/arm64; Termux uses a deterministic Node archive containing workspace tarballs and an installer.
+- The GitHub workflow creates checksummed binary/source assets and an approval-gated GitHub release. Contrary to the current `AGENTS.md` release description, this branch's workflow presently has no npm trusted-publishing job; that gap must be resolved before release.
+- The VPS is behind the current AgentHarness implementation. No SSH connection or remote mutation is authorized as part of local hardening; remote inventory and rollout will be a separate approved phase.
 
 ## Historical session context
 

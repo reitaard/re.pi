@@ -145,3 +145,17 @@
 - Packed and isolated-smoke-tested `0.81.4-repi.2.dev.21.48459331`; version, help, model listing, and packaged memory-runtime parity passed.
 - Installed globally and verified source metadata plus built memory-runtime parity.
 - Artifact SHA-256: `9e7a96aa0c1875acfb38a54aa28cb71707a42fbfdab3df3684c1a61f9d31b997`.
+
+## 2026-07-27 — Durable operations and release direction
+
+- Confirmed restart from the authoritative `re.pi` checkout: project Kioku now resolves to this repository and the entry-based reindex expanded indexed chunks from 35 to 61.
+- With Creator approval, removed or replaced stale global symlink, unsafe-update, transient MCP 401, and obsolete integration-branch memories.
+- Created concise project memories for checkout authority, update safety, modal-worker/orchestrator architecture, and cross-platform deployment.
+- Added root `OPERATIONS.md` and linked it from `AGENTS.md` so future sessions have a single safety, packaging, architecture, memory, and deployment entry point.
+- Recorded the accepted goal of one certified artifact set for npm/Node, Windows, Linux, Termux, the primary machine, work PC, and VPS.
+- Audited existing release foundations. Binary and Termux builders plus checksummed GitHub release staging already exist; npm trusted publishing described in `AGENTS.md` is absent from the current workflow and remains a release blocker.
+- Did not connect to or mutate the VPS. It remains a later explicitly authorized inventory and rollout phase.
+- Strengthened automatic and explicit memory prompts so recalled content is treated as potentially stale evidence below current Creator instructions and verified state.
+- Added shared read-only `kioku_search` to every worker through the directory's host-provided external-tool boundary; no write tool or Cardinal bypass was added.
+- Changed delegation from environment opt-in to default-on with explicit `REPI_DELEGATION=0|false|no|off` opt-out, and added release certification coverage for that default.
+- Focused memory and worker validation passed: 42 tests across three files.

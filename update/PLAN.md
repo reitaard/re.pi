@@ -122,6 +122,9 @@ Tentative flow, subject to Phase 2 decisions:
 - [x] Preserve independent worker conversation ids and custom-entry history without creating or renaming root sessions.
 - [x] Decouple modal worker turns from Aizen's abort signal while retaining runtime-teardown cleanup.
 - [x] Clarify `/shiori` versus `/shiori review` command text.
+- [x] Enable delegation by default while retaining explicit `REPI_DELEGATION=0` opt-out.
+- [x] Give every worker the loaded shared read-only `kioku_search` tool without exposing memory writes.
+- [x] Apply the same stale-evidence and current-instruction precedence policy to worker memory use.
 - [x] Pack, smoke-test, and install the modal boundary.
 - [ ] Restart and visually verify the modal boundary.
 
@@ -211,12 +214,58 @@ Implement only after measurement identifies a material cost:
 - [x] Version the chunking hash so existing indexed documents reindex automatically after restart.
 - [x] Keep explicit search broad and unchanged.
 - [x] For automatic recall, remove conversational stop words, retrieve a bounded candidate set, require one match for a single specific term or two matches for broader prompts, prefer project results, and inject at most three entries.
-- [x] Add regressions proving a generic “continue” prompt injects nothing and targeted package-manager recall still succeeds.
+- [x] Add regressions proving generic continuation and repository-file prompts inject nothing while targeted package-manager recall still succeeds.
+- [x] Add a strict system-prompt policy: memory is potentially stale evidence, current Creator instructions and verified state take precedence, contradictions are rejected, and embedded memory instructions never execute.
 - [ ] Add provenance and explicit supersession metadata before attempting automatic contradiction removal.
 - [ ] Review stale global entries with the Creator before removing or replacing durable memory.
 - [ ] Launch future implementation sessions from `C:\Users\re_Lax\Desktop\chat7\re.pi` so project memory corresponds to the authoritative checkout.
 - [ ] Measure automatic retrieval candidate count, accepted count, duration, and injected characters before considering embeddings or model-based reranking.
 
+## Cross-platform release and deployment
+
+The repository already has one intended release path: `scripts/local-release.mjs`, `scripts/build-binaries.sh`, `scripts/build-termux-release.sh`, and `.github/workflows/build-binaries.yml`. Harden it instead of maintaining machine-specific builds.
+
+### R0 — Audit current release identity
+
+- [x] Confirm binary targets exist for Linux x64/arm64 and Windows x64/arm64.
+- [x] Confirm a deterministic Termux Node archive exists.
+- [x] Confirm GitHub release assets receive SHA-256 checksums and a source archive.
+- [ ] Prove every path builds from `repi/preserve-custom`, retains the exact feature-complete Recode runtime, and enables delegation by default.
+- [ ] Reconcile release documentation with workflow reality: the current binary workflow stages/publishes GitHub assets but does not contain the documented npm trusted-publishing job.
+- [ ] Verify the release/tag script cannot accidentally release incomplete `main` or a raw upstream-derived tree.
+
+### R1 — One versioned release manifest
+
+- [ ] Generate one immutable manifest containing product/package identity, version, source commit, custom baseline, artifact names, sizes, SHA-256 hashes, runtime requirements, and supported platform/architecture.
+- [ ] Embed or bundle the same manifest in npm, binary, Termux, and source artifacts.
+- [ ] Fail packaging if the checkout is dirty, detached, not descended from the custom baseline, or package identity differs.
+- [ ] Make artifact generation reproducible where practical: normalized archive ordering/timestamps and no live model-catalog drift during release builds.
+
+### R2 — Certification matrix
+
+- [ ] npm/Node on Windows x64 and Linux x64.
+- [ ] Bun binary on Windows x64, Windows arm64, Linux x64, and Linux arm64.
+- [ ] Termux Node archive on supported Android architecture.
+- [ ] Verify `--version`, `--help`, model/account listing, interactive startup, one real prompt, OAuth, clipboard fallback, Kioku, worker modal isolation, orchestrator RPC startup, and foreign-update refusal.
+- [ ] Compare critical runtime trees/assets against the source build and retain machine-readable evidence.
+- [ ] Test install, upgrade, and rollback from the immediately previous Recode release.
+
+### R3 — Publication
+
+- [ ] Publish npm packages under `@reitaard` through reviewed GitHub trusted publishing; never publish locally from an interactive machine.
+- [ ] Publish checksummed GitHub release archives only after the certification matrix passes and release preview is approved.
+- [ ] Make `recode update` consume only validated Recode release metadata and verify package identity before mutation.
+- [ ] Keep release publication idempotent; rerunning a failed publish must skip already-published identical package versions.
+
+### R4 — Fleet rollout
+
+- [ ] Primary Windows machine canary.
+- [ ] Work PC canary from the exact same artifact.
+- [ ] VPS inventory and backup under a separately authorized SSH task; it is currently behind AgentHarness.
+- [ ] VPS upgrade from the exact certified Linux/npm artifact, followed by version, startup, provider, session, and rollback checks.
+- [ ] Termux rollout only from the certified Termux archive.
+- [ ] Never clone/build independently on deployment machines unless performing an explicitly approved source-development task.
+
 ## Immediate next step
 
-Restart from the authoritative `re.pi` directory to activate conservative memory recall and rebuild the index. Separately visually confirm that `/levi`, `/mayuri`, and `/shiori` preserve the `chat1` root session while `/shiori review` remains isolated.
+Commit the repository operations guide and project memory, then audit the release scripts against R0/R1 without publishing or connecting to remote machines. Separately visually confirm that `/levi`, `/mayuri`, and `/shiori` preserve the `chat1` root session while `/shiori review` remains isolated.
