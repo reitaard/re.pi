@@ -80,3 +80,22 @@
 - Installed final worker-capable package `0.81.4-repi.2.dev.9.b4b58fc9` from source commit `b4b58fc949c3d800ce4e29aca9f905c8b3556bb9`.
 - Verified the installed worker-capable Coding Agent, TUI, Agent, and AI trees exactly match the custom build.
 - Final worker-capable artifact SHA-256: `b15220d1a5975d06dbeede5350503bca633c121cc1e519633cf0caa6720d956a`.
+
+## 2026-07-26 — Worker presentation and module boundary
+
+- Restored `worker_start_many` batch count, per-worker identity/color/activity, progress text, timing, and separate handoff cards.
+- Committed and pushed the presentation fix at `c1fd1121`; installed staged package `0.81.4-repi.2.dev.11.c1fd1121` with SHA-256 `89584b63eb3bdb310a1f3683af08a725f914041ab8ebd217a20aac97db6bb964`.
+- Moved Levi, Mayuri, and Shiori-owned code under dedicated worker folders while retaining generic delegation lifecycle machinery.
+- Moved specialized tool construction into worker definitions through `createTools`.
+- Fixed native/MSYS Windows sibling-worktree path normalization.
+- Committed and pushed the structural boundary at `c6b4dd13`.
+
+## 2026-07-26 — Shiori and independent slash-worker phase
+
+- Registered Shiori as stable worker id `shiori` with private normal conversation, read-only local tools, and no Kioku write capability.
+- Preserved the isolated schema-constrained Shiori reviewer and made it explicit through `/shiori review [path]`.
+- Removed review dependence on Aizen's idle state while retaining the process-wide single-flight lock.
+- Made slash tasks independent of Aizen's abort signal and delivered completed reports through hidden, explicitly untrusted Aizen handoff messages.
+- Added equal eight-conversation global/per-worker defaults, atomic over-capacity batch rejection, unique same-worker activity widgets, `/worker status`, and scoped `/worker cancel <id>`.
+- Focused validation currently passes: 61 tests across seven worker, memory, and Shiori files; full `npm run check` passed before the final cancellation/UI refinements and will be rerun at the phase boundary.
+- A Levi dogfood audit could not start because the currently installed `c1fd1121` runtime still has the old MSYS workspace bug (`lstat 'C:\\c'`). The source fix is in `c6b4dd13`; no automatic retry or fallback audit was performed.

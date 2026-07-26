@@ -21,6 +21,9 @@ export type RecodeWorkerSettingAction =
 	| "chat"
 	| "close"
 	| "status"
+	| "review"
+	| "review-model"
+	| "review-thinking"
 	| "memory"
 	| "progress"
 	| "evaluations"
@@ -70,6 +73,9 @@ export function parseWorkerSettingId(value: string): RecodeWorkerSettingId | und
 			"chat",
 			"close",
 			"status",
+			"review",
+			"review-model",
+			"review-thinking",
 			"memory",
 			"progress",
 			"evaluations",
@@ -341,7 +347,7 @@ export class RecodeWorkerSettingsComponent extends Container {
 				},
 			];
 		});
-		if (options.shiori) {
+		if (options.shiori && options.workers.some((worker) => worker.id === "shiori")) {
 			const shiori = options.shiori;
 			const workerId = "shiori";
 			const workerName = RECODE_SHIORI_DISPLAY_NAME;
@@ -350,25 +356,25 @@ export class RecodeWorkerSettingsComponent extends Container {
 			items.push(
 				{
 					...shared,
-					id: settingId(workerId, "status"),
-					label: "Health",
-					description: "Shiori is a passive memory reviewer and only runs when explicitly requested",
+					id: settingId(workerId, "review"),
+					label: "Memory Review",
+					description: "The isolated memory reviewer runs only when explicitly requested",
 					currentValue: shiori.enabled ? (shiori.reviewing ? "reviewing" : "ready · passive") : "disabled",
 					values: [shiori.enabled ? (shiori.reviewing ? "reviewing" : "ready · passive") : "disabled"],
 				},
 				{
 					...shared,
-					id: settingId(workerId, "model"),
-					label: "Model",
-					description: "Choose the current Aizen model or a fixed model for Shiori reviews",
+					id: settingId(workerId, "review-model"),
+					label: "Review Model",
+					description: "Choose the current Aizen model or a fixed model for isolated Shiori reviews",
 					currentValue: model,
 					values: [...new Set(["current (follows Aizen)", model, ...options.modelValues])],
 				},
 				{
 					...shared,
-					id: settingId(workerId, "thinking"),
-					label: "Thinking",
-					description: "Allow Shiori to reason before extracting memory candidates",
+					id: settingId(workerId, "review-thinking"),
+					label: "Review Thinking",
+					description: "Allow the isolated reviewer to reason before extracting memory candidates",
 					currentValue: shiori.thinking ? "on" : "off",
 					values: ["off", "on"],
 				},
@@ -379,14 +385,6 @@ export class RecodeWorkerSettingsComponent extends Container {
 					description: "Choose where Cardinal admits Shiori's reviewed memories",
 					currentValue: shiori.cardinalRouting,
 					values: ["auto", "project", "global", "ask"],
-				},
-				{
-					...shared,
-					id: settingId(workerId, "prompt"),
-					label: "Prompt/Role",
-					description: "View Shiori's passive memory-review role and safety boundary",
-					currentValue: "view",
-					values: ["view"],
 				},
 			);
 		}

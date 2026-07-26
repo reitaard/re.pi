@@ -137,6 +137,7 @@ export function createWorkerControlTools(directory: WorkerDirectory): AgentTool<
 		parameters: startManySchema,
 		executionMode: "parallel",
 		async execute(_toolCallId, input, signal) {
+			directory.assertCanStartConversations(input.requests.map((request) => request.worker));
 			const turns = await Promise.all(
 				input.requests.map((request) =>
 					directory.startConversation(

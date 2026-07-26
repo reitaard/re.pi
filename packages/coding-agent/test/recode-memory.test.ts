@@ -9,8 +9,10 @@ import { RecodeMemoryManager } from "../src/core/recode-memory/recode-memory-man
 import { RecodeMemoryRuntime, resolveRecodeMemoryLocation } from "../src/core/recode-memory/recode-memory-runtime.ts";
 import { DefaultResourceLoader } from "../src/core/resource-loader.ts";
 import {
+	RECODE_SHIORI_COMMAND_REQUEST,
 	RECODE_SHIORI_SETTINGS_REQUEST,
 	RECODE_SHIORI_SETTINGS_UPDATE,
+	type RecodeShioriCommandRequest,
 	type RecodeShioriSettingsRequest,
 	type RecodeShioriSettingsSnapshot,
 	type RecodeShioriSettingsUpdate,
@@ -105,6 +107,58 @@ describe("re.code core memory", () => {
 					text: expect.stringContaining("Direct Kioku writes are blocked while Teach Mode is active"),
 				}),
 			]);
+		} finally {
+			runtime.close();
+		}
+	});
+
+	it("routes Shiori private chat and task commands without waiting for Aizen", async () => {
+		const root = await mkdtemp(join(tmpdir(), "repi-memory-shiori-command-"));
+		roots.push(root);
+		const agentDir = join(root, "agent");
+		const runtime = new RecodeMemoryRuntime();
+		const eventBus = createEventBus();
+		const requests: Array<Pick<RecodeShioriCommandRequest, "action" | "message">> = [];
+		eventBus.on(RECODE_SHIORI_COMMAND_REQUEST, (data) => {
+			const request = data as RecodeShioriCommandRequest;
+			request.handled = true;
+			requests.push({ action: request.action, message: request.message });
+			request.resolve();
+		});
+		const loader = new DefaultResourceLoader({
+			cwd: root,
+			agentDir,
+			eventBus,
+			noExtensions: true,
+			noSkills: true,
+			noPromptTemplates: true,
+			noThemes: true,
+			extensionFactories: [
+				{
+					name: "recode-memory",
+					factory: (pi) => recodeMemory(pi, runtime, { agentDir }),
+				},
+			],
+		});
+		try {
+			await loader.reload();
+			const command = loader.getExtensions().extensions[0]?.commands.get("shiori");
+			if (!command) throw new Error("Shiori command missing");
+			const waitForIdle = vi.fn(async () => {});
+			const context = {
+				waitForIdle,
+				ui: { notify: vi.fn() },
+			} as unknown as Parameters<typeof command.handler>[1];
+			await command.handler("", context);
+			await command.handler("new", context);
+			await command.handler("organize the project decisions", context);
+
+			expect(requests).toEqual([
+				{ action: "open", message: undefined },
+				{ action: "new", message: undefined },
+				{ action: "task", message: "organize the project decisions" },
+			]);
+			expect(waitForIdle).not.toHaveBeenCalled();
 		} finally {
 			runtime.close();
 		}

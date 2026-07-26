@@ -356,6 +356,72 @@ describe("WorkerDirectory", () => {
 		expect(turns.every((turn) => turn.result.workerId === "audit")).toBe(true);
 	});
 
+	it("rejects over-capacity batches atomically before launching any worker", async () => {
+		const { registration, models } = createFaux();
+		const directory = new WorkerDirectory({
+			cwd: process.cwd(),
+			workers: workers(),
+			model: registration.getModel(),
+			models,
+			maxActiveConversations: 1,
+		});
+		const startMany = createWorkerControlTools(directory).find((tool) => tool.name === "worker_start_many");
+		if (!startMany) throw new Error("worker_start_many tool missing");
+
+		await expect(
+			startMany.execute("over-capacity", {
+				requests: [
+					{ worker: "audit", message: "Audit one." },
+					{ worker: "research", message: "Research one." },
+				],
+			}),
+		).rejects.toThrow("Worker conversation concurrency limit reached (1)");
+		expect(directory.getStatus()).toEqual([]);
+	});
+
+	it("enforces equal global and per-worker active-conversation limits", async () => {
+		const { registration, models } = createFaux();
+		let release = () => {};
+		const blocked = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		registration.setResponses([
+			async () => {
+				await blocked;
+				return fauxAssistantMessage("First complete.");
+			},
+			async () => {
+				await blocked;
+				return fauxAssistantMessage("Second complete.");
+			},
+		]);
+		const directory = new WorkerDirectory({
+			cwd: process.cwd(),
+			workers: workers(),
+			model: registration.getModel(),
+			models,
+			maxActiveConversations: 2,
+			maxActiveConversationsPerWorker: 1,
+		});
+
+		const first = directory.startConversation("audit", "First audit.");
+		await vi.waitFor(() =>
+			expect(directory.getStatus().filter((entry) => entry.status === "running")).toHaveLength(1),
+		);
+		await expect(directory.startConversation("audit", "Second audit.")).rejects.toThrow(
+			"Worker concurrency limit reached for audit (1)",
+		);
+		const second = directory.startConversation("research", "First research.");
+		await vi.waitFor(() =>
+			expect(directory.getStatus().filter((entry) => entry.status === "running")).toHaveLength(2),
+		);
+		await expect(directory.startConversation("research", "Second research.")).rejects.toThrow(
+			"Worker conversation concurrency limit reached (2)",
+		);
+		release();
+		await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+	});
+
 	it("mounts deterministic controls and exposes the full conversation id to the model", async () => {
 		const { registration, models } = createFaux();
 		registration.setResponses([() => fauxAssistantMessage("Conversation started.")]);

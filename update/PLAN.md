@@ -111,12 +111,12 @@ Tentative flow, subject to Phase 2 decisions:
 - [x] Keep generic conversation, delegation, cancellation, storage, and workspace guards under `core/delegation`.
 - [x] Let worker definitions own their specialized tool factories instead of importing Levi from the generic runtime.
 - [x] Accept native and MSYS-style Windows paths for sibling-worktree routing.
-- [ ] Register Shiori as a first-class direct-chat worker while retaining her isolated reviewer.
-- [ ] Make slash worker tasks bypass Aizen execution and hand results to Aizen at the next safe runtime boundary.
-- [ ] Keep dedicated worker chats private and preserve Teach Mode.
-- [ ] Remove Shiori review's idle wait while retaining one process-wide review lock.
-- [ ] Apply one global eight-conversation default equally to Levi, Mayuri, and Shiori; retain one active Shiori review.
-- [ ] Add behavior, concurrency, cancellation, handoff, and session-restoration tests.
+- [x] Register Shiori as a first-class direct-chat worker while retaining her isolated reviewer.
+- [x] Make slash worker tasks bypass Aizen execution and hand results to Aizen at the next safe runtime boundary.
+- [x] Keep dedicated worker chats private and preserve Teach Mode.
+- [x] Remove Shiori review's idle wait while retaining one process-wide review lock.
+- [x] Apply one global eight-conversation default equally to Levi, Mayuri, and Shiori; retain one active Shiori review.
+- [x] Add behavior, concurrency, cancellation, handoff, and session-restoration tests.
 - [ ] Build, pack, smoke-test, and install only after review.
 
 ### Worker dogfood notes
@@ -125,8 +125,9 @@ Tentative flow, subject to Phase 2 decisions:
 - Individual audit latency of 214–375 seconds is too high for narrow code reviews.
 - Audit evidence was useful but missed one current tool and one existing concurrency test; prompt scope and evidence verification need tightening.
 - Alternate-worktree audit startup exposed an MSYS Windows path-conversion defect before model execution.
+- A post-refactor Levi audit launched from the still-installed `c1fd1121` runtime reproduced that old `C:\\c` failure; no automatic retry was made. Source commit `c6b4dd13` contains the tested fix, but it will not affect the tool host until the next reviewed installation.
 - Later optimization should measure scheduling, harness setup, skill loading, provider start, and first useful output separately.
 
 ## Immediate next step
 
-Commit the behavior-preserving worker-folder boundary, then add Shiori's direct-chat identity and independent slash-worker handoff behavior in separately tested changes.
+Review and commit the Shiori/slash-handoff behavior boundary, then build, pack, smoke-test, install, and restart only after explicit approval.

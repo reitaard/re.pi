@@ -29,8 +29,10 @@ import {
 } from "./core/recode-teach/recode-teach-controller.ts";
 import type { SessionManager } from "./core/session-manager.ts";
 import {
+	RECODE_SHIORI_COMMAND_REQUEST,
 	RECODE_SHIORI_SETTINGS_REQUEST,
 	RECODE_SHIORI_SETTINGS_UPDATE,
+	type RecodeShioriCommandRequest,
 	type RecodeShioriSettingsRequest,
 	type RecodeShioriSettingsSnapshot,
 	type RecodeShioriSettingsUpdate,
@@ -535,9 +537,20 @@ export async function recodeMemory(
 	});
 
 	pi.registerCommand("shiori", {
-		description: `${RECODE_SHIORI_DISPLAY_NAME} reviews new session history and records durable Kioku memory`,
+		description: `${RECODE_SHIORI_DISPLAY_NAME} private chat, independent tasks, and isolated Kioku review`,
+		argumentHint: "[new|review [path]|task]",
 		getArgumentCompletions: (prefix) => {
 			const options = [
+				{
+					value: "new",
+					label: "new",
+					description: "Start a fresh private conversation with Shiori",
+				},
+				{
+					value: "review",
+					label: "review",
+					description: "Review new session history for durable memory",
+				},
 				{
 					value: "review ",
 					label: "review <path>",
@@ -547,6 +560,27 @@ export async function recodeMemory(
 			return options.filter((option) => option.value.startsWith(prefix));
 		},
 		handler: async (args, ctx) => {
+			const trimmedArgs = args.trim();
+			if (trimmedArgs !== "review" && !trimmedArgs.startsWith("review ")) {
+				try {
+					await new Promise<void>((resolve, reject) => {
+						const request: RecodeShioriCommandRequest = {
+							action: trimmedArgs === "new" ? "new" : trimmedArgs ? "task" : "open",
+							...(trimmedArgs && trimmedArgs !== "new" ? { message: trimmedArgs } : {}),
+							context: ctx,
+							handled: false,
+							resolve,
+							reject,
+						};
+						pi.events.emit(RECODE_SHIORI_COMMAND_REQUEST, request);
+						if (!request.handled) reject(new Error("Shiori direct chat is unavailable"));
+					});
+				} catch (error) {
+					ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
+				}
+				return;
+			}
+
 			const sessionManager = ctx.sessionManager as SessionManager;
 			let greeting: string | undefined;
 			try {
@@ -556,14 +590,8 @@ export async function recodeMemory(
 					);
 					return;
 				}
-				await ctx.waitForIdle();
 				if (runtime.isShioriReviewing()) {
 					appendShioriMessage("A memory review is already running.");
-					return;
-				}
-				const trimmedArgs = args.trim();
-				if (trimmedArgs && !trimmedArgs.startsWith("review ")) {
-					appendShioriMessage("Usage: /shiori or /shiori review <path>");
 					return;
 				}
 				let shioriModel = ctx.model;

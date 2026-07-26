@@ -24,6 +24,8 @@ import {
 
 const DEFAULT_MAX_HISTORY_CHARACTERS = 24_000;
 const DEFAULT_MAX_CONVERSATIONS = 64;
+const DEFAULT_MAX_ACTIVE_CONVERSATIONS = 8;
+const DEFAULT_MAX_ACTIVE_CONVERSATIONS_PER_WORKER = 8;
 
 export type WorkerConversationStatus = "running" | "closed" | NamedWorkerRunStatus;
 
@@ -110,6 +112,8 @@ export interface WorkerDirectoryOptions extends WorkerDirectoryRuntimeOptions {
 	workers: readonly NamedWorkerDefinition[];
 	maxHistoryCharacters?: number;
 	maxConversations?: number;
+	maxActiveConversations?: number;
+	maxActiveConversationsPerWorker?: number;
 }
 
 interface ConversationHistoryEntry {
@@ -180,6 +184,8 @@ export class WorkerDirectory {
 	private readonly cwd: string;
 	private readonly maxHistoryCharacters: number;
 	private readonly maxConversations: number;
+	private readonly maxActiveConversations: number;
+	private readonly maxActiveConversationsPerWorker: number;
 	private readonly workerSettings = new Map<string, WorkerRuntimeSettings>();
 
 	constructor(options: WorkerDirectoryOptions) {
@@ -194,6 +200,15 @@ export class WorkerDirectory {
 		this.runtime = options;
 		this.maxHistoryCharacters = options.maxHistoryCharacters ?? DEFAULT_MAX_HISTORY_CHARACTERS;
 		this.maxConversations = options.maxConversations ?? DEFAULT_MAX_CONVERSATIONS;
+		this.maxActiveConversations = options.maxActiveConversations ?? DEFAULT_MAX_ACTIVE_CONVERSATIONS;
+		this.maxActiveConversationsPerWorker =
+			options.maxActiveConversationsPerWorker ?? DEFAULT_MAX_ACTIVE_CONVERSATIONS_PER_WORKER;
+		if (!Number.isInteger(this.maxActiveConversations) || this.maxActiveConversations <= 0) {
+			throw new Error("WorkerDirectory maxActiveConversations must be a positive integer");
+		}
+		if (!Number.isInteger(this.maxActiveConversationsPerWorker) || this.maxActiveConversationsPerWorker <= 0) {
+			throw new Error("WorkerDirectory maxActiveConversationsPerWorker must be a positive integer");
+		}
 		for (const worker of this.workers) {
 			for (const reference of getNamedWorkerReferences(worker)) {
 				const key = normalizeWorkerReference(reference);
@@ -269,6 +284,23 @@ export class WorkerDirectory {
 		throw new Error(`Unknown named worker: ${reference}. Available: ${available}`);
 	}
 
+	assertCanStartConversations(workerReferences: readonly string[]): void {
+		const requestedWorkerIds = workerReferences.map((reference) => this.resolveWorker(reference).id);
+		const running = [...this.conversations.values()].filter((record) => record.status === "running");
+		if (running.length + requestedWorkerIds.length > this.maxActiveConversations) {
+			throw new Error(`Worker conversation concurrency limit reached (${this.maxActiveConversations})`);
+		}
+		for (const workerId of new Set(requestedWorkerIds)) {
+			const runningForWorker = running.filter((record) => record.worker.id === workerId).length;
+			const requestedForWorker = requestedWorkerIds.filter((candidate) => candidate === workerId).length;
+			if (runningForWorker + requestedForWorker > this.maxActiveConversationsPerWorker) {
+				throw new Error(
+					`Worker concurrency limit reached for ${workerId} (${this.maxActiveConversationsPerWorker})`,
+				);
+			}
+		}
+	}
+
 	resolveWorkspace(requestedWorkspace = this.cwd): string {
 		const activeWorkspace = resolveWorkspacePath(this.cwd);
 		const requested = resolveWorkspacePath(requestedWorkspace);
@@ -306,6 +338,7 @@ export class WorkerDirectory {
 	): Promise<WorkerConversationTurnResult> {
 		this.pruneConversations();
 		const worker = this.resolveWorker(workerReference);
+		this.assertConversationCapacity(worker.id);
 		const now = Date.now();
 		const record: WorkerConversationRecord = {
 			conversationId: randomUUID(),
@@ -332,6 +365,7 @@ export class WorkerDirectory {
 	): Promise<WorkerConversationTurnResult> {
 		const record = this.requireConversation(conversationId);
 		if (record.status === "closed") throw new Error(`Worker conversation is closed: ${conversationId}`);
+		this.assertConversationCapacity(record.worker.id);
 		const result = await this.executeConversationTurn(record, message, context, signal);
 		return { conversation: this.snapshot(record), result };
 	}
@@ -571,6 +605,17 @@ export class WorkerDirectory {
 			error: record.error,
 			workspace: record.workspace,
 		};
+	}
+
+	private assertConversationCapacity(workerId: string): void {
+		const running = [...this.conversations.values()].filter((record) => record.status === "running");
+		if (running.length >= this.maxActiveConversations) {
+			throw new Error(`Worker conversation concurrency limit reached (${this.maxActiveConversations})`);
+		}
+		const workerRunning = running.filter((record) => record.worker.id === workerId).length;
+		if (workerRunning >= this.maxActiveConversationsPerWorker) {
+			throw new Error(`Worker concurrency limit reached for ${workerId} (${this.maxActiveConversationsPerWorker})`);
+		}
 	}
 
 	private requireConversation(conversationId: string): WorkerConversationRecord {

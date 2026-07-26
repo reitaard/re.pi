@@ -12,7 +12,7 @@ The authoritative repository is the customized Recode monorepo derived from Pi.
 - Root package: `repi-monorepo`
 - Coding-agent package: `@reitaard/repi-coding-agent`
 - Source package baseline: `0.81.4`
-- Installed staged version: `0.81.4-repi.2.dev.9.b4b58fc9`
+- Installed staged version: `0.81.4-repi.2.dev.11.c1fd1121`
 - CLI binary name: `recode`
 - Required Node version: `>=22.19.0`
 
@@ -48,7 +48,20 @@ The global package path:
 
 `C:\nvm4w\nodejs\node_modules\@reitaard\repi-coding-agent`
 
-is a normal self-contained npm installation, not a symlink. Its staged package metadata records source commit `b4b58fc949c3d800ce4e29aca9f905c8b3556bb9`. The installed Coding Agent, TUI, Agent, and AI runtime trees were verified byte-for-byte against the feature-complete custom build.
+is a normal self-contained npm installation, not a symlink. Its staged package metadata records source commit `c1fd11219075f03298bec7a1251255e7f179af65`. The installed Coding Agent, TUI, Agent, and AI runtime trees were verified byte-for-byte against the feature-complete custom build.
+
+## Worker architecture
+
+The behavior-preserving worker-folder restructure is committed and pushed at `c6b4dd13`.
+
+- Generic lifecycle, conversation history, cancellation, workspace security, and tools remain under `packages/coding-agent/src/core/delegation`.
+- Worker-owned definitions and specialized implementations live under `packages/coding-agent/src/core/workers/{levi,mayuri,shiori}`.
+- Stable worker ids are `audit`, `research`, and `shiori`.
+- Shiori has a normal private-chat worker definition with read-only project tools and no Kioku write tool.
+- Shiori's schema-constrained memory reviewer remains a separate process-owned path controlled by Cardinal and a single-flight lock.
+- Slash tasks run with Creator identity, do not inherit Aizen's abort signal, and inject a hidden, explicitly untrusted handoff into Aizen at the runtime's next safe turn boundary.
+- Active conversation defaults are bounded to eight globally and eight per worker; over-capacity batches are rejected atomically.
+- `/worker status` exposes conversation ids and `/worker cancel <id>` provides scoped user cancellation.
 
 ## Historical session context
 

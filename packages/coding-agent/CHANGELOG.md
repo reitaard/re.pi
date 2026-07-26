@@ -9,10 +9,14 @@
 - Added Shiori as a passive reviewer in parent Worker Settings, with live-linked model, thinking, Cardinal routing, health, and role controls shared with Memory Settings.
 - Added `worker_start_many` for two to eight concurrent independent worker conversations, including multiple conversations using the same named worker.
 - Added a bounded read-only Git tool for audit workers and explicit sibling-worktree selection restricted to the active Git repository.
+- Added Shiori as a first-class private-chat worker with read-only project tools and Teach Mode while retaining her isolated Cardinal-controlled memory reviewer.
+- Added independent slash-worker tasks that hand hidden, explicitly untrusted reports to Aizen, plus worker status and scoped cancellation commands.
 
 ### Changed
 
 - Organized Levi, Mayuri, and Shiori-owned definitions, tools, and reviewer modules under dedicated worker folders while keeping shared delegation runtime generic.
+- Made `/<worker> <task>` launch an independent handoff to Aizen, `/<worker>` open private chat, and `/shiori review [path]` invoke isolated memory review explicitly.
+- Applied equal default limits of eight active conversations globally and per worker.
 
 ### Fixed
 
@@ -22,6 +26,8 @@
 - Prevented Teach Mode from bypassing staged Creator approval through direct Kioku or Shiori writes.
 - Made empty worker shortcuts and their `new` argument create fresh named direct-chat sessions instead of appending to the active Aizen session.
 - Restored per-worker animated activity and handoff cards for concurrent `worker_start_many` batches.
+- Started Shiori reviews immediately instead of waiting for the active Aizen turn, while preserving the single-flight review guard.
+- Kept overlapping same-worker slash tasks on separate activity widgets and independent cancellation signals.
 
 ## [0.81.4] - 2026-07-22
 
