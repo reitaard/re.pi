@@ -38,7 +38,11 @@ function writeJson(path, value) {
 }
 
 function packWorkspace(packagePath, destination) {
-	const output = runNpm(["pack", packagePath, "--ignore-scripts", "--json", "--pack-destination", destination], root, true);
+	const output = runNpm(
+		["pack", resolve(root, packagePath), "--ignore-scripts", "--json", "--pack-destination", destination],
+		root,
+		true,
+	);
 	const records = JSON.parse(output);
 	const filename = records[0]?.filename;
 	if (typeof filename !== "string" || !filename) throw new Error(`npm pack did not return a filename for ${packagePath}`);
