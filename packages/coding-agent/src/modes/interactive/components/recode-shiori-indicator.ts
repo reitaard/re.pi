@@ -1,5 +1,5 @@
 import type { LoaderIndicatorOptions } from "@reitaard/repi-tui";
-import { RECODE_SHIORI_DISPLAY_NAME } from "../../../core/recode-memory/recode-shiori.ts";
+import { RECODE_SHIORI_DISPLAY_NAME } from "../../../core/workers/shiori/reviewer.ts";
 import type { Theme } from "../theme/theme.ts";
 
 const RECODE_SHIORI_SKY_PALETTE = [

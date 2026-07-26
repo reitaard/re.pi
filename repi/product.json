@@ -1,0 +1,7 @@
+{
+	"schemaVersion": 1,
+	"productName": "RePi",
+	"appName": "recode",
+	"packageName": "@reitaard/repi-coding-agent",
+	"upstreamRemote": "upstream"
+}

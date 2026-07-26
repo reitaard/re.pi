@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { realpathSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
 import type { AgentTool, ThinkingLevel } from "@reitaard/repi-agent-core";
 import type { Model, Models } from "@reitaard/repi-ai";
+import { spawnProcessSync } from "../../utils/child-process.ts";
 import type { ModelRegistry } from "../model-registry.ts";
 import {
 	formatNamedWorkerIdentity,
@@ -10,6 +13,7 @@ import {
 	type NamedWorkerRunResult,
 	type NamedWorkerRunStatus,
 	type NamedWorkerSkill,
+	type NamedWorkerToolName,
 	runNamedWorker,
 } from "./named-worker.ts";
 import {
@@ -21,6 +25,8 @@ import {
 
 const DEFAULT_MAX_HISTORY_CHARACTERS = 24_000;
 const DEFAULT_MAX_CONVERSATIONS = 64;
+const DEFAULT_MAX_ACTIVE_CONVERSATIONS = 8;
+const DEFAULT_MAX_ACTIVE_CONVERSATIONS_PER_WORKER = 8;
 
 export type WorkerConversationStatus = "running" | "closed" | NamedWorkerRunStatus;
 
@@ -64,11 +70,21 @@ export interface WorkerConversationSnapshot {
 	lastToolName?: string;
 	lastOutput?: string;
 	error?: string;
+	workspace: string;
 }
 
 export interface WorkerConversationTurnResult {
 	conversation: WorkerConversationSnapshot;
 	result: NamedWorkerRunResult;
+}
+
+export interface WorkerConversationStartRequest {
+	workerReference: string;
+	message: string;
+	context?: string;
+	signal?: AbortSignal;
+	speaker?: OrchestrationActorIdentity;
+	workspace?: string;
 }
 
 export interface WorkerConversationRestoreTurn {
@@ -106,6 +122,8 @@ export interface WorkerDirectoryOptions extends WorkerDirectoryRuntimeOptions {
 	workers: readonly NamedWorkerDefinition[];
 	maxHistoryCharacters?: number;
 	maxConversations?: number;
+	maxActiveConversations?: number;
+	maxActiveConversationsPerWorker?: number;
 }
 
 interface ConversationHistoryEntry {
@@ -129,6 +147,7 @@ interface WorkerConversationRecord {
 	lastOutput?: string;
 	error?: string;
 	history: ConversationHistoryEntry[];
+	workspace: string;
 	abortController?: AbortController;
 }
 
@@ -145,6 +164,35 @@ function statusFromResult(result: NamedWorkerRunResult): WorkerConversationStatu
 	return result.status;
 }
 
+function normalizeWorkspacePath(workspace: string): string {
+	return process.platform === "win32" && /^\/[a-zA-Z](?:\/|$)/.test(workspace)
+		? `${workspace[1]!.toUpperCase()}:${workspace.slice(2)}`
+		: workspace;
+}
+
+function resolveWorkspacePath(workspace: string): string {
+	return realpathSync(resolve(normalizeWorkspacePath(workspace)));
+}
+
+/** Resolve an absolute or workspace-relative path reported by Git, including MSYS drive paths. */
+export function resolveWorkerGitPath(workspace: string, gitPath: string): string {
+	const normalized = normalizeWorkspacePath(gitPath);
+	return realpathSync(isAbsolute(normalized) ? normalized : resolve(workspace, normalized));
+}
+
+function gitCommonDirectory(workspace: string): string | undefined {
+	const result = spawnProcessSync(
+		"git",
+		["-C", workspace, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+		{
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "pipe"],
+		},
+	);
+	if (result.status !== 0 || !result.stdout.trim()) return undefined;
+	return resolveWorkerGitPath(workspace, result.stdout.trim());
+}
+
 export class WorkerDirectory {
 	private readonly workers: readonly NamedWorkerDefinition[];
 	private readonly byReference = new Map<string, NamedWorkerDefinition>();
@@ -153,7 +201,11 @@ export class WorkerDirectory {
 	private readonly cwd: string;
 	private readonly maxHistoryCharacters: number;
 	private readonly maxConversations: number;
+	private readonly maxActiveConversations: number;
+	private readonly maxActiveConversationsPerWorker: number;
 	private readonly workerSettings = new Map<string, WorkerRuntimeSettings>();
+	private readonly oneShotControllers = new Set<AbortController>();
+	private readonly activeOneShotsByWorker = new Map<string, number>();
 
 	constructor(options: WorkerDirectoryOptions) {
 		if (!options.cwd.trim()) throw new Error("WorkerDirectory cwd is required");
@@ -167,6 +219,15 @@ export class WorkerDirectory {
 		this.runtime = options;
 		this.maxHistoryCharacters = options.maxHistoryCharacters ?? DEFAULT_MAX_HISTORY_CHARACTERS;
 		this.maxConversations = options.maxConversations ?? DEFAULT_MAX_CONVERSATIONS;
+		this.maxActiveConversations = options.maxActiveConversations ?? DEFAULT_MAX_ACTIVE_CONVERSATIONS;
+		this.maxActiveConversationsPerWorker =
+			options.maxActiveConversationsPerWorker ?? DEFAULT_MAX_ACTIVE_CONVERSATIONS_PER_WORKER;
+		if (!Number.isInteger(this.maxActiveConversations) || this.maxActiveConversations <= 0) {
+			throw new Error("WorkerDirectory maxActiveConversations must be a positive integer");
+		}
+		if (!Number.isInteger(this.maxActiveConversationsPerWorker) || this.maxActiveConversationsPerWorker <= 0) {
+			throw new Error("WorkerDirectory maxActiveConversationsPerWorker must be a positive integer");
+		}
 		for (const worker of this.workers) {
 			for (const reference of getNamedWorkerReferences(worker)) {
 				const key = normalizeWorkerReference(reference);
@@ -197,7 +258,7 @@ export class WorkerDirectory {
 				description: worker.description,
 				personality: worker.personality,
 				skillName: worker.skillName,
-				tools: worker.tools ?? ["read", "grep", "find", "ls"],
+				tools: this.effectiveTools(worker).names,
 				thinkingLevel: settings.thinkingLevel,
 				maxOutputTokens: settings.maxOutputTokens,
 				modelPreference: settings.modelPreference,
@@ -242,16 +303,59 @@ export class WorkerDirectory {
 		throw new Error(`Unknown named worker: ${reference}. Available: ${available}`);
 	}
 
+	assertCanStartConversations(workerReferences: readonly string[]): void {
+		this.assertCanStartWorkerIds(workerReferences.map((reference) => this.resolveWorker(reference).id));
+	}
+
+	resolveWorkspace(requestedWorkspace = this.cwd): string {
+		const activeWorkspace = resolveWorkspacePath(this.cwd);
+		const requested = resolveWorkspacePath(requestedWorkspace);
+		if (requested === activeWorkspace) return requested;
+		const activeCommonDirectory = gitCommonDirectory(activeWorkspace);
+		const requestedCommonDirectory = gitCommonDirectory(requested);
+		if (!activeCommonDirectory || requestedCommonDirectory !== activeCommonDirectory) {
+			throw new Error(
+				"Worker workspace must be the active workspace or another worktree of the same Git repository",
+			);
+		}
+		return requested;
+	}
+
 	async runOneShot(
 		workerReference: string,
 		task: string,
 		context?: string,
 		signal?: AbortSignal,
 		speaker: OrchestrationActorIdentity = REPI_AIZEN_IDENTITY,
+		workspace = this.cwd,
 	): Promise<NamedWorkerRunResult> {
+		if (!task.trim()) throw new Error("Worker task is required");
 		const worker = this.resolveWorker(workerReference);
+		const resolvedWorkspace = this.resolveWorkspace(workspace);
+		this.assertCanStartWorkerIds([worker.id]);
+		const controller = new AbortController();
+		const onAbort = () => controller.abort();
+		signal?.addEventListener("abort", onAbort, { once: true });
+		if (signal?.aborted) controller.abort();
+		this.oneShotControllers.add(controller);
+		this.activeOneShotsByWorker.set(worker.id, (this.activeOneShotsByWorker.get(worker.id) ?? 0) + 1);
 		const actorContext = [formatOrchestrationActorContext(speaker), context?.trim()].filter(Boolean).join("\n\n");
-		return this.run(worker, task, actorContext, signal, this.runtime.onProgress);
+		try {
+			return await this.run(
+				worker,
+				resolvedWorkspace,
+				task,
+				actorContext,
+				controller.signal,
+				this.runtime.onProgress,
+			);
+		} finally {
+			this.oneShotControllers.delete(controller);
+			const remaining = (this.activeOneShotsByWorker.get(worker.id) ?? 1) - 1;
+			if (remaining > 0) this.activeOneShotsByWorker.set(worker.id, remaining);
+			else this.activeOneShotsByWorker.delete(worker.id);
+			signal?.removeEventListener("abort", onAbort);
+		}
 	}
 
 	async startConversation(
@@ -260,24 +364,50 @@ export class WorkerDirectory {
 		context?: string,
 		signal?: AbortSignal,
 		speaker: OrchestrationActorIdentity = REPI_AIZEN_IDENTITY,
+		workspace = this.cwd,
 	): Promise<WorkerConversationTurnResult> {
-		this.pruneConversations();
-		const worker = this.resolveWorker(workerReference);
-		const now = Date.now();
-		const record: WorkerConversationRecord = {
-			conversationId: randomUUID(),
-			worker,
-			speaker,
-			status: "completed",
-			taskSummary: summarizeTask(message),
-			createdAt: now,
-			updatedAt: now,
-			turnCount: 0,
-			history: [],
-		};
-		this.conversations.set(record.conversationId, record);
-		const result = await this.executeConversationTurn(record, message, context, signal);
-		return { conversation: this.snapshot(record), result };
+		const [turn] = await this.startConversations([{ workerReference, message, context, signal, speaker, workspace }]);
+		return turn!;
+	}
+
+	async startConversations(
+		requests: readonly WorkerConversationStartRequest[],
+	): Promise<WorkerConversationTurnResult[]> {
+		if (requests.length === 0) throw new Error("At least one worker conversation is required");
+		const prepared = requests.map((request) => {
+			if (!request.message.trim()) throw new Error("Worker message is required");
+			return {
+				...request,
+				worker: this.resolveWorker(request.workerReference),
+				workspace: this.resolveWorkspace(request.workspace ?? this.cwd),
+			};
+		});
+		this.assertCanStartWorkerIds(prepared.map((request) => request.worker.id));
+		this.ensureConversationSlots(prepared.length);
+
+		const records = prepared.map((request) => {
+			const now = Date.now();
+			const record: WorkerConversationRecord = {
+				conversationId: randomUUID(),
+				worker: request.worker,
+				speaker: request.speaker ?? REPI_AIZEN_IDENTITY,
+				status: "completed",
+				taskSummary: summarizeTask(request.message),
+				createdAt: now,
+				updatedAt: now,
+				turnCount: 0,
+				history: [],
+				workspace: request.workspace,
+			};
+			this.conversations.set(record.conversationId, record);
+			return { request, record };
+		});
+		return Promise.all(
+			records.map(async ({ request, record }) => {
+				const result = await this.executeConversationTurn(record, request.message, request.context, request.signal);
+				return { conversation: this.snapshot(record), result };
+			}),
+		);
 	}
 
 	async messageConversation(
@@ -288,6 +418,7 @@ export class WorkerDirectory {
 	): Promise<WorkerConversationTurnResult> {
 		const record = this.requireConversation(conversationId);
 		if (record.status === "closed") throw new Error(`Worker conversation is closed: ${conversationId}`);
+		this.assertConversationCapacity(record.worker.id);
 		const result = await this.executeConversationTurn(record, message, context, signal);
 		return { conversation: this.snapshot(record), result };
 	}
@@ -311,6 +442,7 @@ export class WorkerDirectory {
 				updatedAt: turn.updatedAt,
 				turnCount: 0,
 				history: [],
+				workspace: this.resolveWorkspace(),
 			};
 			this.conversations.set(record.conversationId, record);
 		} else if (record.worker.id !== worker.id || record.speaker.id !== turn.speaker.id) {
@@ -363,6 +495,7 @@ export class WorkerDirectory {
 	}
 
 	closeAll(): void {
+		for (const controller of this.oneShotControllers) controller.abort();
 		for (const record of this.conversations.values()) record.abortController?.abort();
 		this.conversations.clear();
 	}
@@ -393,12 +526,19 @@ export class WorkerDirectory {
 
 		const conversationContext = this.buildConversationContext(record, context);
 		try {
-			let result = await this.run(record.worker, message, conversationContext, controller.signal, (event) => {
-				if (event.type === "start") record.runId = event.runId;
-				if (event.type === "tool_start") record.lastToolName = event.toolName;
-				record.updatedAt = Date.now();
-				this.runtime.onProgress?.(event);
-			});
+			let result = await this.run(
+				record.worker,
+				record.workspace,
+				message,
+				conversationContext,
+				controller.signal,
+				(event) => {
+					if (event.type === "start") record.runId = event.runId;
+					if (event.type === "tool_start") record.lastToolName = event.toolName;
+					record.updatedAt = Date.now();
+					this.runtime.onProgress?.(event);
+				},
+			);
 			if (this.runtime.transformResult) {
 				result = await this.runtime.transformResult(record.worker, record.speaker, result);
 			}
@@ -444,6 +584,7 @@ export class WorkerDirectory {
 
 	private async run(
 		worker: NamedWorkerDefinition,
+		workspace: string,
 		task: string,
 		context: string | undefined,
 		signal: AbortSignal | undefined,
@@ -455,10 +596,12 @@ export class WorkerDirectory {
 			: undefined;
 		const model = preferredModel ?? this.runtime.getModel?.() ?? this.runtime.model;
 		if (!model) throw new Error("Cannot run worker without an active model");
+		const effectiveTools = this.effectiveTools(worker);
 		return runNamedWorker({
-			cwd: this.cwd,
+			cwd: workspace,
 			worker: {
 				...worker,
+				tools: effectiveTools.names,
 				thinkingLevel: settings.thinkingLevel,
 				maxOutputTokens: settings.maxOutputTokens,
 			},
@@ -466,7 +609,7 @@ export class WorkerDirectory {
 			skills: this.runtime.getSkills?.() ?? this.runtime.skills,
 			models: this.runtime.models,
 			modelRegistry: this.runtime.modelRegistry,
-			externalTools: this.runtime.getExternalTools?.(worker),
+			externalTools: effectiveTools.external,
 			task,
 			context,
 			timeoutMs: this.runtime.timeoutMs,
@@ -474,6 +617,17 @@ export class WorkerDirectory {
 			signal,
 			onProgress,
 		});
+	}
+
+	private effectiveTools(worker: NamedWorkerDefinition): {
+		names: readonly NamedWorkerToolName[];
+		external: readonly AgentTool[];
+	} {
+		const external = this.runtime.getExternalTools?.(worker) ?? [];
+		const names = [
+			...new Set([...(worker.tools ?? ["read", "grep", "find", "ls"]), ...external.map((tool) => tool.name)]),
+		] as NamedWorkerToolName[];
+		return { names, external };
 	}
 
 	private buildConversationContext(record: WorkerConversationRecord, hostContext?: string): string | undefined {
@@ -516,7 +670,46 @@ export class WorkerDirectory {
 			lastToolName: record.lastToolName,
 			lastOutput: record.lastOutput,
 			error: record.error,
+			workspace: record.workspace,
 		};
+	}
+
+	private assertConversationCapacity(workerId: string): void {
+		this.assertCanStartWorkerIds([workerId]);
+	}
+
+	private assertCanStartWorkerIds(requestedWorkerIds: readonly string[]): void {
+		const running = [...this.conversations.values()].filter((record) => record.status === "running");
+		const activeOneShots = [...this.activeOneShotsByWorker.values()].reduce((sum, count) => sum + count, 0);
+		if (running.length + activeOneShots + requestedWorkerIds.length > this.maxActiveConversations) {
+			throw new Error(`Worker conversation concurrency limit reached (${this.maxActiveConversations})`);
+		}
+		for (const workerId of new Set(requestedWorkerIds)) {
+			const runningForWorker = running.filter((record) => record.worker.id === workerId).length;
+			const activeOneShotsForWorker = this.activeOneShotsByWorker.get(workerId) ?? 0;
+			const requestedForWorker = requestedWorkerIds.filter((candidate) => candidate === workerId).length;
+			if (runningForWorker + activeOneShotsForWorker + requestedForWorker > this.maxActiveConversationsPerWorker) {
+				throw new Error(
+					`Worker concurrency limit reached for ${workerId} (${this.maxActiveConversationsPerWorker})`,
+				);
+			}
+		}
+	}
+
+	private ensureConversationSlots(requiredSlots: number): void {
+		if (requiredSlots > this.maxConversations) {
+			throw new Error("Worker conversation limit reached; close an existing conversation first");
+		}
+		const removable = [...this.conversations.values()]
+			.filter((record) => record.status !== "running")
+			.sort((left, right) => left.updatedAt - right.updatedAt);
+		while (this.conversations.size + requiredSlots > this.maxConversations && removable.length > 0) {
+			const record = removable.shift();
+			if (record) this.conversations.delete(record.conversationId);
+		}
+		if (this.conversations.size + requiredSlots > this.maxConversations) {
+			throw new Error("Worker conversation limit reached; close an existing conversation first");
+		}
 	}
 
 	private requireConversation(conversationId: string): WorkerConversationRecord {

@@ -134,10 +134,10 @@ export class FooterComponent implements Component {
 		const statsParts = [];
 		if (totalInput) statsParts.push(theme.fg("accent", `↑${formatTokens(totalInput)}`));
 		if (totalOutput) statsParts.push(theme.fg("accent", `↓${formatTokens(totalOutput)}`));
-		if (totalCacheRead) statsParts.push(`R${formatTokens(totalCacheRead)}`);
-		if (totalCacheWrite) statsParts.push(`W${formatTokens(totalCacheWrite)}`);
+		if (totalCacheRead) statsParts.push(theme.fg("accent", `R${formatTokens(totalCacheRead)}`));
+		if (totalCacheWrite) statsParts.push(theme.fg("accent", `W${formatTokens(totalCacheWrite)}`));
 		if ((totalCacheRead > 0 || totalCacheWrite > 0) && latestCacheHitRate !== undefined) {
-			statsParts.push(`CH${latestCacheHitRate.toFixed(1)}%`);
+			statsParts.push(theme.fg("accent", `CH${latestCacheHitRate.toFixed(1)}%`));
 		}
 		// Show cost with "(sub)" indicator if using OAuth subscription
 		const usingSubscription = state.model ? this.session.modelRegistry.isUsingOAuth(state.model) : false;

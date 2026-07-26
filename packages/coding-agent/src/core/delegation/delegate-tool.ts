@@ -25,6 +25,9 @@ function createDelegateSchema(workers: readonly NamedWorkerDefinition[]) {
 		context: Type.Optional(
 			Type.String({ description: "Small parent-supplied context that is necessary to complete the task" }),
 		),
+		workspace: Type.Optional(
+			Type.String({ description: "Active workspace or another worktree of the same Git repository" }),
+		),
 	});
 }
 
@@ -125,7 +128,14 @@ export function createDelegateTool(options: CreateDelegateToolOptions): AgentToo
 		parameters,
 		executionMode: "parallel",
 		async execute(_toolCallId, input, signal) {
-			const result = await directory.runOneShot(input.worker, input.task, input.context, signal);
+			const result = await directory.runOneShot(
+				input.worker,
+				input.task,
+				input.context,
+				signal,
+				undefined,
+				input.workspace,
+			);
 			return {
 				content: [{ type: "text", text: formatToolResult(result) }],
 				details: { result },

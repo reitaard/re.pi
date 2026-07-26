@@ -611,7 +611,7 @@ export class AgentSession {
 
 	/** Internal handler for agent events - shared by subscribe and reconnect */
 	private _handleAgentEvent = async (event: AgentEvent): Promise<void> => {
-		if (event.type === "agent_start") {
+		if (event.type === "agent_start" && !this._sessionControl) {
 			this._sessionControl = new RecodeSessionControlHost(
 				getAgentDir(),
 				this.sessionId,
@@ -3349,7 +3349,10 @@ export class AgentSession {
 			}
 		}
 
-		const estimate = estimateContextTokens(this.messages);
+		// AgentHarness persists each model/tool-loop step before synchronizing agent.state.messages
+		// at the outer turn boundary. Read the live, compaction-aware branch so the footer updates
+		// after every completed model step instead of showing stale pre-compaction usage.
+		const estimate = estimateContextTokens(this.sessionManager.buildSessionContext().messages);
 		const percent = (estimate.tokens / contextWindow) * 100;
 
 		return {

@@ -52,7 +52,7 @@ describe("Aizen runtime profile", () => {
 		expect(profile.thinkingLevel).toBe("low");
 		expect(profile.activeToolNames).toEqual(["read"]);
 		expect(profile.tools.map((tool) => tool.name)).toEqual(["read"]);
-		expect(profile.systemPrompt).toContain("You are Aizen (藍染), RePi's main coding agent and Manager.");
+		expect(profile.systemPrompt).toContain("You are Aizen (藍染), Recode's main coding agent and Manager.");
 		expect(profile.steeringMode).toBe(session.steeringMode);
 		expect(profile.followUpMode).toBe(session.followUpMode);
 		expect(profile.resources.promptTemplates).toEqual([

@@ -7,7 +7,7 @@ import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { createDelegateTool } from "../src/core/delegation/delegate-tool.ts";
 import { type NamedWorkerDefinition, runNamedWorker } from "../src/core/delegation/named-worker.ts";
-import { REPI_NAMED_WORKERS } from "../src/core/delegation/worker-registry.ts";
+import { REPI_NAMED_WORKERS } from "../src/core/workers/registry.ts";
 
 let providerCount = 0;
 
@@ -42,10 +42,11 @@ function messageText(messages: Array<{ role: string; content: unknown }>): strin
 }
 
 describe("named worker delegation", () => {
-	it("registers only the two stable worker ids with swappable display names", () => {
+	it("registers the stable worker ids with swappable display names", () => {
 		expect(REPI_NAMED_WORKERS.map(({ id, displayName, aliases }) => ({ id, displayName, aliases }))).toEqual([
 			{ id: "research", displayName: "Mayuri", aliases: ["研究"] },
 			{ id: "audit", displayName: "Levi", aliases: ["監査"] },
+			{ id: "shiori", displayName: "Shiori", aliases: ["栞"] },
 		]);
 		expect(REPI_NAMED_WORKERS.find((candidate) => candidate.id === "research")?.skillName).toBe("librarian");
 		expect(REPI_NAMED_WORKERS.find((candidate) => candidate.id === "research")?.tools).toEqual([
@@ -54,6 +55,13 @@ describe("named worker delegation", () => {
 			"get_search_content",
 		]);
 		expect(REPI_NAMED_WORKERS.find((candidate) => candidate.id === "research")?.tools).not.toContain("read");
+		expect(REPI_NAMED_WORKERS.find((candidate) => candidate.id === "shiori")?.tools).toEqual([
+			"read",
+			"grep",
+			"find",
+			"ls",
+		]);
+		expect(REPI_NAMED_WORKERS.find((candidate) => candidate.id === "shiori")?.tools).not.toContain("kioku_write");
 		expect(REPI_NAMED_WORKERS.every((candidate) => Boolean(candidate.personality))).toBe(true);
 	});
 
@@ -85,6 +93,35 @@ describe("named worker delegation", () => {
 		expect(systemPrompt).toContain("You are Reviewer");
 		expect(systemPrompt).toContain("Do not delegate");
 		expect(systemPrompt).toContain("Personality: Calm and exact.");
+	});
+
+	it("runs Shiori as a normal read-only private worker without Kioku write access", async () => {
+		const { registration, models } = createFaux();
+		let toolNames: string[] = [];
+		let systemPrompt = "";
+		registration.setResponses([
+			(context) => {
+				toolNames = context.tools?.map((tool) => tool.name) ?? [];
+				systemPrompt = context.systemPrompt ?? "";
+				return fauxAssistantMessage("I can help organize that knowledge without claiming it was saved.");
+			},
+		]);
+		const shiori = REPI_NAMED_WORKERS.find((candidate) => candidate.id === "shiori");
+		if (!shiori) throw new Error("Shiori worker missing");
+
+		const result = await runNamedWorker({
+			cwd: process.cwd(),
+			model: registration.getModel(),
+			models,
+			worker: shiori,
+			task: "Help organize this project decision.",
+		});
+
+		expect(result.status).toBe("completed");
+		expect(toolNames).toEqual(["read", "grep", "find", "ls"]);
+		expect(toolNames).not.toContain("kioku_write");
+		expect(systemPrompt).toContain("normal private conversation");
+		expect(systemPrompt).toContain("Cardinal remains the only admission path into Kioku");
 	});
 
 	it("explicitly invokes Mayuri's loaded librarian skill", async () => {
@@ -276,14 +313,20 @@ describe("named worker delegation", () => {
 			"Levi",
 			"監査",
 			"Levi (監査)",
+			"shiori",
+			"Shiori",
+			"栞",
+			"Shiori (栞)",
 		]);
 		expect(workerSchema.description).toContain("Mayuri (研究) -> research");
 		expect(workerSchema.description).toContain("Levi (監査) -> audit");
+		expect(workerSchema.description).toContain("Shiori (栞) -> shiori");
 		expect(delegate.description).toContain("explicitly requests a worker");
 		expect(delegate.description).toContain("simple read/grep/find/ls task");
 		expect(delegate.description).toContain("do not replace the worker");
 		expect(delegate.description).toContain("id=research; name=Mayuri");
 		expect(delegate.description).toContain("id=audit; name=Levi");
+		expect(delegate.description).toContain("id=shiori; name=Shiori");
 	});
 
 	it("accepts display-name aliases but returns the canonical worker id", async () => {

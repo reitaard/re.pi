@@ -3,6 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { RecodeMemoryRuntime } from "../src/core/recode-memory/recode-memory-runtime.ts";
+import { type SessionEntry, SessionManager } from "../src/core/session-manager.ts";
+import {
+	addRecodeShioriResponseFormat,
+	getRecodeLmStudioNativeChatUrl,
+	runRecodeShioriHarness,
+} from "../src/core/workers/shiori/harness.ts";
 import {
 	buildRecodeShioriReviewChunks,
 	executeRecodeShiori,
@@ -10,13 +16,7 @@ import {
 	getRecodeShioriGreeting,
 	parseRecodeShioriCandidates,
 	RECODE_SHIORI_CHECKPOINT,
-} from "../src/core/recode-memory/recode-shiori.ts";
-import {
-	addRecodeShioriResponseFormat,
-	getRecodeLmStudioNativeChatUrl,
-	runRecodeShioriHarness,
-} from "../src/core/recode-memory/recode-shiori-harness.ts";
-import { type SessionEntry, SessionManager } from "../src/core/session-manager.ts";
+} from "../src/core/workers/shiori/reviewer.ts";
 import { normalizeRecodeMemoryConfig } from "../src/recode-memory.ts";
 
 function userEntry(id: string, parentId: string | null, text: string): SessionEntry {

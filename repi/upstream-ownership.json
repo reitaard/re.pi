@@ -1,0 +1,18 @@
+{
+	"schemaVersion": 1,
+	"upstreamBase": "1f9e846c84f7d53356e7904e53f67b479d6f9c86",
+	"defaultTarget": "upstream/main",
+	"protectedPaths": [
+		".pi/**",
+		"repi/**",
+		"update/**",
+		"scripts/recode/**",
+		"packages/coding-agent/src/recode-*.ts",
+		"packages/coding-agent/src/core/recode-*.ts",
+		"packages/coding-agent/src/core/recode-*/**",
+		"packages/coding-agent/src/core/delegation/**",
+		"packages/coding-agent/src/modes/interactive/components/recode-*.ts",
+		"packages/coding-agent/test/recode-*.test.ts",
+		"packages/orchestrator/**"
+	]
+}

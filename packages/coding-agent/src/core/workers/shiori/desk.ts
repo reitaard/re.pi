@@ -1,6 +1,6 @@
 import { copyFile, mkdir, readFile, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
-import type { RecodeMemoryManager } from "./recode-memory-manager.ts";
+import type { RecodeMemoryManager } from "../../recode-memory/recode-memory-manager.ts";
 
 const MAX_INTAKE_BYTES = 512 * 1024;
 

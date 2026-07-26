@@ -16,6 +16,8 @@ interface MemoryFile {
 	path: string;
 }
 
+const RECODE_MEMORY_INDEX_VERSION = "entry-v2";
+
 const SENSITIVE_PATTERNS = [
 	/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/i,
 	/\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password)\s*[:=]\s*\S{8,}/i,
@@ -113,7 +115,7 @@ export class RecodeMemoryManager {
 		for (const file of files) {
 			const path = resolve(file.path);
 			const [content, info] = await Promise.all([readFile(path, "utf8"), stat(path)]);
-			const hash = createHash("sha256").update(content).digest("hex");
+			const hash = createHash("sha256").update(`${RECODE_MEMORY_INDEX_VERSION}\0`).update(content).digest("hex");
 			const previous = this.store.getDocument(path);
 			if (previous?.hash === hash && previous.mtimeMs === info.mtimeMs) {
 				unchanged += 1;

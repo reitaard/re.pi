@@ -9,7 +9,6 @@ import {
 	createDelegateTool,
 	createWorkerControlTools,
 	ensureWorkerStorage,
-	REPI_NAMED_WORKERS,
 	WorkerDirectory,
 } from "./delegation/index.ts";
 import type { ExtensionContext, SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
@@ -25,8 +24,10 @@ import type { SessionManager } from "./session-manager.ts";
 import { SettingsManager } from "./settings-manager.ts";
 import { createPackageManageToolDefinition } from "./tools/package-manage.ts";
 import { createToolDefinitionFromAgentTool, wrapToolDefinition } from "./tools/tool-definition-wrapper.ts";
+import { REPI_NAMED_WORKERS } from "./workers/registry.ts";
 
 const DELEGATION_ENV = "REPI_DELEGATION";
+const SHARED_WORKER_TOOL_NAMES = ["kioku_search"] as const;
 const MAYURI_WEB_TOOL_NAMES = ["web_search", "fetch_content", "get_search_content"] as const;
 
 /** Non-fatal issues collected while creating services or sessions. */
@@ -74,9 +75,9 @@ export interface AgentSessionServices {
 	diagnostics: AgentSessionRuntimeDiagnostic[];
 }
 
-function isTruthyEnvFlag(value: string | undefined): boolean {
-	if (!value) return false;
-	return value === "1" || value.toLowerCase() === "true" || value.toLowerCase() === "yes";
+export function isDelegationEnabled(value: string | undefined): boolean {
+	if (value === undefined || !value.trim()) return true;
+	return !["0", "false", "no", "off"].includes(value.trim().toLowerCase());
 }
 
 function resolveCurrentModel(options: CreateAgentSessionFromServicesOptions): Model<any> | undefined {
@@ -106,12 +107,16 @@ function createWorkerExtensionContext(options: CreateAgentSessionFromServicesOpt
 	};
 }
 
-function createMayuriWebTools(options: CreateAgentSessionFromServicesOptions): AgentTool[] {
+function createWorkerExternalTools(
+	options: CreateAgentSessionFromServicesOptions,
+	worker: { id: string },
+): AgentTool[] {
 	const definitionsByName = new Map<string, ToolDefinition>();
 	for (const extension of options.services.resourceLoader.getExtensions().extensions) {
 		for (const [name, registeredTool] of extension.tools) definitionsByName.set(name, registeredTool.definition);
 	}
-	return MAYURI_WEB_TOOL_NAMES.flatMap((name) => {
+	const names = [...SHARED_WORKER_TOOL_NAMES, ...(worker.id === "research" ? MAYURI_WEB_TOOL_NAMES : [])];
+	return names.flatMap((name) => {
 		const definition = definitionsByName.get(name);
 		return definition ? [wrapToolDefinition(definition, () => createWorkerExtensionContext(options))] : [];
 	});
@@ -121,7 +126,7 @@ function getOrCreateWorkerDirectory(options: CreateAgentSessionFromServicesOptio
 	const runtime = {
 		getModel: () => resolveCurrentModel(options),
 		getSkills: () => options.services.resourceLoader.getSkills().skills,
-		getExternalTools: (worker: { id: string }) => (worker.id === "research" ? createMayuriWebTools(options) : []),
+		getExternalTools: (worker: { id: string }) => createWorkerExternalTools(options, worker),
 		modelRegistry: options.services.modelRegistry,
 	};
 	if (options.services.workerDirectory) {
@@ -139,6 +144,7 @@ function getOrCreateWorkerDirectory(options: CreateAgentSessionFromServicesOptio
 
 function resolveCustomTools(options: CreateAgentSessionFromServicesOptions): ToolDefinition[] | undefined {
 	const customTools = [...(options.customTools ?? [])];
+	if (options.noTools) return customTools.length > 0 ? customTools : undefined;
 	customTools.push(
 		createPackageManageToolDefinition({
 			cwd: options.services.cwd,
@@ -146,7 +152,7 @@ function resolveCustomTools(options: CreateAgentSessionFromServicesOptions): Too
 			settingsManager: options.services.settingsManager,
 		}),
 	);
-	if (!isTruthyEnvFlag(process.env[DELEGATION_ENV])) return customTools.length > 0 ? customTools : undefined;
+	if (!isDelegationEnabled(process.env[DELEGATION_ENV])) return customTools.length > 0 ? customTools : undefined;
 
 	const directory = getOrCreateWorkerDirectory(options);
 	const workerTools = [createDelegateTool({ directory }), ...createWorkerControlTools(directory)];
@@ -208,7 +214,7 @@ export async function createAgentSessionServices(
 	const authStorage = options.authStorage ?? AuthStorage.create(join(agentDir, "auth.json"));
 	const settingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir);
 	const modelRegistry = options.modelRegistry ?? ModelRegistry.create(authStorage, join(agentDir, "models.json"));
-	const workerDirectory = isTruthyEnvFlag(process.env[DELEGATION_ENV])
+	const workerDirectory = isDelegationEnabled(process.env[DELEGATION_ENV])
 		? new WorkerDirectory({
 				cwd,
 				workers: REPI_NAMED_WORKERS,

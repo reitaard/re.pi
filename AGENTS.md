@@ -1,5 +1,10 @@
 # Development Rules
 
+## Repository Operations
+
+- Read `OPERATIONS.md` before update, release, packaging, installation, worker, memory, orchestrator, or remote-deployment work.
+- For update and release work, follow the reading order under `update/README.md` and keep its context, decisions, plan, and log current.
+
 ## Conversational Style
 
 - No emojis in commits, issues, PR comments, or code
@@ -162,9 +167,9 @@ Attribution:
 
    The release script bumps all package versions, updates changelogs, regenerates release artifacts, runs `npm run check`, commits `Release vX.Y.Z`, tags `vX.Y.Z`, adds fresh `## [Unreleased]` changelog sections, commits `Add [Unreleased] section for next cycle`, then pushes `main` and the tag. Do not rerun the release script after a tag was pushed.
 
-4. **CI publishes npm packages**: pushing the `vX.Y.Z` tag triggers `.github/workflows/build-binaries.yml`. The `publish-npm` job uses npm trusted publishing through GitHub Actions OIDC with environment `npm-publish`; no local `npm publish`, `npm whoami`, OTP, or WebAuthn flow is required.
+4. **Npm publication is currently blocked**: `.github/workflows/build-binaries.yml` currently builds and publishes approval-gated GitHub release assets but has no `publish-npm` job. Do not run a release until a reviewed npm trusted-publishing job and idempotent publish helper are restored. Never substitute local `npm publish`, `npm whoami`, OTP, or WebAuthn publication.
 
-5. **If CI publish fails**: inspect the failed `publish-npm` job. The publish helper is idempotent and skips package versions already present on npm, so rerun the tag workflow after fixing CI or transient npm issues. Do not rerun `npm run release:patch` or `npm run release:minor` for the same version.
+5. **After trusted publishing is restored**: inspect and rerun only the failed tag workflow when npm publication fails. The publish helper must skip package versions already present on npm. Do not rerun `npm run release:patch` or `npm run release:minor` for the same version.
 
 ## User Override
 

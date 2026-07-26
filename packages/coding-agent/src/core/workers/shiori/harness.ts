@@ -1,8 +1,8 @@
 import { AgentHarness, InMemorySessionStorage, Session } from "@reitaard/repi-agent-core";
 import { NodeExecutionEnv } from "@reitaard/repi-agent-core/node";
 import type { AssistantMessage, Model } from "@reitaard/repi-ai";
-import { createHarnessModels } from "../harness-models.ts";
-import type { ModelRegistry } from "../model-registry.ts";
+import { createHarnessModels } from "../../harness-models.ts";
+import type { ModelRegistry } from "../../model-registry.ts";
 
 const SHIORI_NON_THINKING_MAX_OUTPUT_TOKENS = 1024;
 const SHIORI_THINKING_MAX_OUTPUT_TOKENS = 4096;

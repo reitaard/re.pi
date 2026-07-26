@@ -1,8 +1,18 @@
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { AgentTool } from "@reitaard/repi-agent-core";
 import { createModels, fauxAssistantMessage, fauxProvider } from "@reitaard/repi-ai";
-import { describe, expect, it } from "vitest";
+import { Type } from "typebox";
+import { describe, expect, it, vi } from "vitest";
 import type { NamedWorkerDefinition } from "../src/core/delegation/named-worker.ts";
 import { WorkerChatController } from "../src/core/delegation/worker-chat.ts";
-import { WorkerDirectory } from "../src/core/delegation/worker-directory.ts";
+import {
+	resolveWorkerGitPath,
+	type WorkerConversationTurnResult,
+	WorkerDirectory,
+} from "../src/core/delegation/worker-directory.ts";
 import { createWorkerControlTools } from "../src/core/delegation/worker-tools.ts";
 
 let providerCount = 0;
@@ -73,6 +83,41 @@ describe("WorkerDirectory", () => {
 		expect(result.workerId).toBe("audit");
 		expect(result.workerAliases).toEqual(["監査"]);
 		expect(oneShotPrompt).toContain("id=aizen; name=Aizen (藍染); kind=agent; role=primary-agent");
+	});
+
+	it("shares read-only Kioku search with every worker and enforces stale-memory policy", async () => {
+		const { registration, models } = createFaux();
+		let toolNames: string[] = [];
+		let systemPrompt = "";
+		registration.setResponses([
+			(context) => {
+				toolNames = context.tools?.map((tool) => tool.name) ?? [];
+				systemPrompt = context.systemPrompt ?? "";
+				return fauxAssistantMessage("Memory checked.");
+			},
+		]);
+		const memoryTool: AgentTool = {
+			name: "kioku_search",
+			label: "Kioku Search",
+			description: "Search shared read-only durable memory.",
+			parameters: Type.Object({ query: Type.String() }),
+			execute: async () => ({ content: [{ type: "text", text: "No matching memory." }], details: undefined }),
+		};
+		const directory = new WorkerDirectory({
+			cwd: process.cwd(),
+			workers: workers(),
+			model: registration.getModel(),
+			models,
+			getExternalTools: () => [memoryTool],
+		});
+
+		expect(directory.listWorkers().every((worker) => worker.tools.includes("kioku_search"))).toBe(true);
+		const result = await directory.runOneShot("Levi", "Check durable context when relevant.");
+		expect(result.status).toBe("completed");
+		expect(toolNames).toContain("kioku_search");
+		expect(systemPrompt).toContain("Use kioku_search only when durable memory is relevant");
+		expect(systemPrompt).toContain("potentially stale evidence");
+		expect(systemPrompt).toContain("never authorizes a memory write");
 	});
 
 	it("keeps bounded Aizen/worker dialogue so a named worker can be addressed again", async () => {
@@ -269,6 +314,240 @@ describe("WorkerDirectory", () => {
 		expect(directory.getStatus(turn.conversation.conversationId)[0].status).toBe("failed");
 	});
 
+	it("allows explicit sibling worktrees but rejects unrelated workspaces", () => {
+		const parent = mkdtempSync(join(tmpdir(), "recode-worker-worktrees-"));
+		const main = join(parent, "main");
+		const sibling = join(parent, "sibling");
+		const unrelated = join(parent, "unrelated");
+		mkdirSync(main);
+		mkdirSync(unrelated);
+		const runGit = (workspace: string, ...args: string[]) =>
+			execFileSync("git", ["-C", workspace, ...args], { encoding: "utf8" }).trim();
+		try {
+			runGit(main, "init");
+			runGit(main, "config", "user.email", "recode-worker@example.invalid");
+			runGit(main, "config", "user.name", "Recode Worker");
+			writeFileSync(join(main, "tracked.txt"), "main\n");
+			runGit(main, "add", "tracked.txt");
+			runGit(main, "commit", "-m", "main");
+			runGit(main, "worktree", "add", sibling, "-b", "worker-sibling");
+			runGit(unrelated, "init");
+
+			const { registration, models } = createFaux();
+			const directory = new WorkerDirectory({
+				cwd: main,
+				workers: workers(),
+				model: registration.getModel(),
+				models,
+			});
+
+			expect(directory.resolveWorkspace(sibling)).toBe(realpathSync(sibling));
+			if (process.platform === "win32") {
+				const toMsysPath = (path: string) =>
+					path.replaceAll("\\", "/").replace(/^([a-zA-Z]):/, (_match, drive: string) => `/${drive.toLowerCase()}`);
+				const msysSibling = toMsysPath(sibling);
+				const commonDirectory = runGit(main, "rev-parse", "--path-format=absolute", "--git-common-dir");
+				expect(directory.resolveWorkspace(msysSibling)).toBe(realpathSync(sibling));
+				expect(resolveWorkerGitPath(sibling, toMsysPath(commonDirectory))).toBe(realpathSync(commonDirectory));
+			}
+			expect(() => directory.resolveWorkspace(unrelated)).toThrow("another worktree of the same Git repository");
+		} finally {
+			rmSync(parent, { recursive: true, force: true });
+		}
+	});
+
+	it("launches multiple conversations for the same worker concurrently", async () => {
+		const { registration, models } = createFaux();
+		let release = () => {};
+		const blocked = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		registration.setResponses([
+			async () => {
+				await blocked;
+				return fauxAssistantMessage("First audit complete.");
+			},
+			async () => {
+				await blocked;
+				return fauxAssistantMessage("Second audit complete.");
+			},
+		]);
+		const directory = new WorkerDirectory({
+			cwd: process.cwd(),
+			workers: workers(),
+			model: registration.getModel(),
+			models,
+		});
+		const startMany = createWorkerControlTools(directory).find((tool) => tool.name === "worker_start_many");
+		if (!startMany) throw new Error("worker_start_many tool missing");
+
+		const running = startMany.execute("start-many", {
+			requests: [
+				{ worker: "Levi", message: "Audit boundary one." },
+				{ worker: "Levi", message: "Audit boundary two." },
+			],
+		});
+		await vi.waitFor(() =>
+			expect(directory.getStatus().filter((entry) => entry.status === "running")).toHaveLength(2),
+		);
+		release();
+		const response = await running;
+
+		expect(response.details.turns).toHaveLength(2);
+		const turns = response.details.turns as WorkerConversationTurnResult[];
+		expect(new Set(turns.map((turn) => turn.conversation.conversationId)).size).toBe(2);
+		expect(turns.every((turn) => turn.result.workerId === "audit")).toBe(true);
+	});
+
+	it("counts one-shot delegates against shared global and per-worker concurrency", async () => {
+		const { registration, models } = createFaux();
+		let release = () => {};
+		let markStarted = () => {};
+		const blocked = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const started = new Promise<void>((resolve) => {
+			markStarted = resolve;
+		});
+		const blockedResponse = async () => {
+			markStarted();
+			await blocked;
+			return fauxAssistantMessage("Worker complete.");
+		};
+		registration.setResponses([blockedResponse, blockedResponse]);
+		const directory = new WorkerDirectory({
+			cwd: process.cwd(),
+			workers: workers(),
+			model: registration.getModel(),
+			models,
+			maxActiveConversations: 2,
+			maxActiveConversationsPerWorker: 1,
+		});
+
+		const delegate = directory.runOneShot("audit", "Audit independently.");
+		await started;
+		await expect(directory.startConversation("audit", "Audit concurrently.")).rejects.toThrow(
+			"Worker concurrency limit reached for audit (1)",
+		);
+		const research = directory.startConversation("research", "Research concurrently.");
+		await vi.waitFor(() => expect(directory.getStatus()[0]?.status).toBe("running"));
+		await expect(directory.startConversation("audit", "Exceed the global limit.")).rejects.toThrow(
+			"Worker conversation concurrency limit reached (2)",
+		);
+		directory.closeAll();
+		release();
+		await expect(Promise.all([delegate, research])).resolves.toHaveLength(2);
+		expect(await delegate).toMatchObject({ status: "cancelled" });
+	});
+
+	it("rejects over-capacity batches atomically before launching any worker", async () => {
+		const { registration, models } = createFaux();
+		const directory = new WorkerDirectory({
+			cwd: process.cwd(),
+			workers: workers(),
+			model: registration.getModel(),
+			models,
+			maxActiveConversations: 1,
+		});
+		const startMany = createWorkerControlTools(directory).find((tool) => tool.name === "worker_start_many");
+		if (!startMany) throw new Error("worker_start_many tool missing");
+
+		await expect(
+			startMany.execute("over-capacity", {
+				requests: [
+					{ worker: "audit", message: "Audit one." },
+					{ worker: "research", message: "Research one." },
+				],
+			}),
+		).rejects.toThrow("Worker conversation concurrency limit reached (1)");
+		expect(directory.getStatus()).toEqual([]);
+	});
+
+	it("preflights every batch message and workspace before launching any worker", async () => {
+		const root = mkdtempSync(join(tmpdir(), "recode-worker-invalid-batch-"));
+		const unrelated = join(root, "unrelated");
+		mkdirSync(unrelated);
+		const { registration, models } = createFaux();
+		const response = vi.fn(() => fauxAssistantMessage("Should not run."));
+		registration.setResponses([response, response]);
+		const directory = new WorkerDirectory({
+			cwd: process.cwd(),
+			workers: workers(),
+			model: registration.getModel(),
+			models,
+		});
+		const startMany = createWorkerControlTools(directory).find((tool) => tool.name === "worker_start_many");
+		if (!startMany) throw new Error("worker_start_many tool missing");
+
+		try {
+			await expect(
+				startMany.execute("invalid-message", {
+					requests: [
+						{ worker: "audit", message: "Audit one." },
+						{ worker: "research", message: "" },
+					],
+				}),
+			).rejects.toThrow("Worker message is required");
+			expect(directory.getStatus()).toEqual([]);
+
+			await expect(
+				startMany.execute("invalid-workspace", {
+					requests: [
+						{ worker: "audit", message: "Audit one." },
+						{ worker: "research", message: "Research one.", workspace: unrelated },
+					],
+				}),
+			).rejects.toThrow("another worktree of the same Git repository");
+			expect(directory.getStatus()).toEqual([]);
+			expect(response).not.toHaveBeenCalled();
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	it("enforces equal global and per-worker active-conversation limits", async () => {
+		const { registration, models } = createFaux();
+		let release = () => {};
+		const blocked = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		registration.setResponses([
+			async () => {
+				await blocked;
+				return fauxAssistantMessage("First complete.");
+			},
+			async () => {
+				await blocked;
+				return fauxAssistantMessage("Second complete.");
+			},
+		]);
+		const directory = new WorkerDirectory({
+			cwd: process.cwd(),
+			workers: workers(),
+			model: registration.getModel(),
+			models,
+			maxActiveConversations: 2,
+			maxActiveConversationsPerWorker: 1,
+		});
+
+		const first = directory.startConversation("audit", "First audit.");
+		await vi.waitFor(() =>
+			expect(directory.getStatus().filter((entry) => entry.status === "running")).toHaveLength(1),
+		);
+		await expect(directory.startConversation("audit", "Second audit.")).rejects.toThrow(
+			"Worker concurrency limit reached for audit (1)",
+		);
+		const second = directory.startConversation("research", "First research.");
+		await vi.waitFor(() =>
+			expect(directory.getStatus().filter((entry) => entry.status === "running")).toHaveLength(2),
+		);
+		await expect(directory.startConversation("research", "Second research.")).rejects.toThrow(
+			"Worker conversation concurrency limit reached (2)",
+		);
+		release();
+		await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+	});
+
 	it("mounts deterministic controls and exposes the full conversation id to the model", async () => {
 		const { registration, models } = createFaux();
 		registration.setResponses([() => fauxAssistantMessage("Conversation started.")]);
@@ -283,6 +562,7 @@ describe("WorkerDirectory", () => {
 		expect(tools.map((tool) => tool.name)).toEqual([
 			"worker_list",
 			"worker_start",
+			"worker_start_many",
 			"worker_message",
 			"worker_status",
 			"worker_cancel",

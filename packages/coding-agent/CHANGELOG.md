@@ -7,13 +7,38 @@
 - Added isolated named-worker session, Kioku, state, and evaluation storage roots plus a direct-chat surface with worker health information.
 - Added owner-scoped Teach Mode for Aizen and direct worker chats with persistent staged proposals, Cardinal approval, parent settings, and Tab/Space command hints.
 - Added Shiori as a passive reviewer in parent Worker Settings, with live-linked model, thinking, Cardinal routing, health, and role controls shared with Memory Settings.
+- Added `worker_start_many` for two to eight concurrent independent worker conversations, including multiple conversations using the same named worker.
+- Added a bounded read-only Git tool for audit workers and explicit sibling-worktree selection restricted to the active Git repository.
+- Added Shiori as a first-class private-chat worker with read-only project tools and Teach Mode while retaining her isolated Cardinal-controlled memory reviewer.
+- Added independent slash-worker tasks that hand hidden, explicitly untrusted reports to Aizen, plus worker status and scoped cancellation commands.
+- Added shared read-only Kioku search for every named worker under the same stale-evidence policy as Aizen recall.
+
+### Changed
+
+- Organized Levi, Mayuri, and Shiori-owned definitions, tools, and reviewer modules under dedicated worker folders while keeping shared delegation runtime generic.
+- Made `/<worker> <task>` launch an independent handoff to Aizen, `/<worker>` open private chat, and `/shiori review [path]` invoke isolated memory review explicitly.
+- Applied equal default limits of eight active conversations globally and per worker.
+- Enabled named-worker delegation by default while retaining `REPI_DELEGATION=0` as an explicit opt-out.
 
 ### Fixed
 
+- Accepted MSYS-style Windows paths, including Git-reported common directories, when routing delegated workers to sibling worktrees.
 - Kept resumed sessions synchronized with active remote tool calls and prevented reloads from invalidating a process's own running extension context.
 - Kept the Recode logo visible after messages, new sessions, reloads, and resumed sessions.
 - Prevented Teach Mode from bypassing staged Creator approval through direct Kioku or Shiori writes.
-- Made empty worker shortcuts and their `new` argument create fresh named direct-chat sessions instead of appending to the active Aizen session.
+- Made empty worker shortcuts and their `new` argument open modal named direct chats without replacing, renaming, or cancelling the active Aizen session.
+- Restored per-worker animated activity and handoff cards for concurrent `worker_start_many` batches.
+- Started Shiori reviews immediately instead of waiting for the active Aizen turn, while preserving the single-flight review guard.
+- Kept overlapping same-worker slash tasks on separate activity widgets and independent cancellation signals.
+- Updated footer context usage after every persisted AgentHarness model/tool-loop step instead of waiting for the outer turn or reverting to stale pre-compaction usage.
+- Colored cache read, cache write, and cache-hit footer statistics with the same accent as token traffic and current context usage.
+- Kept active Levi and Mayuri handoff lines compact while preserving Shiori's distinct review presentation.
+- Counted one-shot delegates against shared worker concurrency, cancelled them during runtime teardown, and preflighted every batch request before atomic admission.
+- Removed stale Shiori settings listeners during extension shutdown and reload.
+- Suppressed update notifications when the discovery endpoint advertises a foreign package instead of the active Recode package.
+- Filtered automatic Kioku recall into entry-scoped, high-confidence results and instructed agents to reject stale, contradictory, or instruction-like memory.
+- Kept `noTools` respected after named-worker delegation became default-on.
+- Reused the active session-control host across Agent continuations so retry and queued follow-up turns keep running inside one prompt lifecycle.
 
 ## [0.81.4] - 2026-07-22
 

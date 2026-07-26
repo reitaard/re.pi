@@ -143,6 +143,30 @@ describe("AgentSession.getSessionStats", () => {
 		}
 	});
 
+	it("tracks live post-compaction model steps before AgentHarness synchronizes its outer turn", () => {
+		const { session, sessionManager } = createSession();
+
+		try {
+			sessionManager.appendMessage(createUserMessage("first", 1));
+			sessionManager.appendMessage(createAssistantMessage("response1", 180_000, 2));
+			const keptUserId = sessionManager.appendMessage(createUserMessage("second", 3));
+			sessionManager.appendMessage(createAssistantMessage("response2", 195_000, 4));
+			syncAgentMessages(session, sessionManager);
+
+			sessionManager.appendCompaction("summary", keptUserId, 195_000);
+			sessionManager.appendMessage(createUserMessage("third", 5));
+			expect(session.getContextUsage()?.tokens).toBeNull();
+
+			// AgentHarness writes each model/tool-loop step to the session branch immediately,
+			// but agent.state.messages remains unchanged until the complete outer turn ends.
+			sessionManager.appendMessage(createAssistantMessage("live tool call", 25_000, 6));
+			expect(session.getContextUsage()?.tokens).toBe(25_000);
+			expect(session.getContextUsage()?.percent).toBe((25_000 / model.contextWindow) * 100);
+		} finally {
+			session.dispose();
+		}
+	});
+
 	it("ignores zero-usage messages when checking for post-compaction context usage", () => {
 		const { session, sessionManager } = createSession();
 
