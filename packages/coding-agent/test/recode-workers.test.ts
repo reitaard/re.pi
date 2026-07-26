@@ -8,7 +8,7 @@ import { createAgentSessionServices } from "../src/core/agent-session-services.t
 import { createDelegateTool } from "../src/core/delegation/delegate-tool.ts";
 import { REPI_CREATOR_IDENTITY } from "../src/core/delegation/orchestration-identity.ts";
 import { WorkerChatController } from "../src/core/delegation/worker-chat.ts";
-import { WorkerDirectory } from "../src/core/delegation/worker-directory.ts";
+import { type WorkerConversationTurnResult, WorkerDirectory } from "../src/core/delegation/worker-directory.ts";
 import { REPI_NAMED_WORKERS } from "../src/core/delegation/worker-registry.ts";
 import {
 	applyWorkerSettingsConfig,
@@ -173,8 +173,66 @@ describe("recode worker TUI", () => {
 			withWorkerToolPresentation(createToolDefinitionFromAgentTool(tool), directory),
 		);
 		expect(tools.every((tool) => tool.renderCall && tool.renderResult)).toBe(true);
+		const batchTool = tools.find((tool) => tool.name === "worker_start_many");
+		if (!batchTool?.renderCall || !batchTool.renderResult) throw new Error("worker_start_many renderer missing");
 
 		initTheme("dark");
+		const batchCall = batchTool
+			.renderCall(
+				{
+					requests: [
+						{ worker: "audit", message: "Audit one" },
+						{ worker: "research", message: "Research one" },
+					],
+				},
+				theme,
+				{ state: {}, isPartial: false } as never,
+			)
+			.render(100)
+			.join("\n");
+		expect(batchCall).toContain("2 workers in parallel");
+		expect(batchCall.replace(/\x1b\[[0-9;]*m/g, "")).toContain("Levi (監査)");
+		expect(batchCall.replace(/\x1b\[[0-9;]*m/g, "")).toContain("Mayuri (研究)");
+
+		const batchTurns = [
+			{
+				conversation: { turnCount: 1 },
+				result: {
+					workerId: "audit",
+					workerName: "Levi",
+					workerAliases: ["監査"],
+					status: "completed",
+					output: "Audit complete.",
+					harnessSetupDurationMs: 5,
+					durationMs: 100,
+				},
+			},
+			{
+				conversation: { turnCount: 1 },
+				result: {
+					workerId: "research",
+					workerName: "Mayuri",
+					workerAliases: ["研究"],
+					status: "completed",
+					output: "Research complete.",
+					harnessSetupDurationMs: 7,
+					durationMs: 120,
+				},
+			},
+		] as unknown as WorkerConversationTurnResult[];
+		const batchResult = batchTool
+			.renderResult(
+				{ content: [{ type: "text", text: "complete" }], details: { turns: batchTurns } } as never,
+				{} as never,
+				theme,
+				{} as never,
+			)
+			?.render(100)
+			.join("\n");
+		expect(batchResult).toContain("Levi (監査) → Aizen (藍染) · handoff");
+		expect(batchResult).toContain("Audit complete.");
+		expect(batchResult).toContain("Mayuri (研究) → Aizen (藍染) · handoff");
+		expect(batchResult).toContain("Research complete.");
 		const rosterCall = renderWorkerCall(directory, "worker_list", {}, theme).render(100).join("\n");
 		const rosterResult = renderRoster(directory.listWorkers(), theme).render(100).join("\n");
 		expect(rosterCall).toContain(theme.fg("accent", "✦"));

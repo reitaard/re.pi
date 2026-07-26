@@ -16,6 +16,7 @@
 - Kept the Recode logo visible after messages, new sessions, reloads, and resumed sessions.
 - Prevented Teach Mode from bypassing staged Creator approval through direct Kioku or Shiori writes.
 - Made empty worker shortcuts and their `new` argument create fresh named direct-chat sessions instead of appending to the active Aizen session.
+- Restored per-worker animated activity and handoff cards for concurrent `worker_start_many` batches.
 
 ## [0.81.4] - 2026-07-22
 

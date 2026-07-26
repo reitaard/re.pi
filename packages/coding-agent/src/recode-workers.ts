@@ -343,6 +343,12 @@ function isWorkerHandoff(value: unknown): value is { result: WorkerConversationT
 	return typeof candidate.result?.workerId === "string" && typeof candidate.result.workerName === "string";
 }
 
+function isWorkerBatch(value: unknown): value is { turns: WorkerConversationTurnResult[] } {
+	if (!value || typeof value !== "object") return false;
+	const turns = (value as { turns?: unknown }).turns;
+	return Array.isArray(turns) && turns.every(isWorkerTurn);
+}
+
 function isWorkerRoster(value: unknown): value is { workers: WorkerDescriptor[] } {
 	if (!value || typeof value !== "object") return false;
 	return Array.isArray((value as { workers?: unknown }).workers);
@@ -733,6 +739,20 @@ function resolveCallWorker(
 	return undefined;
 }
 
+function resolveBatchCallWorkers(directory: WorkerDirectory, args: Record<string, unknown>): NamedWorkerDefinition[] {
+	if (!Array.isArray(args.requests)) return [];
+	return args.requests.flatMap((request) => {
+		if (!request || typeof request !== "object") return [];
+		const worker = (request as { worker?: unknown }).worker;
+		if (typeof worker !== "string") return [];
+		try {
+			return [directory.resolveWorker(worker)];
+		} catch {
+			return [];
+		}
+	});
+}
+
 interface WorkerCallRenderState {
 	frameIndex?: number;
 	interval?: ReturnType<typeof setInterval>;
@@ -747,6 +767,7 @@ export function renderWorkerCall(
 ): Container {
 	const container = new Container();
 	const worker = resolveCallWorker(directory, args);
+	const batchWorkers = toolName === "worker_start_many" ? resolveBatchCallWorkers(directory, args) : [];
 	const state = context?.state as WorkerCallRenderState | undefined;
 	if (state && context) {
 		if (context.isPartial && !state.interval) {
@@ -761,6 +782,31 @@ export function renderWorkerCall(
 		}
 	}
 	const frameIndex = state?.frameIndex ?? 0;
+	if (batchWorkers.length > 0) {
+		container.addChild(
+			new Text(
+				`${workerStarFrame(frameIndex, theme)} ${theme.fg("mdLink", `${batchWorkers.length} workers in parallel`)}`,
+				0,
+				0,
+			),
+		);
+		for (const [index, batchWorker] of batchWorkers.entries()) {
+			const activity = `${workerActivityText(batchWorker, "delegated", index + 1)} · handoff ${index + 1}/${batchWorkers.length}`;
+			if (context?.isPartial) {
+				const frames = createRecodeWorkerIndicator(batchWorker.id, activity, theme).frames ?? [];
+				container.addChild(new Text(frames[frameIndex % Math.max(1, frames.length)] ?? "", 0, 0));
+			} else {
+				container.addChild(
+					new Text(
+						workerForeground(batchWorker.id, "identity", `${workerStarFrame(0, theme)} ${activity}`, theme),
+						0,
+						0,
+					),
+				);
+			}
+		}
+		return container;
+	}
 	if (!worker) {
 		if (toolName === "worker_list") {
 			container.addChild(
@@ -866,6 +912,7 @@ export function withWorkerToolPresentation(definition: ToolDefinition, directory
 			"delegate",
 			"worker_list",
 			"worker_start",
+			"worker_start_many",
 			"worker_message",
 			"worker_status",
 			"worker_cancel",
@@ -881,6 +928,14 @@ export function withWorkerToolPresentation(definition: ToolDefinition, directory
 			renderWorkerCall(directory, definition.name, args as Record<string, unknown>, theme, context),
 		renderResult: (result, _options, theme) => {
 			if (isWorkerTurn(result.details)) return renderHandoff(handoffMessage(result.details, "delegated"), theme);
+			if (isWorkerBatch(result.details)) {
+				const container = new Container();
+				for (const [index, turn] of result.details.turns.entries()) {
+					if (index > 0) container.addChild(new Spacer(1));
+					container.addChild(renderHandoff(handoffMessage(turn, "delegated"), theme));
+				}
+				return container;
+			}
 			if (isWorkerHandoff(result.details)) {
 				return renderHandoff(
 					{
