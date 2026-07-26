@@ -10,9 +10,73 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  parity-patch:
+    name: Apply exact legacy parity patch
+    if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout RePi
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check whether patch is needed
+        id: parity
+        shell: bash
+        run: |
+          if [ -f repi/.exact-ui-parity-applied ]; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch legacy Recode source
+        if: steps.parity.outputs.needed == 'true'
+        run: git fetch origin oauth-test:refs/remotes/origin/oauth-test --force
+
+      - name: Set up Node 26.5
+        if: steps.parity.outputs.needed == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26.5.0
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.parity.outputs.needed == 'true'
+        run: npm ci
+
+      - name: Apply exact parity patch
+        if: steps.parity.outputs.needed == 'true'
+        run: node scripts/repi/remote-parity-patch.mjs
+
+      - name: Validate patched build
+        if: steps.parity.outputs.needed == 'true'
+        run: |
+          npm --prefix packages/tui run build
+          npm --prefix packages/ai run build
+          npm --prefix packages/agent run build
+          npm --prefix packages/storage/sqlite-node run build
+          npm --prefix packages/coding-agent run build
+
+      - name: Validate restored footer
+        if: steps.parity.outputs.needed == 'true'
+        run: npm --prefix packages/coding-agent test -- test/repi-recode-footer.test.ts
+
+      - name: Commit patched source
+        if: steps.parity.outputs.needed == 'true'
+        run: |
+          mkdir -p repi
+          printf 'Applied and build-validated remotely on Node 26.5.0.\n' > repi/.exact-ui-parity-applied
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/coding-agent/src repi/.exact-ui-parity-applied
+          git commit -m "fix(repi): restore exact legacy startup and LSP parity"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
   validate:
     name: ${{ matrix.os }} / Node 26.5.0
     runs-on: ${{ matrix.os }}
