@@ -134,7 +134,9 @@ export const stream: StreamFunction<"openai-responses", OpenAIResponsesOptions> 
 			const requestOptions = {
 				...(options?.signal ? { signal: options.signal } : {}),
 				...(options?.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
-				maxRetries: options?.maxRetries ?? 0,
+				// ChatGPT subscription limits can last hours or days. Never let the SDK
+				// repeat the same OAuth request after usage_limit_reached.
+				maxRetries: model.provider === "openai-oauth" ? 0 : (options?.maxRetries ?? 0),
 			};
 			const { data: openaiStream, response } = await client.responses.create(params, requestOptions).withResponse();
 			await options?.onResponse?.({ status: response.status, headers: headersToRecord(response.headers) }, model);
