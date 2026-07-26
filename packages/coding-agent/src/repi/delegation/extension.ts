@@ -90,7 +90,6 @@ export function repiWorkers(pi: ExtensionAPI): void {
 	let activeWorkerId: string | undefined;
 	let loadedSkills: readonly NamedWorkerSkill[] = [];
 	let externalTools: readonly AgentTool[] = [];
-	let externalToolError: string | undefined;
 	let removeTerminalInput: (() => void) | undefined;
 	const facade = createDirectoryFacade(() => directory);
 
@@ -125,10 +124,8 @@ export function repiWorkers(pi: ExtensionAPI): void {
 	const refreshExternalTools = async (ctx: ExtensionContext): Promise<void> => {
 		try {
 			externalTools = await resolveExternalAgentTools(pi, ctx, WEB_TOOL_NAMES);
-			externalToolError = undefined;
-		} catch (error) {
+		} catch {
 			externalTools = [];
-			externalToolError = error instanceof Error ? error.message : String(error);
 		}
 	};
 
@@ -149,12 +146,12 @@ export function repiWorkers(pi: ExtensionAPI): void {
 			sessionCount: storage.sessionCount,
 			evaluationCount: storage.evaluationCount,
 		});
-		ctx.ui.setStatus("repi-worker-chat", `Direct chat · ${worker.displayName} · ${status}`);
 	};
 
 	const exitDirectChat = (ctx: ExtensionContext, notify = true): void => {
 		activeWorkerId = undefined;
 		setActiveWorkerHeaderState(undefined);
+		ctx.ui.setStatus("repi-workers", undefined);
 		ctx.ui.setStatus("repi-worker-chat", undefined);
 		ctx.ui.setWorkingMessage();
 		ctx.ui.setWorkingIndicator();
@@ -205,6 +202,8 @@ export function repiWorkers(pi: ExtensionAPI): void {
 		currentContext = ctx;
 		activeWorkerId = undefined;
 		setActiveWorkerHeaderState(undefined);
+		ctx.ui.setStatus("repi-workers", undefined);
+		ctx.ui.setStatus("repi-worker-chat", undefined);
 		loadedSkills = discoverSessionSkills(ctx.cwd);
 		await refreshExternalTools(ctx);
 		directory = new WorkerDirectory({
@@ -223,10 +222,6 @@ export function repiWorkers(pi: ExtensionAPI): void {
 		applyWorkerSettingsConfig(
 			directory,
 			await readWorkerSettingsConfig(join(getAgentDir(), SETTINGS_FILE)),
-		);
-		ctx.ui.setStatus(
-			"repi-workers",
-			externalToolError ? "Workers · Levi ready · Mayuri web unavailable" : "Workers · Mayuri + Levi ready",
 		);
 	};
 
