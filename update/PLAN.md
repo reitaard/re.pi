@@ -219,4 +219,4 @@ Implement only after measurement identifies a material cost:
 
 ## Immediate next step
 
-Validate and package the conservative memory retrieval change, then restart from the authoritative `re.pi` directory. Separately visually confirm that `/levi`, `/mayuri`, and `/shiori` preserve the `chat1` root session while `/shiori review` remains isolated.
+Restart from the authoritative `re.pi` directory to activate conservative memory recall and rebuild the index. Separately visually confirm that `/levi`, `/mayuri`, and `/shiori` preserve the `chat1` root session while `/shiori review` remains isolated.

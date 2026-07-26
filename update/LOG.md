@@ -141,3 +141,7 @@
 - Added an index-version hash so existing documents rebuild under the new chunker after restart.
 - Added conservative local automatic reranking: conversational stop-word removal, minimum term coverage, project preference, and a three-entry cap. Explicit search remains broad.
 - Focused memory validation passed: 15 tests.
+- Committed and pushed the retrieval fix at `48459331`.
+- Packed and isolated-smoke-tested `0.81.4-repi.2.dev.21.48459331`; version, help, model listing, and packaged memory-runtime parity passed.
+- Installed globally and verified source metadata plus built memory-runtime parity.
+- Artifact SHA-256: `9e7a96aa0c1875acfb38a54aa28cb71707a42fbfdab3df3684c1a61f9d31b997`.
