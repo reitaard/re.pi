@@ -45,6 +45,8 @@ describe("Aizen runtime", () => {
 		};
 		const agentSession = {
 			sessionManager: manager,
+			sessionId: manager.getSessionId(),
+			sessionFile: manager.getSessionFile(),
 			modelRegistry: {},
 			createAizenRuntimeProfile: () => profile,
 		} as AgentSession;
@@ -101,6 +103,8 @@ describe("Aizen runtime", () => {
 		};
 		const agentSession = {
 			sessionManager: manager,
+			sessionId: manager.getSessionId(),
+			sessionFile: manager.getSessionFile(),
 			modelRegistry: {},
 			createAizenRuntimeProfile: () => profile,
 		} as AgentSession;
@@ -179,6 +183,8 @@ describe("Aizen runtime", () => {
 		};
 		const agentSession = {
 			sessionManager: manager,
+			sessionId: manager.getSessionId(),
+			sessionFile: manager.getSessionFile(),
 			modelRegistry: {},
 			createAizenRuntimeProfile: () => profile,
 		} as AgentSession;

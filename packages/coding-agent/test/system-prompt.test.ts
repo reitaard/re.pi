@@ -27,14 +27,14 @@ describe("buildSystemPrompt", () => {
 	});
 
 	describe("default tools", () => {
-		test("uses the authoritative Aizen and RePi identity", () => {
+		test("uses the authoritative Aizen and Recode identity", () => {
 			const prompt = buildSystemPrompt({
 				contextFiles: [],
 				skills: [],
 				cwd: process.cwd(),
 			});
 
-			expect(prompt).toContain("You are Aizen (藍染), RePi's main coding agent and Manager.");
+			expect(prompt).toContain("You are Aizen (藍染), Recode's main coding agent and Manager.");
 			expect(prompt).not.toContain("operating inside pi");
 		});
 
@@ -57,7 +57,7 @@ describe("buildSystemPrompt", () => {
 			expect(prompt).toContain("- write:");
 		});
 
-		test("instructs models to resolve RePi docs and examples under absolute base paths", () => {
+		test("instructs models to resolve Recode docs and examples under absolute base paths", () => {
 			const prompt = buildSystemPrompt({
 				contextFiles: [],
 				skills: [],
@@ -65,7 +65,7 @@ describe("buildSystemPrompt", () => {
 			});
 
 			expect(prompt).toContain(
-				"- When reading RePi docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory",
+				"- When reading Recode docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory",
 			);
 		});
 	});

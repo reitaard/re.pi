@@ -144,6 +144,7 @@ function getOrCreateWorkerDirectory(options: CreateAgentSessionFromServicesOptio
 
 function resolveCustomTools(options: CreateAgentSessionFromServicesOptions): ToolDefinition[] | undefined {
 	const customTools = [...(options.customTools ?? [])];
+	if (options.noTools) return customTools.length > 0 ? customTools : undefined;
 	customTools.push(
 		createPackageManageToolDefinition({
 			cwd: options.services.cwd,

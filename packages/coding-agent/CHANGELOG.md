@@ -37,6 +37,8 @@
 - Removed stale Shiori settings listeners during extension shutdown and reload.
 - Suppressed update notifications when the discovery endpoint advertises a foreign package instead of the active Recode package.
 - Filtered automatic Kioku recall into entry-scoped, high-confidence results and instructed agents to reject stale, contradictory, or instruction-like memory.
+- Kept `noTools` respected after named-worker delegation became default-on.
+- Reused the active session-control host across Agent continuations so retry and queued follow-up turns keep running inside one prompt lifecycle.
 
 ## [0.81.4] - 2026-07-22
 

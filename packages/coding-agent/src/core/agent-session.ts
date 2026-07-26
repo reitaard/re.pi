@@ -611,7 +611,7 @@ export class AgentSession {
 
 	/** Internal handler for agent events - shared by subscribe and reconnect */
 	private _handleAgentEvent = async (event: AgentEvent): Promise<void> => {
-		if (event.type === "agent_start") {
+		if (event.type === "agent_start" && !this._sessionControl) {
 			this._sessionControl = new RecodeSessionControlHost(
 				getAgentDir(),
 				this.sessionId,

@@ -170,3 +170,8 @@
 - Confirmed clean pushed `repi/preserve-custom` commit `659d9fcd7ebc7dc963df79060e71a426c942d30d`, descended from `c5ab200b`.
 - The first full local-release attempt passed `npm run check` but failed before tests because Windows `cmd.exe` cannot execute `./test.sh` directly.
 - Corrected the cross-platform local-release runner to invoke `bash ./test.sh`; no release artifact from the failed attempt was accepted.
+- A second full local-release attempt reached the complete suite and failed before packaging. Failures separated into current regressions plus Windows/environment assumptions.
+- Fixed current regressions: service-based `noTools` no longer exposes default delegation tools, Aizen retry/queue continuations no longer recreate the session-control host on continuation `agent_start`, and stale Recode identity tests were updated.
+- Focused validation passed: 101 tests across system prompt, Aizen runtime/profile, retry/queue, no-tools, memory, workers, and worker directory suites.
+- Full `npm run check` passed after the fixes.
+- Remaining unrestricted `test.sh` failures on this Windows host include symlink privilege, chmod/read-only semantics, path separators, timing, stale platform-specific expectations, and broader historical tests. They are not accepted as a green release gate, but they are now documented as separate release hardening work.
