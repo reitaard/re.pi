@@ -435,6 +435,11 @@ async function getSelfUpdatePlan(force: boolean): Promise<SelfUpdatePlan> {
 	}
 
 	const packageName = latestRelease.packageName ?? PACKAGE_NAME;
+	if (packageName !== PACKAGE_NAME) {
+		throw new Error(
+			`Refusing to replace ${PACKAGE_NAME} with ${packageName}. Recode updates may only install the active Recode package.`,
+		);
+	}
 	const installSpec = `${packageName}@${latestRelease.version}`;
 	if (force || packageName !== PACKAGE_NAME || isNewerPackageVersion(latestRelease.version, VERSION)) {
 		return {

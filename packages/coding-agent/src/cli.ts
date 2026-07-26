@@ -8,6 +8,7 @@
 import { APP_NAME } from "./config.ts";
 import { installPiPackageCompatibilityHooks } from "./core/extensions/pi-package-compat.ts";
 import { configureHttpDispatcher } from "./core/http-dispatcher.ts";
+import { handleRepiUpstreamCommand } from "./recode/update/upstream-plan.ts";
 
 process.title = APP_NAME;
 process.env.PI_CODING_AGENT = "true";
@@ -21,7 +22,10 @@ configureHttpDispatcher();
 
 const args = process.argv.slice(2);
 
-if (args[0] === "telegram") {
+const upstreamResult = handleRepiUpstreamCommand(args);
+if (upstreamResult.handled) {
+	process.exitCode = upstreamResult.exitCode;
+} else if (args[0] === "telegram") {
 	const { runRecodeTelegramGateway } = await import("./recode-telegram-gateway.ts");
 
 	void runRecodeTelegramGateway().catch((error: unknown) => {
