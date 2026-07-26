@@ -33,7 +33,9 @@ jobs:
         run: npm ci
 
       - name: Apply parity patch
-        run: node scripts/repi/remote-parity-patch.mjs
+        run: |
+          node scripts/repi/remote-parity-patch.mjs
+          node scripts/repi/remote-parity-fixes.mjs
 
       - name: Build patched source
         id: build
