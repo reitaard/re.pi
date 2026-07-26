@@ -1,0 +1,69 @@
+name: RePi Final Parity Fix
+
+on:
+  pull_request:
+    branches:
+      - sync/upstream-v0.82.1
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout integration head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+
+      - name: Fetch authoritative upstream tags
+        run: |
+          git remote remove upstream 2>/dev/null || true
+          git remote add upstream https://github.com/earendil-works/pi.git
+          git fetch upstream --tags --force
+
+      - name: Set up Node 26.5
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26.5.0
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Keep hidden RePi extensions out of startup listing
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const path = 'packages/coding-agent/src/modes/interactive/interactive-mode.ts';
+          const source = readFileSync(path, 'utf8');
+          const before = `\t\tconst extensions =\n\t\t\toptions?.extensions ??\n\t\t\tthis.session.resourceLoader.getExtensions().extensions.map((extension) => ({\n\t\t\t\tpath: extension.path,\n\t\t\t\tsourceInfo: extension.sourceInfo,\n\t\t\t}));`;
+          const after = `\t\tconst extensions =\n\t\t\toptions?.extensions ??\n\t\t\tthis.session.resourceLoader\n\t\t\t\t.getExtensions()\n\t\t\t\t.extensions.filter((extension) => !extension.hidden)\n\t\t\t\t.map((extension) => ({\n\t\t\t\t\tpath: extension.path,\n\t\t\t\t\tsourceInfo: extension.sourceInfo,\n\t\t\t\t}));`;
+          if (!source.includes(before)) throw new Error('startup extension-list anchor not found');
+          writeFileSync(path, source.replace(before, after));
+          NODE
+
+      - name: Build final patched source
+        run: |
+          npm --prefix packages/tui run build
+          npm --prefix packages/ai run build
+          npm --prefix packages/agent run build
+          npm --prefix packages/storage/sqlite-node run build
+          npm --prefix packages/coding-agent run build
+
+      - name: Validate restored footer
+        run: npm --prefix packages/coding-agent test -- test/repi-recode-footer.test.ts
+
+      - name: Commit final source fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/coding-agent/src/modes/interactive/interactive-mode.ts
+          git commit --no-verify -m "fix(repi): hide internal extensions from startup list"
+
+      - name: Push tested staging branch
+        run: git push --force origin HEAD:refs/heads/repi/final-output
