@@ -1,0 +1,64 @@
+name: RePi Remote Parity Patch
+
+on:
+  push:
+    branches:
+      - repi/integrate-v0.82.1
+    paths:
+      - scripts/repi/remote-parity-patch.mjs
+      - .github/workflows/repi-remote-parity-patch.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout RePi
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch legacy Recode source
+        run: git fetch origin oauth-test:refs/remotes/origin/oauth-test --force
+
+      - name: Set up Node 26.5
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26.5.0
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply exact parity patch
+        run: node scripts/repi/remote-parity-patch.mjs
+
+      - name: Validate patched build
+        run: |
+          npm --prefix packages/tui run build
+          npm --prefix packages/ai run build
+          npm --prefix packages/agent run build
+          npm --prefix packages/storage/sqlite-node run build
+          npm --prefix packages/coding-agent run build
+
+      - name: Validate restored footer
+        run: npm --prefix packages/coding-agent test -- test/repi-recode-footer.test.ts
+
+      - name: Validate clean patch
+        run: git diff --check
+
+      - name: Commit patched source
+        run: |
+          if git diff --quiet; then
+            echo "Parity patch already applied."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/coding-agent/src
+          git commit -m "fix(repi): restore exact legacy startup and LSP parity"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
