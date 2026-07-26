@@ -28,6 +28,8 @@
 - Restored per-worker animated activity and handoff cards for concurrent `worker_start_many` batches.
 - Started Shiori reviews immediately instead of waiting for the active Aizen turn, while preserving the single-flight review guard.
 - Kept overlapping same-worker slash tasks on separate activity widgets and independent cancellation signals.
+- Updated footer context usage after every persisted AgentHarness model/tool-loop step instead of waiting for the outer turn or reverting to stale pre-compaction usage.
+- Colored cache read, cache write, and cache-hit footer statistics with the same accent as token traffic and current context usage.
 
 ## [0.81.4] - 2026-07-22
 

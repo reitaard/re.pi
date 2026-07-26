@@ -159,8 +159,8 @@ describe("FooterComponent width handling", () => {
 				usage: {
 					input: 12_345,
 					output: 678,
-					cacheRead: 0,
-					cacheWrite: 0,
+					cacheRead: 5_000,
+					cacheWrite: 1_000,
 					cost: { total: 0 },
 				},
 			}),
@@ -170,8 +170,11 @@ describe("FooterComponent width handling", () => {
 
 		expect(statsLine).toContain(theme.fg("accent", "↑12k"));
 		expect(statsLine).toContain(theme.fg("accent", "↓678"));
+		expect(statsLine).toContain(theme.fg("accent", "R5.0k"));
+		expect(statsLine).toContain(theme.fg("accent", "W1.0k"));
+		expect(statsLine).toContain(theme.fg("accent", "CH27.3%"));
 		expect(statsLine).toContain(theme.fg("accent", "ctx 25k 12.3%"));
-		expect(stripAnsi(statsLine)).toContain("↑12k ↓678 ctx 25k 12.3%");
+		expect(stripAnsi(statsLine)).toContain("↑12k ↓678 R5.0k W1.0k CH27.3% ctx 25k 12.3%");
 		expect(stripAnsi(statsLine)).not.toContain("200k");
 		expect(stripAnsi(statsLine)).not.toContain("compact?");
 	});
