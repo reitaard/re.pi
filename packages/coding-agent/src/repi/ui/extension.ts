@@ -1,11 +1,8 @@
 import { homedir } from "node:os";
 import { basename } from "node:path";
-import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
-import type { Api, Model } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "../../core/extensions/types.ts";
 import { SettledStatus, type SettledOutcome } from "../../modes/interactive/components/status-indicator.ts";
 import { getActiveWorkerHeaderState } from "../delegation/worker-header-state.ts";
-import { RecodeFooter, type RecodeFooterState } from "./recode-footer.ts";
 import { RecodeHeader, type RecodeHeaderDetails } from "./recode-header.ts";
 
 function displayCwd(cwd: string): string {
@@ -29,17 +26,6 @@ function hasConversation(ctx: ExtensionContext): boolean {
 		.some((entry) => entry.type === "message" || entry.type === "custom" || entry.type === "custom_message");
 }
 
-function footerStateFromContext(ctx: ExtensionContext): RecodeFooterState {
-	return {
-		cwd: ctx.cwd,
-		sessionManager: ctx.sessionManager,
-		modelRegistry: ctx.modelRegistry,
-		model: ctx.model as Model<Api> | undefined,
-		thinkingLevel: ctx.thinkingLevel ?? "off",
-		getContextUsage: () => ctx.getContextUsage(),
-	};
-}
-
 function formatElapsedRuntime(startedAt: number): string {
 	const totalSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
 	const hours = Math.floor(totalSeconds / 3600);
@@ -58,7 +44,6 @@ export function repiProductUi(pi: ExtensionAPI): void {
 		provider: "unknown",
 		cwd: displayCwd(process.cwd()),
 	};
-	let footerState: RecodeFooterState | undefined;
 	let runStartedAt = 0;
 	let settledOutcome: SettledOutcome = "completed";
 
@@ -74,19 +59,6 @@ export function repiProductUi(pi: ExtensionAPI): void {
 		);
 	};
 
-	const installFooter = (ctx: ExtensionContext): void => {
-		ctx.ui.setFooter((_tui, theme, footerData) => {
-			return new RecodeFooter(
-				() => {
-					if (!footerState) throw new Error("Recode footer state is unavailable");
-					return footerState;
-				},
-				footerData,
-				theme,
-			);
-		});
-	};
-
 	pi.on("session_start", (_event, ctx) => {
 		if (ctx.mode !== "tui") return;
 		visible = !hasConversation(ctx);
@@ -95,11 +67,9 @@ export function repiProductUi(pi: ExtensionAPI): void {
 			...selectedModel(ctx),
 			cwd: displayCwd(ctx.cwd),
 		};
-		footerState = footerStateFromContext(ctx);
 		ctx.ui.setTitle(`Recode — ${basename(ctx.cwd) || "session"}`);
 		ctx.ui.setWidget("repi-settled-status", undefined, { placement: "aboveEditor" });
 		installHeader(ctx);
-		installFooter(ctx);
 	});
 
 	pi.on("before_agent_start", (_event, ctx) => {
@@ -138,23 +108,6 @@ export function repiProductUi(pi: ExtensionAPI): void {
 			provider: event.model.provider,
 			cwd: displayCwd(ctx.cwd),
 		};
-		if (footerState) {
-			footerState = {
-				...footerState,
-				cwd: ctx.cwd,
-				model: event.model,
-				thinkingLevel: ctx.thinkingLevel ?? footerState.thinkingLevel,
-			};
-		}
 		if (ctx.mode === "tui" && (visible || getActiveWorkerHeaderState())) installHeader(ctx);
-	});
-
-	pi.on("thinking_level_select", (event, ctx) => {
-		if (!footerState) return;
-		footerState = {
-			...footerState,
-			cwd: ctx.cwd,
-			thinkingLevel: event.level as ThinkingLevel,
-		};
 	});
 }
