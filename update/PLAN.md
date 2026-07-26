@@ -95,9 +95,14 @@ Tentative flow, subject to Phase 2 decisions:
 - [x] Verify all installed Coding Agent, TUI, Agent, and AI runtime trees byte-for-byte against the custom build.
 - [ ] Obtain a final user visual confirmation after restart; automated pseudo-TTY startup is unavailable in the non-TTY tool host.
 
-## Deferred worker project
+## Worker capability follow-up
 
-After the update is stable, test parallel `worker_start` conversations, improve worker workspace/tool access, and add task-specific audit/research skills. Do not mix worker restructuring into the release integration.
+- [x] Add one-call concurrent launch for two to eight independent conversations, including repeated Levi instances.
+- [x] Add bounded read-only Git evidence for audit workers.
+- [x] Allow explicit sibling worktrees only when they share the active Git common directory.
+- [x] Keep Git mutations, unsafe execution/configuration flags, and workspace traversal blocked.
+- [x] Preserve Mayuri's librarian skill and strengthen Levi's audit instructions around Git evidence.
+- [x] Add focused concurrency, workspace-boundary, and Git fail-closed tests.
 
 ## Immediate next step
 

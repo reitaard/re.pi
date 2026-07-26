@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { realpathSync } from "node:fs";
+import { resolve } from "node:path";
 import type { AgentTool, ThinkingLevel } from "@reitaard/repi-agent-core";
 import type { Model, Models } from "@reitaard/repi-ai";
+import { spawnProcessSync } from "../../utils/child-process.ts";
 import type { ModelRegistry } from "../model-registry.ts";
 import {
 	formatNamedWorkerIdentity,
@@ -64,6 +67,7 @@ export interface WorkerConversationSnapshot {
 	lastToolName?: string;
 	lastOutput?: string;
 	error?: string;
+	workspace: string;
 }
 
 export interface WorkerConversationTurnResult {
@@ -129,6 +133,7 @@ interface WorkerConversationRecord {
 	lastOutput?: string;
 	error?: string;
 	history: ConversationHistoryEntry[];
+	workspace: string;
 	abortController?: AbortController;
 }
 
@@ -143,6 +148,20 @@ function summarizeTask(value: string): string {
 
 function statusFromResult(result: NamedWorkerRunResult): WorkerConversationStatus {
 	return result.status;
+}
+
+function gitCommonDirectory(workspace: string): string | undefined {
+	const result = spawnProcessSync(
+		"git",
+		["-C", workspace, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+		{
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "pipe"],
+		},
+	);
+	if (result.status !== 0 || !result.stdout.trim()) return undefined;
+	const path = result.stdout.trim();
+	return realpathSync(resolve(workspace, path));
 }
 
 export class WorkerDirectory {
@@ -242,16 +261,31 @@ export class WorkerDirectory {
 		throw new Error(`Unknown named worker: ${reference}. Available: ${available}`);
 	}
 
+	resolveWorkspace(requestedWorkspace = this.cwd): string {
+		const activeWorkspace = realpathSync(resolve(this.cwd));
+		const requested = realpathSync(resolve(requestedWorkspace));
+		if (requested === activeWorkspace) return requested;
+		const activeCommonDirectory = gitCommonDirectory(activeWorkspace);
+		const requestedCommonDirectory = gitCommonDirectory(requested);
+		if (!activeCommonDirectory || requestedCommonDirectory !== activeCommonDirectory) {
+			throw new Error(
+				"Worker workspace must be the active workspace or another worktree of the same Git repository",
+			);
+		}
+		return requested;
+	}
+
 	async runOneShot(
 		workerReference: string,
 		task: string,
 		context?: string,
 		signal?: AbortSignal,
 		speaker: OrchestrationActorIdentity = REPI_AIZEN_IDENTITY,
+		workspace = this.cwd,
 	): Promise<NamedWorkerRunResult> {
 		const worker = this.resolveWorker(workerReference);
 		const actorContext = [formatOrchestrationActorContext(speaker), context?.trim()].filter(Boolean).join("\n\n");
-		return this.run(worker, task, actorContext, signal, this.runtime.onProgress);
+		return this.run(worker, this.resolveWorkspace(workspace), task, actorContext, signal, this.runtime.onProgress);
 	}
 
 	async startConversation(
@@ -260,6 +294,7 @@ export class WorkerDirectory {
 		context?: string,
 		signal?: AbortSignal,
 		speaker: OrchestrationActorIdentity = REPI_AIZEN_IDENTITY,
+		workspace = this.cwd,
 	): Promise<WorkerConversationTurnResult> {
 		this.pruneConversations();
 		const worker = this.resolveWorker(workerReference);
@@ -274,6 +309,7 @@ export class WorkerDirectory {
 			updatedAt: now,
 			turnCount: 0,
 			history: [],
+			workspace: this.resolveWorkspace(workspace),
 		};
 		this.conversations.set(record.conversationId, record);
 		const result = await this.executeConversationTurn(record, message, context, signal);
@@ -311,6 +347,7 @@ export class WorkerDirectory {
 				updatedAt: turn.updatedAt,
 				turnCount: 0,
 				history: [],
+				workspace: this.resolveWorkspace(),
 			};
 			this.conversations.set(record.conversationId, record);
 		} else if (record.worker.id !== worker.id || record.speaker.id !== turn.speaker.id) {
@@ -393,12 +430,19 @@ export class WorkerDirectory {
 
 		const conversationContext = this.buildConversationContext(record, context);
 		try {
-			let result = await this.run(record.worker, message, conversationContext, controller.signal, (event) => {
-				if (event.type === "start") record.runId = event.runId;
-				if (event.type === "tool_start") record.lastToolName = event.toolName;
-				record.updatedAt = Date.now();
-				this.runtime.onProgress?.(event);
-			});
+			let result = await this.run(
+				record.worker,
+				record.workspace,
+				message,
+				conversationContext,
+				controller.signal,
+				(event) => {
+					if (event.type === "start") record.runId = event.runId;
+					if (event.type === "tool_start") record.lastToolName = event.toolName;
+					record.updatedAt = Date.now();
+					this.runtime.onProgress?.(event);
+				},
+			);
 			if (this.runtime.transformResult) {
 				result = await this.runtime.transformResult(record.worker, record.speaker, result);
 			}
@@ -444,6 +488,7 @@ export class WorkerDirectory {
 
 	private async run(
 		worker: NamedWorkerDefinition,
+		workspace: string,
 		task: string,
 		context: string | undefined,
 		signal: AbortSignal | undefined,
@@ -456,7 +501,7 @@ export class WorkerDirectory {
 		const model = preferredModel ?? this.runtime.getModel?.() ?? this.runtime.model;
 		if (!model) throw new Error("Cannot run worker without an active model");
 		return runNamedWorker({
-			cwd: this.cwd,
+			cwd: workspace,
 			worker: {
 				...worker,
 				thinkingLevel: settings.thinkingLevel,
@@ -516,6 +561,7 @@ export class WorkerDirectory {
 			lastToolName: record.lastToolName,
 			lastOutput: record.lastOutput,
 			error: record.error,
+			workspace: record.workspace,
 		};
 	}
 

@@ -1,8 +1,12 @@
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createModels, fauxAssistantMessage, fauxProvider } from "@reitaard/repi-ai";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { NamedWorkerDefinition } from "../src/core/delegation/named-worker.ts";
 import { WorkerChatController } from "../src/core/delegation/worker-chat.ts";
-import { WorkerDirectory } from "../src/core/delegation/worker-directory.ts";
+import { type WorkerConversationTurnResult, WorkerDirectory } from "../src/core/delegation/worker-directory.ts";
 import { createWorkerControlTools } from "../src/core/delegation/worker-tools.ts";
 
 let providerCount = 0;
@@ -269,6 +273,83 @@ describe("WorkerDirectory", () => {
 		expect(directory.getStatus(turn.conversation.conversationId)[0].status).toBe("failed");
 	});
 
+	it("allows explicit sibling worktrees but rejects unrelated workspaces", () => {
+		const parent = mkdtempSync(join(tmpdir(), "recode-worker-worktrees-"));
+		const main = join(parent, "main");
+		const sibling = join(parent, "sibling");
+		const unrelated = join(parent, "unrelated");
+		mkdirSync(main);
+		mkdirSync(unrelated);
+		const runGit = (workspace: string, ...args: string[]) =>
+			execFileSync("git", ["-C", workspace, ...args], { encoding: "utf8" }).trim();
+		try {
+			runGit(main, "init");
+			runGit(main, "config", "user.email", "recode-worker@example.invalid");
+			runGit(main, "config", "user.name", "Recode Worker");
+			writeFileSync(join(main, "tracked.txt"), "main\n");
+			runGit(main, "add", "tracked.txt");
+			runGit(main, "commit", "-m", "main");
+			runGit(main, "worktree", "add", sibling, "-b", "worker-sibling");
+			runGit(unrelated, "init");
+
+			const { registration, models } = createFaux();
+			const directory = new WorkerDirectory({
+				cwd: main,
+				workers: workers(),
+				model: registration.getModel(),
+				models,
+			});
+
+			expect(directory.resolveWorkspace(sibling)).toBe(realpathSync(sibling));
+			expect(() => directory.resolveWorkspace(unrelated)).toThrow("another worktree of the same Git repository");
+		} finally {
+			rmSync(parent, { recursive: true, force: true });
+		}
+	});
+
+	it("launches multiple conversations for the same worker concurrently", async () => {
+		const { registration, models } = createFaux();
+		let release = () => {};
+		const blocked = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		registration.setResponses([
+			async () => {
+				await blocked;
+				return fauxAssistantMessage("First audit complete.");
+			},
+			async () => {
+				await blocked;
+				return fauxAssistantMessage("Second audit complete.");
+			},
+		]);
+		const directory = new WorkerDirectory({
+			cwd: process.cwd(),
+			workers: workers(),
+			model: registration.getModel(),
+			models,
+		});
+		const startMany = createWorkerControlTools(directory).find((tool) => tool.name === "worker_start_many");
+		if (!startMany) throw new Error("worker_start_many tool missing");
+
+		const running = startMany.execute("start-many", {
+			requests: [
+				{ worker: "Levi", message: "Audit boundary one." },
+				{ worker: "Levi", message: "Audit boundary two." },
+			],
+		});
+		await vi.waitFor(() =>
+			expect(directory.getStatus().filter((entry) => entry.status === "running")).toHaveLength(2),
+		);
+		release();
+		const response = await running;
+
+		expect(response.details.turns).toHaveLength(2);
+		const turns = response.details.turns as WorkerConversationTurnResult[];
+		expect(new Set(turns.map((turn) => turn.conversation.conversationId)).size).toBe(2);
+		expect(turns.every((turn) => turn.result.workerId === "audit")).toBe(true);
+	});
+
 	it("mounts deterministic controls and exposes the full conversation id to the model", async () => {
 		const { registration, models } = createFaux();
 		registration.setResponses([() => fauxAssistantMessage("Conversation started.")]);
@@ -283,6 +364,7 @@ describe("WorkerDirectory", () => {
 		expect(tools.map((tool) => tool.name)).toEqual([
 			"worker_list",
 			"worker_start",
+			"worker_start_many",
 			"worker_message",
 			"worker_status",
 			"worker_cancel",

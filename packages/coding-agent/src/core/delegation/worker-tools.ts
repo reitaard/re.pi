@@ -54,6 +54,26 @@ export function createWorkerControlTools(directory: WorkerDirectory): AgentTool<
 		worker: workerReferenceSchema(directory),
 		message: Type.String({ description: "First task or message for the worker" }),
 		context: Type.Optional(Type.String({ description: "Small Aizen context needed for this conversation" })),
+		workspace: Type.Optional(
+			Type.String({ description: "Active workspace or another worktree of the same Git repository" }),
+		),
+	});
+	const startManySchema = Type.Object({
+		requests: Type.Array(
+			Type.Object({
+				worker: workerReferenceSchema(directory),
+				message: Type.String({ description: "Independent first task or message for this worker conversation" }),
+				context: Type.Optional(Type.String({ description: "Small Aizen context for this conversation" })),
+				workspace: Type.Optional(
+					Type.String({ description: "Active workspace or another worktree of the same Git repository" }),
+				),
+			}),
+			{
+				description: "Independent worker conversations to launch concurrently",
+				minItems: 2,
+				maxItems: 8,
+			},
+		),
 	});
 	const messageSchema = Type.Object({
 		conversationId: Type.String({ description: "Full worker conversation id returned by worker_start" }),
@@ -93,11 +113,46 @@ export function createWorkerControlTools(directory: WorkerDirectory): AgentTool<
 		parameters: startSchema,
 		executionMode: "parallel",
 		async execute(_toolCallId, input, signal) {
-			const turn = await directory.startConversation(input.worker, input.message, input.context, signal);
+			const turn = await directory.startConversation(
+				input.worker,
+				input.message,
+				input.context,
+				signal,
+				undefined,
+				input.workspace,
+			);
 			return {
 				content: [{ type: "text", text: formatTurn(turn) }],
 				details: turn,
 				terminate: turn.result.status !== "completed",
+			};
+		},
+	};
+
+	const startManyTool: AgentTool<typeof startManySchema, { turns: WorkerConversationTurnResult[] }> = {
+		name: "worker_start_many",
+		label: "worker_start_many",
+		description:
+			"Launch two to eight independent named-worker conversations concurrently in one deterministic tool call. Requests may use the same worker personality for separate tasks. Each completed result includes its own conversationId for later worker_message/status/cancel/close calls.",
+		parameters: startManySchema,
+		executionMode: "parallel",
+		async execute(_toolCallId, input, signal) {
+			const turns = await Promise.all(
+				input.requests.map((request) =>
+					directory.startConversation(
+						request.worker,
+						request.message,
+						request.context,
+						signal,
+						undefined,
+						request.workspace,
+					),
+				),
+			);
+			return {
+				content: [{ type: "text", text: turns.map(formatTurn).join("\n\n") }],
+				details: { turns },
+				terminate: turns.some((turn) => turn.result.status !== "completed"),
 			};
 		},
 	};
@@ -170,5 +225,5 @@ export function createWorkerControlTools(directory: WorkerDirectory): AgentTool<
 		},
 	};
 
-	return [listTool, startTool, messageTool, statusTool, cancelTool, closeTool];
+	return [listTool, startTool, startManyTool, messageTool, statusTool, cancelTool, closeTool];
 }

@@ -7,6 +7,8 @@
 - Added isolated named-worker session, Kioku, state, and evaluation storage roots plus a direct-chat surface with worker health information.
 - Added owner-scoped Teach Mode for Aizen and direct worker chats with persistent staged proposals, Cardinal approval, parent settings, and Tab/Space command hints.
 - Added Shiori as a passive reviewer in parent Worker Settings, with live-linked model, thinking, Cardinal routing, health, and role controls shared with Memory Settings.
+- Added `worker_start_many` for two to eight concurrent independent worker conversations, including multiple conversations using the same named worker.
+- Added a bounded read-only Git tool for audit workers and explicit sibling-worktree selection restricted to the active Git repository.
 
 ### Fixed
 

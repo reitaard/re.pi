@@ -67,3 +67,13 @@
 - Verified the final global runtime trees exactly match the custom build.
 - Verified live `recode update --self` refuses `@earendil-works/pi-coding-agent` and exits cleanly with status 1.
 - Final artifact SHA-256: `8408643910b3a1841d5a100239eb095047eb5c6487a0a0f864d731e12e67dbae`.
+
+## 2026-07-26 — Worker capability follow-up
+
+- Confirmed multiple persistent conversations can use the same named worker identity.
+- Added `worker_start_many` to launch two to eight independent conversations concurrently in one tool call.
+- Added Levi's bounded `git_read` capability with a strict read-only subcommand allowlist.
+- Blocked Git mutation commands, external execution/configuration flags, and parent traversal.
+- Added explicit alternate workspace selection restricted to worktrees sharing the active Git common directory.
+- Preserved Mayuri's librarian specialization and strengthened Levi's Git-evidence audit prompt.
+- Focused worker tests pass, including simultaneous running-state proof and sibling/unrelated worktree boundaries.
