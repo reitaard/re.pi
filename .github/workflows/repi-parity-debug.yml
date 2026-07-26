@@ -23,6 +23,12 @@ jobs:
       - name: Fetch legacy Recode source
         run: git fetch origin oauth-test:refs/remotes/origin/oauth-test --force
 
+      - name: Fetch authoritative upstream tags
+        run: |
+          git remote remove upstream 2>/dev/null || true
+          git remote add upstream https://github.com/earendil-works/pi.git
+          git fetch upstream --tags --force
+
       - name: Set up Node 26.5
         uses: actions/setup-node@v4
         with:
