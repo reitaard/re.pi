@@ -1,4 +1,10 @@
-import { createModels, createProvider, type Model, type Models, type ProviderHeaders } from "@earendil-works/pi-ai";
+import {
+	createModels,
+	createProvider,
+	type Model,
+	type Models,
+	type ProviderHeaders,
+} from "@earendil-works/pi-ai";
 import { type ProviderStreamOptions, stream, streamSimple } from "@earendil-works/pi-ai/compat";
 import type { ModelRegistry } from "../../core/model-registry.ts";
 

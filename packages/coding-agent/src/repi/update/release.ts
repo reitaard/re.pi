@@ -46,10 +46,7 @@ function configuredPackageName(options: RepiReleaseLookupOptions): string {
 
 function configuredRegistryUrl(options: RepiReleaseLookupOptions): string {
 	return normalizeRegistryUrl(
-		options.registryUrl ??
-			process.env.REPI_UPDATE_REGISTRY ??
-			process.env.npm_config_registry ??
-			DEFAULT_REGISTRY_URL,
+		options.registryUrl ?? process.env.REPI_UPDATE_REGISTRY ?? process.env.npm_config_registry ?? DEFAULT_REGISTRY_URL,
 	);
 }
 

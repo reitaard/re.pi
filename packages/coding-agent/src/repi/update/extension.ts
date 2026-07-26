@@ -9,7 +9,10 @@ export async function repiUpdateNotifier(pi: ExtensionAPI): Promise<void> {
 		notified = true;
 		void checkForRepiUpdate().then((release) => {
 			if (!release) return;
-			ctx.ui.notify(`Recode ${release.version} is available. Exit Recode and run: recode update`, "info");
+			ctx.ui.notify(
+				`Recode ${release.version} is available. Exit Recode and run: recode update`,
+				"info",
+			);
 		});
 	});
 }

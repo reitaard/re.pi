@@ -2,7 +2,10 @@ import { Box, type Component, Container, getCapabilities, Image, Spacer, Text, t
 import type { ToolDefinition, ToolRenderContext } from "../../../core/extensions/types.ts";
 import { createAllToolDefinitions, type ToolName } from "../../../core/tools/index.ts";
 import { getTextOutput as getRenderedTextOutput } from "../../../core/tools/render-utils.ts";
-import { type RecodeToolStatus, recodeToolStatusForeground } from "../../../repi/ui/recode-tool-status.ts";
+import {
+	recodeToolStatusForeground,
+	type RecodeToolStatus,
+} from "../../../repi/ui/recode-tool-status.ts";
 import { convertToPng } from "../../../utils/image-convert.ts";
 import { type ThemeBg, theme } from "../theme/theme.ts";
 

@@ -10,7 +10,14 @@ import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import { formatRecodeThinkingLevel } from "./recode-thinking-label.ts";
 
 const SMART_CONTEXT_COMPACT_THRESHOLD_PERCENT = 40;
-const MODEL_THINKING_LEVEL_ORDER: readonly ModelThinkingLevel[] = ["minimal", "low", "medium", "high", "xhigh", "max"];
+const MODEL_THINKING_LEVEL_ORDER: readonly ModelThinkingLevel[] = [
+	"minimal",
+	"low",
+	"medium",
+	"high",
+	"xhigh",
+	"max",
+];
 
 interface UsageTotals {
 	input: number;
@@ -84,7 +91,10 @@ function collectUsage(sessionManager: ReadonlySessionManager): UsageTotals {
 function availableThinkingLevels(model: Model<Api>): ThinkingLevel[] {
 	if (!model.reasoning) return ["off"];
 	if (!model.thinkingLevelMap) return ["off", ...MODEL_THINKING_LEVEL_ORDER];
-	return ["off", ...MODEL_THINKING_LEVEL_ORDER.filter((level) => model.thinkingLevelMap?.[level] !== null)];
+	return [
+		"off",
+		...MODEL_THINKING_LEVEL_ORDER.filter((level) => model.thinkingLevelMap?.[level] !== null),
+	];
 }
 
 function ansiForeground(text: string, hex: string, ansi256: number, theme: Theme): string {
@@ -147,9 +157,7 @@ export class RecodeFooter implements Component {
 			contextPercent === "?"
 				? "ctx ?"
 				: `ctx ${contextTokens ? `${contextTokens} ` : ""}${contextPercent}%${compactHint}`;
-		statsParts.push(
-			contextPercent === "?" ? footerForeground(contextText, this.theme) : this.theme.fg("accent", contextText),
-		);
+		statsParts.push(contextPercent === "?" ? footerForeground(contextText, this.theme) : this.theme.fg("accent", contextText));
 		let statsLeft = statsParts.join(" ");
 		let statsLeftWidth = visibleWidth(statsLeft);
 		if (statsLeftWidth > width) {
@@ -160,7 +168,10 @@ export class RecodeFooter implements Component {
 		const modelName = state.model?.id ?? "no-model";
 		let rightSideWithoutProvider = modelName;
 		if (state.model?.reasoning) {
-			const thinkingLabel = formatRecodeThinkingLevel(state.thinkingLevel, availableThinkingLevels(state.model));
+			const thinkingLabel = formatRecodeThinkingLevel(
+				state.thinkingLevel,
+				availableThinkingLevels(state.model),
+			);
 			rightSideWithoutProvider = `${modelName} • thinking ${thinkingLabel}`;
 		}
 
@@ -178,10 +189,7 @@ export class RecodeFooter implements Component {
 			const availableForRight = width - statsLeftWidth - 2;
 			if (availableForRight > 0) {
 				const truncatedRight = truncateToWidth(rightSide, availableForRight, "");
-				statsLine =
-					statsLeft +
-					" ".repeat(Math.max(0, width - statsLeftWidth - visibleWidth(truncatedRight))) +
-					truncatedRight;
+				statsLine = statsLeft + " ".repeat(Math.max(0, width - statsLeftWidth - visibleWidth(truncatedRight))) + truncatedRight;
 			} else {
 				statsLine = statsLeft;
 			}

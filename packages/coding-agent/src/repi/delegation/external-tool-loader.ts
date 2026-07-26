@@ -1,7 +1,12 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { createEventBus } from "../../core/event-bus.ts";
 import { loadExtensions } from "../../core/extensions/loader.ts";
-import type { ExtensionAPI, ExtensionContext, ToolDefinition, ToolInfo } from "../../core/extensions/types.ts";
+import type {
+	ExtensionAPI,
+	ExtensionContext,
+	ToolDefinition,
+	ToolInfo,
+} from "../../core/extensions/types.ts";
 
 const extensionToolCache = new Map<string, Promise<Map<string, ToolDefinition>>>();
 

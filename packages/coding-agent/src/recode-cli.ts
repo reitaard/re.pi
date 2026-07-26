@@ -26,9 +26,7 @@ function loadBuildInfo(): RepiBuildInfo {
 	const moduleDir = dirname(fileURLToPath(import.meta.url));
 	const path = process.env.REPI_BUILD_INFO_PATH || join(moduleDir, "repi-build-info.json");
 	if (!existsSync(path)) {
-		throw new Error(
-			`RePi build metadata is missing at ${path}. Rebuild packages/coding-agent before running recode.`,
-		);
+		throw new Error(`RePi build metadata is missing at ${path}. Rebuild packages/coding-agent before running recode.`);
 	}
 	const info = JSON.parse(readFileSync(path, "utf8")) as Partial<RepiBuildInfo>;
 	for (const key of ["appName", "packageName", "version", "upstreamVersion", "releaseTag"] as const) {

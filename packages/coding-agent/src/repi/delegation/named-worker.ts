@@ -106,15 +106,12 @@ function assertPositiveInteger(value: number, label: string): void {
 
 function validateWorker(worker: NamedWorkerDefinition): void {
 	if (!/^[a-z][a-z0-9_-]{0,63}$/.test(worker.id)) {
-		throw new Error(
-			"Worker id must start with a lowercase letter and contain only lowercase letters, digits, _ or -",
-		);
+		throw new Error("Worker id must start with a lowercase letter and contain only lowercase letters, digits, _ or -");
 	}
 	if (!worker.displayName.trim()) throw new Error("Worker displayName is required");
 	if (worker.aliases?.some((alias) => !alias.trim())) throw new Error("Worker aliases cannot be empty");
 	if (!worker.description.trim()) throw new Error("Worker description is required");
-	if (worker.personality !== undefined && !worker.personality.trim())
-		throw new Error("Worker personality cannot be empty");
+	if (worker.personality !== undefined && !worker.personality.trim()) throw new Error("Worker personality cannot be empty");
 	if (worker.skillName !== undefined && !worker.skillName.trim()) throw new Error("Worker skillName cannot be empty");
 	if (worker.maxOutputTokens !== undefined) assertPositiveInteger(worker.maxOutputTokens, "maxOutputTokens");
 	const tools = worker.tools ?? ["read", "grep", "find", "ls"];
@@ -347,8 +344,7 @@ export async function runNamedWorker(options: RunNamedWorkerOptions): Promise<Na
 	const onAbort = () => requestAbort("cancelled");
 	options.signal?.addEventListener("abort", onAbort, { once: true });
 	if (options.signal?.aborted) requestAbort("cancelled");
-	const timer =
-		options.timeoutMs === undefined ? undefined : setTimeout(() => requestAbort("timeout"), options.timeoutMs);
+	const timer = options.timeoutMs === undefined ? undefined : setTimeout(() => requestAbort("timeout"), options.timeoutMs);
 	const unsubscribe = harness.subscribe((event) => {
 		if (event.type !== "tool_execution_start" && event.type !== "tool_execution_end") return;
 		emitProgress(options, {

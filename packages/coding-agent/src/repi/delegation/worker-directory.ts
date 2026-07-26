@@ -328,10 +328,7 @@ export class WorkerDirectory {
 		record.lastOutput = turn.result.output || undefined;
 		record.error = turn.result.error;
 		record.history.push({ role: "speaker", text: turn.message.trim() });
-		record.history.push({
-			role: "worker",
-			text: turn.result.output || turn.result.error || `[${turn.result.status}]`,
-		});
+		record.history.push({ role: "worker", text: turn.result.output || turn.result.error || `[${turn.result.status}]` });
 		this.trimHistory(record);
 		this.pruneConversations();
 		return this.snapshot(record);

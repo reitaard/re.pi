@@ -9,12 +9,19 @@ import { createRecodeWorkerIndicator, workerForeground } from "../ui/recode-work
 import { createDelegateTool } from "./delegate-tool.ts";
 import { resolveExternalAgentTools } from "./external-tool-loader.ts";
 import type { NamedWorkerDefinition, NamedWorkerSkill } from "./named-worker.ts";
-import { WorkerChatController } from "./worker-chat.ts";
-import { type WorkerConversationSnapshot, WorkerDirectory } from "./worker-directory.ts";
-import { setActiveWorkerHeaderState } from "./worker-header-state.ts";
 import { REPI_NAMED_WORKERS } from "./worker-registry.ts";
-import { applyWorkerSettingsConfig, readWorkerSettingsConfig } from "./worker-settings.ts";
-import { ensureWorkerStorage, inspectWorkerStorage, resolveWorkerStoragePaths } from "./worker-storage.ts";
+import { WorkerChatController } from "./worker-chat.ts";
+import { WorkerDirectory, type WorkerConversationSnapshot } from "./worker-directory.ts";
+import { setActiveWorkerHeaderState } from "./worker-header-state.ts";
+import {
+	applyWorkerSettingsConfig,
+	readWorkerSettingsConfig,
+} from "./worker-settings.ts";
+import {
+	ensureWorkerStorage,
+	inspectWorkerStorage,
+	resolveWorkerStoragePaths,
+} from "./worker-storage.ts";
 import { createWorkerControlTools } from "./worker-tools.ts";
 
 const WEB_TOOL_NAMES = ["web_search", "fetch_content", "get_search_content"] as const;
@@ -151,11 +158,7 @@ export function repiWorkers(pi: ExtensionAPI): void {
 		if (notify) ctx.ui.notify("Returned to Aizen", "info");
 	};
 
-	const sendDirectMessage = async (
-		worker: NamedWorkerDefinition,
-		text: string,
-		ctx: ExtensionContext,
-	): Promise<void> => {
+	const sendDirectMessage = async (worker: NamedWorkerDefinition, text: string, ctx: ExtensionContext): Promise<void> => {
 		if (!chat) throw new Error("Direct worker chat is not ready");
 		pi.sendMessage(
 			{
@@ -216,7 +219,10 @@ export function repiWorkers(pi: ExtensionAPI): void {
 		});
 		chat = new WorkerChatController(directory);
 		await ensureWorkerStorage(getAgentDir(), ctx.cwd, REPI_NAMED_WORKERS);
-		applyWorkerSettingsConfig(directory, await readWorkerSettingsConfig(join(getAgentDir(), SETTINGS_FILE)));
+		applyWorkerSettingsConfig(
+			directory,
+			await readWorkerSettingsConfig(join(getAgentDir(), SETTINGS_FILE)),
+		);
 	};
 
 	pi.registerCommand("worker", {

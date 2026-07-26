@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
-import { type KiokuSqliteDatabase, openKiokuDatabase } from "./sqlite.ts";
+import { openKiokuDatabase, type KiokuSqliteDatabase } from "./sqlite.ts";
 import type {
 	KiokuMemoryChunk,
 	KiokuMemoryDocument,
@@ -117,9 +117,7 @@ export class KiokuMemoryStore {
 		const now = Date.now();
 		database.exec("BEGIN IMMEDIATE");
 		try {
-			const oldChunks = database
-				.prepare("SELECT id FROM recode_memory_chunks WHERE document_id = ?")
-				.all(document.id);
+			const oldChunks = database.prepare("SELECT id FROM recode_memory_chunks WHERE document_id = ?").all(document.id);
 			const deleteFts = database.prepare("DELETE FROM recode_memory_fts WHERE id = ?");
 			for (const row of oldChunks) deleteFts.run(stringValue(row.id));
 			database.prepare("DELETE FROM recode_memory_chunks WHERE document_id = ?").run(document.id);
@@ -207,8 +205,7 @@ export class KiokuMemoryStore {
 			scopeSql = "AND c.scope = 'project' AND (c.path = ? OR substr(c.path, 1, length(?)) = ?)";
 			params.push(root, prefix, prefix);
 		} else if (scope === "both") {
-			scopeSql =
-				"AND (c.scope = 'global' OR (c.scope = 'project' AND (c.path = ? OR substr(c.path, 1, length(?)) = ?)))";
+			scopeSql = "AND (c.scope = 'global' OR (c.scope = 'project' AND (c.path = ? OR substr(c.path, 1, length(?)) = ?)))";
 			params.push(root, prefix, prefix);
 		}
 		params.push(limit);
