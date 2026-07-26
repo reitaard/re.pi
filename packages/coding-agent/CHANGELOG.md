@@ -20,7 +20,7 @@
 
 ### Fixed
 
-- Accepted MSYS-style Windows paths when routing delegated workers to sibling Git worktrees.
+- Accepted MSYS-style Windows paths, including Git-reported common directories, when routing delegated workers to sibling worktrees.
 - Kept resumed sessions synchronized with active remote tool calls and prevented reloads from invalidating a process's own running extension context.
 - Kept the Recode logo visible after messages, new sessions, reloads, and resumed sessions.
 - Prevented Teach Mode from bypassing staged Creator approval through direct Kioku or Shiori writes.

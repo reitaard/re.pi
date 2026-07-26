@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
-import { resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import type { AgentTool, ThinkingLevel } from "@reitaard/repi-agent-core";
 import type { Model, Models } from "@reitaard/repi-ai";
 import { spawnProcessSync } from "../../utils/child-process.ts";
@@ -154,12 +154,20 @@ function statusFromResult(result: NamedWorkerRunResult): WorkerConversationStatu
 	return result.status;
 }
 
+function normalizeWorkspacePath(workspace: string): string {
+	return process.platform === "win32" && /^\/[a-zA-Z](?:\/|$)/.test(workspace)
+		? `${workspace[1]!.toUpperCase()}:${workspace.slice(2)}`
+		: workspace;
+}
+
 function resolveWorkspacePath(workspace: string): string {
-	const normalized =
-		process.platform === "win32" && /^\/[a-zA-Z](?:\/|$)/.test(workspace)
-			? `${workspace[1]!.toUpperCase()}:${workspace.slice(2)}`
-			: workspace;
-	return realpathSync(resolve(normalized));
+	return realpathSync(resolve(normalizeWorkspacePath(workspace)));
+}
+
+/** Resolve an absolute or workspace-relative path reported by Git, including MSYS drive paths. */
+export function resolveWorkerGitPath(workspace: string, gitPath: string): string {
+	const normalized = normalizeWorkspacePath(gitPath);
+	return realpathSync(isAbsolute(normalized) ? normalized : resolve(workspace, normalized));
 }
 
 function gitCommonDirectory(workspace: string): string | undefined {
@@ -172,8 +180,7 @@ function gitCommonDirectory(workspace: string): string | undefined {
 		},
 	);
 	if (result.status !== 0 || !result.stdout.trim()) return undefined;
-	const path = result.stdout.trim();
-	return realpathSync(resolve(workspace, path));
+	return resolveWorkerGitPath(workspace, result.stdout.trim());
 }
 
 export class WorkerDirectory {

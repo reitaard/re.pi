@@ -6,7 +6,11 @@ import { createModels, fauxAssistantMessage, fauxProvider } from "@reitaard/repi
 import { describe, expect, it, vi } from "vitest";
 import type { NamedWorkerDefinition } from "../src/core/delegation/named-worker.ts";
 import { WorkerChatController } from "../src/core/delegation/worker-chat.ts";
-import { type WorkerConversationTurnResult, WorkerDirectory } from "../src/core/delegation/worker-directory.ts";
+import {
+	resolveWorkerGitPath,
+	type WorkerConversationTurnResult,
+	WorkerDirectory,
+} from "../src/core/delegation/worker-directory.ts";
 import { createWorkerControlTools } from "../src/core/delegation/worker-tools.ts";
 
 let providerCount = 0;
@@ -302,10 +306,12 @@ describe("WorkerDirectory", () => {
 
 			expect(directory.resolveWorkspace(sibling)).toBe(realpathSync(sibling));
 			if (process.platform === "win32") {
-				const msysSibling = sibling
-					.replaceAll("\\", "/")
-					.replace(/^([a-zA-Z]):/, (_match, drive: string) => `/${drive.toLowerCase()}`);
+				const toMsysPath = (path: string) =>
+					path.replaceAll("\\", "/").replace(/^([a-zA-Z]):/, (_match, drive: string) => `/${drive.toLowerCase()}`);
+				const msysSibling = toMsysPath(sibling);
+				const commonDirectory = runGit(main, "rev-parse", "--path-format=absolute", "--git-common-dir");
 				expect(directory.resolveWorkspace(msysSibling)).toBe(realpathSync(sibling));
+				expect(resolveWorkerGitPath(sibling, toMsysPath(commonDirectory))).toBe(realpathSync(commonDirectory));
 			}
 			expect(() => directory.resolveWorkspace(unrelated)).toThrow("another worktree of the same Git repository");
 		} finally {
