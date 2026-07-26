@@ -66,15 +66,20 @@ describe("recode worker TUI", () => {
 
 		const leviDirect = workerActivityText(levi, "direct", 1);
 		const leviDelegated = workerActivityText(levi, "delegated", 1);
+		const mayuriDelegated = workerActivityText(mayuri, "delegated", 1);
 		const mayuriPhrases = new Set([1, 2, 3].map((turn) => workerActivityText(mayuri, "direct", turn)));
 
 		expect(leviDirect).toContain("Levi (監査)");
 		expect(leviDirect).not.toContain("Aizen");
-		expect(leviDelegated).toContain("for Aizen (藍染)");
+		expect(leviDelegated).toMatch(/^Levi \(監査\) is (checking|reviewing|tightening)…$/);
+		expect(leviDelegated).not.toContain("Aizen");
+		expect(mayuriDelegated).toMatch(/^Mayuri \(研究\) is (following|cross-checking|organizing)…$/);
+		expect(mayuriDelegated).not.toContain("Aizen");
 		expect(mayuriPhrases.size).toBeGreaterThan(1);
 		expect(workerRouteLabel("Levi (監査)", "direct")).toBe("Levi (監査) · direct chat");
 		expect(workerRouteLabel("Levi (監査)", "delegated")).toBe("Levi (監査) → Aizen (藍染) · handoff");
 		expect(workerActivityText(shiori, "direct", 1)).toContain("Shiori (栞)");
+		expect(workerActivityText(shiori, "delegated", 1)).toContain("for Aizen (藍染)");
 		expect(workerActivityWidgetKey("research")).not.toBe(workerActivityWidgetKey("audit"));
 	});
 
@@ -252,8 +257,10 @@ describe("recode worker TUI", () => {
 			.render(100)
 			.join("\n");
 		expect(batchCall).toContain("2 workers in parallel");
-		expect(batchCall.replace(/\x1b\[[0-9;]*m/g, "")).toContain("Levi (監査)");
-		expect(batchCall.replace(/\x1b\[[0-9;]*m/g, "")).toContain("Mayuri (研究)");
+		const plainBatchCall = batchCall.replace(/\x1b\[[0-9;]*m/g, "");
+		expect(plainBatchCall).toMatch(/Levi \(監査\) is (checking|reviewing|tightening)… · handoff 1\/2/);
+		expect(plainBatchCall).toMatch(/Mayuri \(研究\) is (following|cross-checking|organizing)… · handoff 2\/2/);
+		expect(plainBatchCall).not.toContain("Aizen");
 
 		const batchTurns = [
 			{

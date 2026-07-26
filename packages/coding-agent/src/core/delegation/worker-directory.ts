@@ -77,6 +77,15 @@ export interface WorkerConversationTurnResult {
 	result: NamedWorkerRunResult;
 }
 
+export interface WorkerConversationStartRequest {
+	workerReference: string;
+	message: string;
+	context?: string;
+	signal?: AbortSignal;
+	speaker?: OrchestrationActorIdentity;
+	workspace?: string;
+}
+
 export interface WorkerConversationRestoreTurn {
 	conversationId: string;
 	workerId: string;
@@ -194,6 +203,8 @@ export class WorkerDirectory {
 	private readonly maxActiveConversations: number;
 	private readonly maxActiveConversationsPerWorker: number;
 	private readonly workerSettings = new Map<string, WorkerRuntimeSettings>();
+	private readonly oneShotControllers = new Set<AbortController>();
+	private readonly activeOneShotsByWorker = new Map<string, number>();
 
 	constructor(options: WorkerDirectoryOptions) {
 		if (!options.cwd.trim()) throw new Error("WorkerDirectory cwd is required");
@@ -292,20 +303,7 @@ export class WorkerDirectory {
 	}
 
 	assertCanStartConversations(workerReferences: readonly string[]): void {
-		const requestedWorkerIds = workerReferences.map((reference) => this.resolveWorker(reference).id);
-		const running = [...this.conversations.values()].filter((record) => record.status === "running");
-		if (running.length + requestedWorkerIds.length > this.maxActiveConversations) {
-			throw new Error(`Worker conversation concurrency limit reached (${this.maxActiveConversations})`);
-		}
-		for (const workerId of new Set(requestedWorkerIds)) {
-			const runningForWorker = running.filter((record) => record.worker.id === workerId).length;
-			const requestedForWorker = requestedWorkerIds.filter((candidate) => candidate === workerId).length;
-			if (runningForWorker + requestedForWorker > this.maxActiveConversationsPerWorker) {
-				throw new Error(
-					`Worker concurrency limit reached for ${workerId} (${this.maxActiveConversationsPerWorker})`,
-				);
-			}
-		}
+		this.assertCanStartWorkerIds(workerReferences.map((reference) => this.resolveWorker(reference).id));
 	}
 
 	resolveWorkspace(requestedWorkspace = this.cwd): string {
@@ -330,9 +328,33 @@ export class WorkerDirectory {
 		speaker: OrchestrationActorIdentity = REPI_AIZEN_IDENTITY,
 		workspace = this.cwd,
 	): Promise<NamedWorkerRunResult> {
+		if (!task.trim()) throw new Error("Worker task is required");
 		const worker = this.resolveWorker(workerReference);
+		const resolvedWorkspace = this.resolveWorkspace(workspace);
+		this.assertCanStartWorkerIds([worker.id]);
+		const controller = new AbortController();
+		const onAbort = () => controller.abort();
+		signal?.addEventListener("abort", onAbort, { once: true });
+		if (signal?.aborted) controller.abort();
+		this.oneShotControllers.add(controller);
+		this.activeOneShotsByWorker.set(worker.id, (this.activeOneShotsByWorker.get(worker.id) ?? 0) + 1);
 		const actorContext = [formatOrchestrationActorContext(speaker), context?.trim()].filter(Boolean).join("\n\n");
-		return this.run(worker, this.resolveWorkspace(workspace), task, actorContext, signal, this.runtime.onProgress);
+		try {
+			return await this.run(
+				worker,
+				resolvedWorkspace,
+				task,
+				actorContext,
+				controller.signal,
+				this.runtime.onProgress,
+			);
+		} finally {
+			this.oneShotControllers.delete(controller);
+			const remaining = (this.activeOneShotsByWorker.get(worker.id) ?? 1) - 1;
+			if (remaining > 0) this.activeOneShotsByWorker.set(worker.id, remaining);
+			else this.activeOneShotsByWorker.delete(worker.id);
+			signal?.removeEventListener("abort", onAbort);
+		}
 	}
 
 	async startConversation(
@@ -343,25 +365,48 @@ export class WorkerDirectory {
 		speaker: OrchestrationActorIdentity = REPI_AIZEN_IDENTITY,
 		workspace = this.cwd,
 	): Promise<WorkerConversationTurnResult> {
-		this.pruneConversations();
-		const worker = this.resolveWorker(workerReference);
-		this.assertConversationCapacity(worker.id);
-		const now = Date.now();
-		const record: WorkerConversationRecord = {
-			conversationId: randomUUID(),
-			worker,
-			speaker,
-			status: "completed",
-			taskSummary: summarizeTask(message),
-			createdAt: now,
-			updatedAt: now,
-			turnCount: 0,
-			history: [],
-			workspace: this.resolveWorkspace(workspace),
-		};
-		this.conversations.set(record.conversationId, record);
-		const result = await this.executeConversationTurn(record, message, context, signal);
-		return { conversation: this.snapshot(record), result };
+		const [turn] = await this.startConversations([{ workerReference, message, context, signal, speaker, workspace }]);
+		return turn!;
+	}
+
+	async startConversations(
+		requests: readonly WorkerConversationStartRequest[],
+	): Promise<WorkerConversationTurnResult[]> {
+		if (requests.length === 0) throw new Error("At least one worker conversation is required");
+		const prepared = requests.map((request) => {
+			if (!request.message.trim()) throw new Error("Worker message is required");
+			return {
+				...request,
+				worker: this.resolveWorker(request.workerReference),
+				workspace: this.resolveWorkspace(request.workspace ?? this.cwd),
+			};
+		});
+		this.assertCanStartWorkerIds(prepared.map((request) => request.worker.id));
+		this.ensureConversationSlots(prepared.length);
+
+		const records = prepared.map((request) => {
+			const now = Date.now();
+			const record: WorkerConversationRecord = {
+				conversationId: randomUUID(),
+				worker: request.worker,
+				speaker: request.speaker ?? REPI_AIZEN_IDENTITY,
+				status: "completed",
+				taskSummary: summarizeTask(request.message),
+				createdAt: now,
+				updatedAt: now,
+				turnCount: 0,
+				history: [],
+				workspace: request.workspace,
+			};
+			this.conversations.set(record.conversationId, record);
+			return { request, record };
+		});
+		return Promise.all(
+			records.map(async ({ request, record }) => {
+				const result = await this.executeConversationTurn(record, request.message, request.context, request.signal);
+				return { conversation: this.snapshot(record), result };
+			}),
+		);
 	}
 
 	async messageConversation(
@@ -449,6 +494,7 @@ export class WorkerDirectory {
 	}
 
 	closeAll(): void {
+		for (const controller of this.oneShotControllers) controller.abort();
 		for (const record of this.conversations.values()) record.abortController?.abort();
 		this.conversations.clear();
 	}
@@ -615,13 +661,40 @@ export class WorkerDirectory {
 	}
 
 	private assertConversationCapacity(workerId: string): void {
+		this.assertCanStartWorkerIds([workerId]);
+	}
+
+	private assertCanStartWorkerIds(requestedWorkerIds: readonly string[]): void {
 		const running = [...this.conversations.values()].filter((record) => record.status === "running");
-		if (running.length >= this.maxActiveConversations) {
+		const activeOneShots = [...this.activeOneShotsByWorker.values()].reduce((sum, count) => sum + count, 0);
+		if (running.length + activeOneShots + requestedWorkerIds.length > this.maxActiveConversations) {
 			throw new Error(`Worker conversation concurrency limit reached (${this.maxActiveConversations})`);
 		}
-		const workerRunning = running.filter((record) => record.worker.id === workerId).length;
-		if (workerRunning >= this.maxActiveConversationsPerWorker) {
-			throw new Error(`Worker concurrency limit reached for ${workerId} (${this.maxActiveConversationsPerWorker})`);
+		for (const workerId of new Set(requestedWorkerIds)) {
+			const runningForWorker = running.filter((record) => record.worker.id === workerId).length;
+			const activeOneShotsForWorker = this.activeOneShotsByWorker.get(workerId) ?? 0;
+			const requestedForWorker = requestedWorkerIds.filter((candidate) => candidate === workerId).length;
+			if (runningForWorker + activeOneShotsForWorker + requestedForWorker > this.maxActiveConversationsPerWorker) {
+				throw new Error(
+					`Worker concurrency limit reached for ${workerId} (${this.maxActiveConversationsPerWorker})`,
+				);
+			}
+		}
+	}
+
+	private ensureConversationSlots(requiredSlots: number): void {
+		if (requiredSlots > this.maxConversations) {
+			throw new Error("Worker conversation limit reached; close an existing conversation first");
+		}
+		const removable = [...this.conversations.values()]
+			.filter((record) => record.status !== "running")
+			.sort((left, right) => left.updatedAt - right.updatedAt);
+		while (this.conversations.size + requiredSlots > this.maxConversations && removable.length > 0) {
+			const record = removable.shift();
+			if (record) this.conversations.delete(record.conversationId);
+		}
+		if (this.conversations.size + requiredSlots > this.maxConversations) {
+			throw new Error("Worker conversation limit reached; close an existing conversation first");
 		}
 	}
 

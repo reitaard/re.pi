@@ -313,11 +313,11 @@ export async function recodeMemory(
 		cardinalRouting: config.cardinalRouting,
 	});
 
-	pi.events.on(RECODE_SHIORI_SETTINGS_REQUEST, (data) => {
+	const unsubscribeShioriSettingsRequest = pi.events.on(RECODE_SHIORI_SETTINGS_REQUEST, (data) => {
 		const request = data as RecodeShioriSettingsRequest;
 		request.resolve(shioriSettingsSnapshot());
 	});
-	pi.events.on(RECODE_SHIORI_SETTINGS_UPDATE, async (data) => {
+	const unsubscribeShioriSettingsUpdate = pi.events.on(RECODE_SHIORI_SETTINGS_UPDATE, async (data) => {
 		const request = data as RecodeShioriSettingsUpdate;
 		try {
 			const next = { ...config, ...request.patch };
@@ -357,6 +357,8 @@ export async function recodeMemory(
 		adapterActive = false;
 		activeContext = undefined;
 		unsubscribeShiori();
+		unsubscribeShioriSettingsRequest();
+		unsubscribeShioriSettingsUpdate();
 	});
 
 	pi.on("input", async (event) => {

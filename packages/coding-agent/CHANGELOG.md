@@ -30,6 +30,10 @@
 - Kept overlapping same-worker slash tasks on separate activity widgets and independent cancellation signals.
 - Updated footer context usage after every persisted AgentHarness model/tool-loop step instead of waiting for the outer turn or reverting to stale pre-compaction usage.
 - Colored cache read, cache write, and cache-hit footer statistics with the same accent as token traffic and current context usage.
+- Kept active Levi and Mayuri handoff lines compact while preserving Shiori's distinct review presentation.
+- Counted one-shot delegates against shared worker concurrency, cancelled them during runtime teardown, and preflighted every batch request before atomic admission.
+- Removed stale Shiori settings listeners during extension shutdown and reload.
+- Suppressed update notifications when the discovery endpoint advertises a foreign package instead of the active Recode package.
 
 ## [0.81.4] - 2026-07-22
 

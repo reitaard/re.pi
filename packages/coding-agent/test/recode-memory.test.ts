@@ -218,6 +218,15 @@ describe("re.code core memory", () => {
 				shioriThinking: true,
 				cardinalRouting: "project",
 			});
+
+			const shutdownHandlers = loader.getExtensions().extensions[0]?.handlers.get("session_shutdown") ?? [];
+			for (const handler of shutdownHandlers) {
+				await handler({ type: "session_shutdown", reason: "reload" }, {} as ExtensionContext);
+			}
+			const staleResolve = vi.fn();
+			eventBus.emit(RECODE_SHIORI_SETTINGS_REQUEST, { resolve: staleResolve } satisfies RecodeShioriSettingsRequest);
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(staleResolve).not.toHaveBeenCalled();
 		} finally {
 			runtime.close();
 		}

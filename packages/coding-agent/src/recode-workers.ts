@@ -230,6 +230,9 @@ export function workerActivityText(
 ): string {
 	const phrases = WORKER_ACTIVITY_PHRASES[worker.id] ?? ["working through the request"];
 	const phrase = phrases[stableHash(`${worker.id}:${mode}:${turnNumber}`) % phrases.length] ?? phrases[0];
+	if (mode === "delegated" && worker.id !== SHIORI_WORKER_ID) {
+		return `${identity(worker)} is ${phrase.split(" ", 1)[0] ?? phrase}…`;
+	}
 	const destination = mode === "delegated" ? ` for ${AIZEN_IDENTITY}` : "";
 	return `${identity(worker)} is ${phrase}${destination}…`;
 }

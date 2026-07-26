@@ -362,6 +362,47 @@ describe("WorkerDirectory", () => {
 		expect(turns.every((turn) => turn.result.workerId === "audit")).toBe(true);
 	});
 
+	it("counts one-shot delegates against shared global and per-worker concurrency", async () => {
+		const { registration, models } = createFaux();
+		let release = () => {};
+		let markStarted = () => {};
+		const blocked = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const started = new Promise<void>((resolve) => {
+			markStarted = resolve;
+		});
+		const blockedResponse = async () => {
+			markStarted();
+			await blocked;
+			return fauxAssistantMessage("Worker complete.");
+		};
+		registration.setResponses([blockedResponse, blockedResponse]);
+		const directory = new WorkerDirectory({
+			cwd: process.cwd(),
+			workers: workers(),
+			model: registration.getModel(),
+			models,
+			maxActiveConversations: 2,
+			maxActiveConversationsPerWorker: 1,
+		});
+
+		const delegate = directory.runOneShot("audit", "Audit independently.");
+		await started;
+		await expect(directory.startConversation("audit", "Audit concurrently.")).rejects.toThrow(
+			"Worker concurrency limit reached for audit (1)",
+		);
+		const research = directory.startConversation("research", "Research concurrently.");
+		await vi.waitFor(() => expect(directory.getStatus()[0]?.status).toBe("running"));
+		await expect(directory.startConversation("audit", "Exceed the global limit.")).rejects.toThrow(
+			"Worker conversation concurrency limit reached (2)",
+		);
+		directory.closeAll();
+		release();
+		await expect(Promise.all([delegate, research])).resolves.toHaveLength(2);
+		expect(await delegate).toMatchObject({ status: "cancelled" });
+	});
+
 	it("rejects over-capacity batches atomically before launching any worker", async () => {
 		const { registration, models } = createFaux();
 		const directory = new WorkerDirectory({
@@ -383,6 +424,48 @@ describe("WorkerDirectory", () => {
 			}),
 		).rejects.toThrow("Worker conversation concurrency limit reached (1)");
 		expect(directory.getStatus()).toEqual([]);
+	});
+
+	it("preflights every batch message and workspace before launching any worker", async () => {
+		const root = mkdtempSync(join(tmpdir(), "recode-worker-invalid-batch-"));
+		const unrelated = join(root, "unrelated");
+		mkdirSync(unrelated);
+		const { registration, models } = createFaux();
+		const response = vi.fn(() => fauxAssistantMessage("Should not run."));
+		registration.setResponses([response, response]);
+		const directory = new WorkerDirectory({
+			cwd: process.cwd(),
+			workers: workers(),
+			model: registration.getModel(),
+			models,
+		});
+		const startMany = createWorkerControlTools(directory).find((tool) => tool.name === "worker_start_many");
+		if (!startMany) throw new Error("worker_start_many tool missing");
+
+		try {
+			await expect(
+				startMany.execute("invalid-message", {
+					requests: [
+						{ worker: "audit", message: "Audit one." },
+						{ worker: "research", message: "" },
+					],
+				}),
+			).rejects.toThrow("Worker message is required");
+			expect(directory.getStatus()).toEqual([]);
+
+			await expect(
+				startMany.execute("invalid-workspace", {
+					requests: [
+						{ worker: "audit", message: "Audit one." },
+						{ worker: "research", message: "Research one.", workspace: unrelated },
+					],
+				}),
+			).rejects.toThrow("another worktree of the same Git repository");
+			expect(directory.getStatus()).toEqual([]);
+			expect(response).not.toHaveBeenCalled();
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
 	});
 
 	it("enforces equal global and per-worker active-conversation limits", async () => {

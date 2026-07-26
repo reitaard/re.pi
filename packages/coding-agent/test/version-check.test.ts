@@ -42,6 +42,19 @@ describe("version checks", () => {
 		await expect(checkForNewPiVersion("1.2.2")).resolves.toEqual({ version: "1.2.3" });
 	});
 
+	it("suppresses newer releases for a foreign package identity", async () => {
+		const fetchMock = vi.fn(async () =>
+			Response.json({ packageName: "@earendil-works/pi-coding-agent", version: "0.82.1" }),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		await expect(checkForNewPiVersion("0.81.4", "@reitaard/repi-coding-agent")).resolves.toBeUndefined();
+		await expect(checkForNewPiVersion("0.81.4", "@earendil-works/pi-coding-agent")).resolves.toEqual({
+			packageName: "@earendil-works/pi-coding-agent",
+			version: "0.82.1",
+		});
+	});
+
 	it("uses the pi.dev version check api with a pi user agent", async () => {
 		const fetchMock = vi.fn(async () => Response.json({ version: "1.2.4" }));
 		vi.stubGlobal("fetch", fetchMock);
