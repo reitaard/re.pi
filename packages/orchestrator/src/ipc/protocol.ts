@@ -5,7 +5,8 @@ import type {
 	RpcExtensionUIResponse,
 	RpcResponse,
 } from "@reitaard/repi-coding-agent";
-import type { InstanceStatus } from "../types.ts";
+import type { RpcCancellationResult } from "../rpc-process.ts";
+import type { InstanceStatus, TerminationOutcome } from "../types.ts";
 
 export interface SpawnRequest {
 	type: "spawn";
@@ -22,6 +23,12 @@ export interface ListRequest {
 export interface StopRequest {
 	type: "stop";
 	instanceId: string;
+}
+
+export interface CancelRequest {
+	type: "cancel";
+	instanceId: string;
+	commandId?: string;
 }
 
 export interface StatusRequest {
@@ -44,6 +51,7 @@ export interface RequestMap {
 	spawn: SpawnRequest;
 	list: ListRequest;
 	stop: StopRequest;
+	cancel: CancelRequest;
 	status: StatusRequest;
 	rpc: RpcRequest;
 	rpc_stream: RpcStreamRequest;
@@ -59,6 +67,9 @@ export interface InstanceSummary {
 	sessionId?: string;
 	sessionFile?: string;
 	radiusPiId?: string;
+	completedAt?: string;
+	terminationOutcome?: TerminationOutcome;
+	terminalDiagnostic?: string;
 }
 
 export interface ResponseBase {
@@ -86,6 +97,11 @@ export interface StatusResponse extends ResponseBase {
 	instance?: InstanceSummary;
 }
 
+export interface CancelResponse extends ResponseBase {
+	type: "cancel_result";
+	cancellation?: RpcCancellationResult;
+}
+
 export interface RpcBridgeResponse extends ResponseBase {
 	type: "rpc_result";
 	response: RpcResponse;
@@ -106,6 +122,7 @@ export interface ResponseMap {
 	spawn: SpawnResponse;
 	list: ListResponse;
 	stop: StopResponse;
+	cancel: CancelResponse;
 	status: StatusResponse;
 	rpc: RpcBridgeResponse;
 	rpc_stream: RpcReadyResponse;

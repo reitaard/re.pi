@@ -6,6 +6,8 @@ import type {
 	RpcResponse,
 } from "@reitaard/repi-coding-agent";
 import type {
+	CancelRequest,
+	CancelResponse,
 	ErrorResponse,
 	InstanceSummary,
 	ListRequest,
@@ -35,6 +37,9 @@ function toInstanceSummary(instance: InstanceRecord): InstanceSummary {
 		sessionId: instance.sessionId,
 		sessionFile: instance.sessionFile,
 		radiusPiId: instance.radiusPiId,
+		completedAt: instance.completedAt,
+		terminationOutcome: instance.terminationOutcome,
+		terminalDiagnostic: instance.terminalDiagnostic,
 	};
 }
 
@@ -50,6 +55,7 @@ function unknownInstanceError(instanceId: string): ErrorResponse {
 export async function handleIpcRequest(request: SpawnRequest): Promise<SpawnResponse | ErrorResponse>;
 export async function handleIpcRequest(request: ListRequest): Promise<ListResponse | ErrorResponse>;
 export async function handleIpcRequest(request: StopRequest): Promise<StopResponse | ErrorResponse>;
+export async function handleIpcRequest(request: CancelRequest): Promise<CancelResponse | ErrorResponse>;
 export async function handleIpcRequest(request: StatusRequest): Promise<StatusResponse | ErrorResponse>;
 export async function handleIpcRequest(request: RpcRequest): Promise<RpcBridgeResponse | ErrorResponse>;
 export async function handleIpcRequest(request: RpcStreamRequest): Promise<RpcReadyResponse | ErrorResponse>;
@@ -99,6 +105,15 @@ export async function handleIpcRequest(request: OrchestratorRequest): Promise<Or
 				type: "stop_result",
 				ok: true,
 				instanceId: request.instanceId,
+			};
+		}
+
+		case "cancel": {
+			const cancellation = await supervisor.cancelInstance(request.instanceId, request.commandId);
+			return {
+				type: "cancel_result",
+				ok: true,
+				cancellation,
 			};
 		}
 

@@ -291,6 +291,43 @@ Detailed evidence is in [`EXTENSIONAUDIT.md`](EXTENSIONAUDIT.md).
 - Full `npm run check` and `git diff --check` passed.
 - Persistence, process-safe capability durability, deadline/escalation, iteration-budget integration and session turn leases remain O2–O4 work.
 
+### O2 — Atomic persistence and terminal retention
+
+**Status:** complete
+**Started:** 2026-07-28
+**Completed:** 2026-07-28
+
+- Replaced direct manifest overwrites with same-directory exclusive temporary files, file flush, atomic rename and best-effort directory flush.
+- Added validated bounded backups that are refreshed only from a valid current manifest, so corrupt current state cannot overwrite the last known-good backup.
+- Added fail-closed schema/bounds validation for machine and instance records, duplicate instance IDs and process identity receipts.
+- Added bounded observable storage diagnostics for invalid current state, invalid backup state, successful backup recovery and unrecoverable corruption.
+- Added one-hour configurable terminal retention and required completion timestamps for stopped, succeeded, failed and cancelled records.
+- Changed explicit stop to retain a cancelled terminal snapshot; failed spawn and unexpected exit retain failed snapshots; restart-normalized live records retain stopped snapshots.
+- Added PID plus independently observed process-start receipt verification; PID equality alone never authorizes adoption or termination.
+- Added injected RPC-process/presence boundaries to keep supervisor persistence tests deterministic and network-free.
+- O2 storage/lifecycle tests: **7 passed**; all O0–O2 orchestrator tests: **21 passed**.
+- Full `npm run check` passed. O3 owns RPC deadlines, cancellation completion and shutdown escalation.
+
+### O3 — Deadlines, cancellation and shutdown
+
+**Status:** complete
+**Started:** 2026-07-28
+**Completed:** 2026-07-28
+
+- Added a configurable default deadline to every response-bearing RPC request, deadline cleanup, per-request abort signals and typed timeout/cancel errors.
+- Added best-effort remote prompt abort on local deadline/cancellation and command-scoped cancellation for active prompt IDs.
+- Added public instance cancellation through the supervisor and IPC protocol with requested, accepted, completed, unsupported and unknown outcomes.
+- Prevented stale request-ID reuse and stale attachment generations from cancelling newer work.
+- Added bounded pending requests, one concurrent prompt per RPC process, bounded request identities, stdout/stderr buffers, live sessions and subscribers.
+- Isolated RPC event/UI observer exceptions from transport control flow and fail-closed malformed or oversized child output.
+- Replaced unbounded SIGTERM waiting with configurable graceful deadline, SIGKILL escalation, bounded forced-exit verification and persisted termination outcomes.
+- Recorded unverified forced termination as failed rather than claiming a successful stop.
+- Made multi-instance supervisor shutdown concurrent so one child's shutdown window does not delay starting shutdown for another child.
+- Added six dedicated RPC deadline/cancellation/shutdown tests and extended lifecycle/storage tests for stale ownership, failed termination, live limits and concurrent shutdown. All O0–O3 orchestrator tests: **29 passed**.
+- Rechecked O1–O3 against the clean frozen Hermes checkout at `5b22bd955682a8fc7b07769784c5129e23f53eaf`; retained only mapped lifecycle/process invariants and removed the obsolete lossy `removeInstance()` path.
+- The checkpoint classification is recorded in [`MAESTRO-O3-CHECKPOINT.md`](MAESTRO-O3-CHECKPOINT.md).
+- Full `npm run check` and `git diff --check` passed. O4 owns durable-session turn leases and rotation-safe rebind.
+
 ## Comparison traceability
 
 The implementation is governed by [`analyze/COMPARE.md`](../analyze/COMPARE.md), not only its startup section. `Analyze/PLAN.md` maps the complete comparison into startup/package work, lifecycle/service work, matched three-way validation and P0–P4 distribution, preservation, safety, memory and integrated-product work. S3 is current because accurate independent readiness boundaries are required before lifecycle/service work can improve perceived and complete startup honestly.

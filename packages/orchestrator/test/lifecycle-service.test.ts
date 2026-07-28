@@ -128,7 +128,7 @@ describe("Maestro lifecycle contract", () => {
 		assert.equal((await service.cancel(handle, "again")).alreadyTerminal, true);
 	});
 
-	it("fails forged handles closed and rejects stale attachment generations", () => {
+	it("fails forged handles closed and rejects stale attachment generations", async () => {
 		const service = new MaestroLifecycleService({ adapters: [terminalAdapter("worker")] });
 		const handle = service.launch(launchRequest());
 		const forged = { ...handle, capability: "x".repeat(handle.capability.length) };
@@ -140,8 +140,12 @@ describe("Maestro lifecycle contract", () => {
 		);
 		const first = service.attach(handle, "owner-1");
 		const second = service.attach(handle, "owner-2");
-		assert.deepEqual(service.detach(first), { detached: false, stale: true, state: "PENDING" });
-		assert.deepEqual(service.detach(second), { detached: true, stale: false, state: "PENDING" });
+		const staleCancellation = await service.cancelAttached(handle, first, "stale owner");
+		assert.equal(staleCancellation.staleOwner, true);
+		const unchangedState = service.status(handle).state;
+		assert.notEqual(unchangedState, "CANCEL_REQUESTED");
+		assert.deepEqual(service.detach(first), { detached: false, stale: true, state: unchangedState });
+		assert.deepEqual(service.detach(second), { detached: true, stale: false, state: unchangedState });
 	});
 
 	it("expires terminal handles consistently and releases their correlation IDs", async () => {

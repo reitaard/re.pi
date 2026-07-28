@@ -6,6 +6,7 @@ export * from "./ipc/server.ts";
 export * from "./lifecycle-adapters.ts";
 export * from "./lifecycle-contract.ts";
 export * from "./lifecycle-service.ts";
+export * from "./process-identity.ts";
 export * from "./rpc-process.ts";
 export * from "./serve.ts";
 export * from "./storage.ts";

@@ -83,6 +83,7 @@ export interface MaestroCancelResult {
 	alreadyTerminal: boolean;
 	unknownHandle: boolean;
 	unsupported: boolean;
+	staleOwner: boolean;
 	state: MaestroLifecycleState;
 }
 

@@ -311,14 +311,23 @@ export class MaestroLifecycleService {
 
 	async cancel(handle: MaestroHandle, reason: string, commandId?: string): Promise<MaestroCancelResult> {
 		const record = this.findRecord(handle);
-		if (!record)
-			return { accepted: false, alreadyTerminal: false, unknownHandle: true, unsupported: false, state: "UNKNOWN" };
+		if (!record) {
+			return {
+				accepted: false,
+				alreadyTerminal: false,
+				unknownHandle: true,
+				unsupported: false,
+				staleOwner: false,
+				state: "UNKNOWN",
+			};
+		}
 		if (isMaestroTerminalState(record.state)) {
 			return {
 				accepted: false,
 				alreadyTerminal: true,
 				unknownHandle: false,
 				unsupported: false,
+				staleOwner: false,
 				state: record.state,
 			};
 		}
@@ -330,6 +339,7 @@ export class MaestroLifecycleService {
 				alreadyTerminal: false,
 				unknownHandle: false,
 				unsupported: false,
+				staleOwner: false,
 				state: record.state,
 			};
 		}
@@ -339,11 +349,46 @@ export class MaestroLifecycleService {
 				alreadyTerminal: false,
 				unknownHandle: false,
 				unsupported: true,
+				staleOwner: false,
 				state: record.state,
 			};
 		}
 		const accepted = await record.adapter.cancel(cloneHandle(record.handle), bounded(reason, 500) ?? "", commandId);
-		return { accepted, alreadyTerminal: false, unknownHandle: false, unsupported: !accepted, state: record.state };
+		return {
+			accepted,
+			alreadyTerminal: false,
+			unknownHandle: false,
+			unsupported: !accepted,
+			staleOwner: false,
+			state: record.state,
+		};
+	}
+
+	async cancelAttached(
+		handle: MaestroHandle,
+		attachment: MaestroAttachment,
+		reason: string,
+		commandId?: string,
+	): Promise<MaestroCancelResult> {
+		const record = this.findRecord(handle);
+		if (
+			!record ||
+			!record.owner ||
+			record.owner.instanceId !== attachment.instanceId ||
+			record.owner.ownerId !== attachment.ownerId ||
+			record.owner.ownerGeneration !== attachment.ownerGeneration ||
+			!capabilitiesEqual(record.owner.capability, attachment.capability)
+		) {
+			return {
+				accepted: false,
+				alreadyTerminal: false,
+				unknownHandle: !record,
+				unsupported: false,
+				staleOwner: Boolean(record),
+				state: record?.state ?? "UNKNOWN",
+			};
+		}
+		return await this.cancel(handle, reason, commandId);
 	}
 
 	result(handle: MaestroHandle): MaestroResult {

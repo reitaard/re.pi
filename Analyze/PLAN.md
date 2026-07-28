@@ -595,14 +595,16 @@ After each code phase, run focused tests, `npm run check`, `git diff --check`, a
 5. Checkpoint A configured-package behavior/readiness contract — complete.
 6. O0 Maestro characterization and frozen Hermes port mapping — complete.
 7. O1 public lifecycle-model port — complete.
-8. **O2 now:** atomic persistence and terminal retention, followed by O3–O4 cancellation and turn lease.
-9. O5–O7 attach/detach, completion and workspace safety.
-10. O8 TUI integration.
-11. **Checkpoint B:** Hermes lifecycle conformance passes against Recode adapters and the long-lived service is usable end to end.
-12. C0–C3 fresh exact-source three-way test/performance comparison of Recode, jcode and upstream Pi.
-13. C4 gap decision.
-14. S4 performance target ratification from matched evidence.
-15. O9 shared-service optimization in the measured order.
-16. P0–P4 overall product-gap work in the order ratified by C4.
+8. O2 atomic persistence and terminal retention — complete.
+9. O3 deadlines, cancellation and shutdown — complete.
+10. **O4 now:** durable-session turn leases and rotation-safe rebind.
+11. O5–O7 attach/detach, completion and workspace safety.
+12. O8 TUI integration.
+13. **Checkpoint B:** Hermes lifecycle conformance passes against Recode adapters and the long-lived service is usable end to end.
+14. C0–C3 fresh exact-source three-way test/performance comparison of Recode, jcode and upstream Pi.
+15. C4 gap decision.
+16. S4 performance target ratification from matched evidence.
+17. O9 shared-service optimization in the measured order.
+18. P0–P4 overall product-gap work in the order ratified by C4.
 
 This order fixes observability first, replaces the package runtime boundary, ports the lifecycle subsystem to a tested checkpoint, and only then compares exact implementations before broader product-gap closure. The service is never used to conceal cold startup cost, jcode claims are never compared against unlike Recode lifecycle points, and startup gains are not treated as overall feature parity.

@@ -3,6 +3,8 @@ import { createConnection, createServer, type Server } from "node:net";
 import type { AgentSessionEvent, RpcExtensionUIRequest, RpcResponse } from "@reitaard/repi-coding-agent";
 import { getSocketPath } from "../config.ts";
 import {
+	type CancelRequest,
+	type CancelResponse,
 	type ErrorResponse,
 	encodeMessage,
 	type ListRequest,
@@ -22,10 +24,14 @@ import {
 	type StopResponse,
 } from "./protocol.ts";
 
+const MAX_IPC_MESSAGE_BYTES = 1_048_576;
+const MAX_QUEUED_RPC_REQUESTS = 64;
+
 export interface IpcRequestHandler {
 	(request: SpawnRequest): Promise<SpawnResponse | ErrorResponse> | SpawnResponse | ErrorResponse;
 	(request: ListRequest): Promise<ListResponse | ErrorResponse> | ListResponse | ErrorResponse;
 	(request: StopRequest): Promise<StopResponse | ErrorResponse> | StopResponse | ErrorResponse;
+	(request: CancelRequest): Promise<CancelResponse | ErrorResponse> | CancelResponse | ErrorResponse;
 	(request: StatusRequest): Promise<StatusResponse | ErrorResponse> | StatusResponse | ErrorResponse;
 	(request: RpcRequest): Promise<RpcBridgeResponse | ErrorResponse> | RpcBridgeResponse | ErrorResponse;
 	(request: RpcStreamRequest): Promise<RpcReadyResponse | ErrorResponse> | RpcReadyResponse | ErrorResponse;
@@ -49,11 +55,27 @@ export async function startIpcServer(handler: IpcRequestHandler): Promise<Server
 
 	const server = createServer((socket) => {
 		let buffer = "";
+		const writeBounded = (
+			message: OrchestratorResponse | RpcResponse | AgentSessionEvent | RpcExtensionUIRequest,
+		): void => {
+			const encoded = encodeMessage(message);
+			if (socket.writableLength + Buffer.byteLength(encoded) > MAX_IPC_MESSAGE_BYTES) {
+				socket.destroy(new Error("IPC output buffer limit reached"));
+				return;
+			}
+			socket.write(encoded);
+		};
 
 		socket.on("data", async (chunk: Buffer | string) => {
 			buffer += chunk.toString();
 			const newlineIndex = buffer.indexOf("\n");
 			if (newlineIndex === -1) {
+				if (Buffer.byteLength(buffer) > MAX_IPC_MESSAGE_BYTES)
+					socket.destroy(new Error("IPC message limit reached"));
+				return;
+			}
+			if (Buffer.byteLength(buffer.slice(0, newlineIndex)) > MAX_IPC_MESSAGE_BYTES) {
+				socket.destroy(new Error("IPC message limit reached"));
 				return;
 			}
 
@@ -75,15 +97,9 @@ export async function startIpcServer(handler: IpcRequestHandler): Promise<Server
 					socket.removeAllListeners("data");
 					const rpcStream = handler.openRpcStream(
 						request.instanceId,
-						(response) => {
-							socket.write(encodeMessage(response));
-						},
-						(event) => {
-							socket.write(encodeMessage(event));
-						},
-						(request) => {
-							socket.write(encodeMessage(request));
-						},
+						(response) => writeBounded(response),
+						(event) => writeBounded(event),
+						(uiRequest) => writeBounded(uiRequest),
 					);
 					if (!rpcStream) {
 						socket.end(
@@ -92,42 +108,50 @@ export async function startIpcServer(handler: IpcRequestHandler): Promise<Server
 						return;
 					}
 
-					socket.write(encodeMessage(response));
+					writeBounded(response);
 					let rpcRequestQueue = Promise.resolve();
+					let queuedRpcRequests = 0;
 					socket.on("data", (rpcChunk: Buffer | string) => {
 						buffer += rpcChunk.toString();
 						for (;;) {
 							const rpcNewlineIndex = buffer.indexOf("\n");
 							if (rpcNewlineIndex === -1) {
+								if (Buffer.byteLength(buffer) > MAX_IPC_MESSAGE_BYTES) {
+									socket.destroy(new Error("IPC message limit reached"));
+								}
 								break;
+							}
+							if (Buffer.byteLength(buffer.slice(0, rpcNewlineIndex)) > MAX_IPC_MESSAGE_BYTES) {
+								socket.destroy(new Error("IPC message limit reached"));
+								return;
 							}
 							const rpcLine = buffer.slice(0, rpcNewlineIndex).trim();
 							buffer = buffer.slice(rpcNewlineIndex + 1);
 							if (!rpcLine) {
 								continue;
 							}
+							if (queuedRpcRequests >= MAX_QUEUED_RPC_REQUESTS) {
+								socket.destroy(new Error("IPC RPC request queue limit reached"));
+								return;
+							}
+							queuedRpcRequests += 1;
 							rpcRequestQueue = rpcRequestQueue
 								.then(async () => {
 									try {
 										await rpcStream.handleRequest(JSON.parse(rpcLine));
 									} catch (rpcError: unknown) {
-										socket.write(
-											encodeMessage({
-												type: "error",
-												ok: false,
-												error: rpcError instanceof Error ? rpcError.message : String(rpcError),
-											}),
-										);
+										writeBounded({
+											type: "error",
+											ok: false,
+											error: rpcError instanceof Error ? rpcError.message : String(rpcError),
+										});
 									}
 								})
 								.catch((rpcError: Error) => {
-									socket.write(
-										encodeMessage({
-											type: "error",
-											ok: false,
-											error: rpcError.message,
-										}),
-									);
+									writeBounded({ type: "error", ok: false, error: rpcError.message });
+								})
+								.finally(() => {
+									queuedRpcRequests -= 1;
 								});
 						}
 					});
