@@ -1,4 +1,5 @@
 import { ProcessTerminal, type Terminal } from "@reitaard/repi-tui";
+import { emitStartupMilestone, isStartupProbeEnabled } from "../../core/startup-probe.ts";
 import { resetRecodeTerminalBackground } from "./recode-terminal-background.ts";
 
 interface WindowSizeSource {
@@ -40,6 +41,14 @@ export class RecodeProcessTerminal extends ProcessTerminal {
 	override start(onInput: (data: string) => void, onResize: () => void): void {
 		super.start(onInput, onResize);
 		prepareRecodeTerminalViewport(this);
+	}
+
+	override write(data: string): void {
+		super.write(data);
+		const expectedInput = process.env.PI_STARTUP_BENCHMARK_INPUT;
+		if (isStartupProbeEnabled() && expectedInput && data.includes(expectedInput)) {
+			emitStartupMilestone("tui-input-echo");
+		}
 	}
 
 	override stop(): void {

@@ -17,6 +17,7 @@ import type { ResourceLoader } from "./resource-loader.ts";
 import { DefaultResourceLoader } from "./resource-loader.ts";
 import { getDefaultSessionDir, SessionManager } from "./session-manager.ts";
 import { SettingsManager } from "./settings-manager.ts";
+import { emitStartupMilestone } from "./startup-probe.ts";
 import { time } from "./timings.ts";
 import {
 	createBashTool,
@@ -335,6 +336,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			if (headerRunner?.hasHandlers("before_provider_headers")) {
 				headers = await headerRunner.emitBeforeProviderHeaders(headers ?? {});
 			}
+			emitStartupMilestone("provider-request");
 			return streamSimple(model, context, {
 				...options,
 				apiKey: auth.apiKey,

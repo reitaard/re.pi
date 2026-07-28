@@ -186,3 +186,18 @@
 - Verified VPS `recode --version`, `recode --help`, `recode --list-models`, package source metadata, private Node version, non-symlink command wrapper, and foreign-package update refusal.
 - Preserved `/opt/repi/v0.81.4` and recorded the previous symlink target under `/opt/recode/rollback/recode-bin-before-0.81.4-repi.2.dev.27.9e818840.txt` for rollback.
 - `/root/repi` was not present on the VPS; the source checkout is `/root/re.pi`, on branch `agent-harness`, with existing modified worker/delegation files and untracked `ops/`, `recodeupvps.sh`, and a backup file. It was treated as reference-only and was not used for the installed artifact.
+
+## 2026-07-28 — Startup baseline and post-lifecycle comparison gate
+
+- Completed S0 startup measurement instrumentation and the S1 representative baseline; detailed evidence is recorded in `Analyze/IMPLIMENT.md`.
+- Established S2 release-grade package runtime architecture as the next implementation phase.
+- Accepted a faithful Hermes lifecycle-contract port at exact commit `5b22bd955682a8fc7b07769784c5129e23f53eaf` through separate Recode worker and full-session adapters.
+- Added a concrete post-lifecycle gate: after S2–S3 and O0–O8 pass, clone/freeze exact jcode and upstream Pi revisions, map behavioral test contracts, run native/translated conformance suites, and compare matched lifecycle performance endpoints.
+- Kept the product checkpoint three-way—Recode, jcode and upstream Pi—with Hermes retained as lifecycle provenance.
+- Deferred final startup SLO ratification and shared-service optimization ordering until that evidence exists.
+- Began S2 with a versioned extension runtime contract, verified built-entry/hash loading and fail-closed tamper/compatibility handling.
+- Classified `repi-browser` as a required first-party certified package and the first controlled migration target despite its private status; public redistribution remains blocked on explicit licensing.
+- Completed the local controlled browser-package path: bundled ESM artifact, source map, exact hash, compatibility/declarative lifecycle metadata, fail-closed host verification and successful browser-tool registration.
+- Updated installed web/MCP packages and exact upstream Pi compatibility runtimes after the configured probe exposed a broken `pi-web-access` `./compat` import; all configured extension tools now register without errors.
+- Completed S2 and pushed private browser artifact commit `6105993645f3578bf989393704bcc97c0e06e156` to `origin/s2-runtime-contract`; global Recode settings pin the verified remote commit.
+- Post-S2 warm medians: configured RPC 3,761.5 ms, configured TUI input 4,264.9 ms, isolated RPC 1,521.3 ms, isolated TUI input 1,723.7 ms. All stayed inside the 10% regression guard.

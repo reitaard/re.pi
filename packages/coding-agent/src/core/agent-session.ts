@@ -115,11 +115,13 @@ import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts
 import { RecodeSessionControlHost } from "./recode-session-control.ts";
 import { getRecodeSessionReference } from "./recode-session-identity.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
+import { markExtensionPackagesSessionStarted } from "./resource-loader.ts";
 import type { BranchSummaryEntry, CompactionEntry, SessionEntry, SessionManager } from "./session-manager.ts";
 import { CURRENT_SESSION_VERSION, getLatestCompactionEntry, type SessionHeader } from "./session-manager.ts";
 import type { SettingsManager } from "./settings-manager.ts";
 import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
+import { emitStartupMilestone } from "./startup-probe.ts";
 import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-prompt.ts";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts";
 import { createAllToolDefinitions } from "./tools/index.ts";
@@ -621,6 +623,7 @@ export class AgentSession {
 			await this._sessionControl.start();
 		} else if (event.type === "message_update" && event.message.role === "assistant") {
 			this._sessionControl?.setGenerating();
+			emitStartupMilestone("first-model-event");
 		}
 
 		// When a user message starts, check if it's from either queue and remove it BEFORE emitting
@@ -1375,6 +1378,7 @@ export class AgentSession {
 		}
 
 		preflightResult?.(true);
+		emitStartupMilestone("prompt-accepted");
 		await this._runAgentPrompt(messages);
 	}
 
@@ -2397,6 +2401,7 @@ export class AgentSession {
 
 		this._applyExtensionBindings(this._extensionRunner);
 		await this._extensionRunner.emit(this._sessionStartEvent);
+		markExtensionPackagesSessionStarted(this._resourceLoader.getExtensions());
 		await this.extendResourcesFromExtensions(this._sessionStartEvent.reason === "reload" ? "reload" : "startup");
 	}
 
@@ -2791,6 +2796,7 @@ export class AgentSession {
 		if (hasBindings) {
 			await options?.beforeSessionStart?.();
 			await this._extensionRunner.emit({ type: "session_start", reason: "reload" });
+			markExtensionPackagesSessionStarted(this._resourceLoader.getExtensions());
 			await this.extendResourcesFromExtensions("reload");
 		}
 	}

@@ -80,6 +80,30 @@ Latency work starts with stage-level measurements. Prefer schema/prompt caching,
 
 Windows, Linux, Termux, the primary machine, work PC, and VPS must consume artifacts from one reviewed source commit and release manifest. Extend the existing local-release, binary, Termux, and GitHub workflow; do not clone and rebuild independently on each deployment machine. Remote rollout occurs only after local certification and explicit authorization, with inventory and rollback evidence.
 
+## D-013 — Port Hermes lifecycle contracts through Recode adapters
+
+**Status:** Accepted
+
+Freeze Hermes Agent at exact reviewed commit `5b22bd955682a8fc7b07769784c5129e23f53eaf` and faithfully translate its public lifecycle state machine, bounds, cancellation/result semantics, iteration-budget behavior and relevant turn-lease invariants. Preserve required MIT attribution. Bind the port through separate adapters for existing named workers and full orchestrator-owned RPC sessions rather than replacing either Recode implementation with Hermes’s in-process `AIAgent` executor.
+
+**Reason:** Hermes provides the preferred tested lifecycle contract, while Recode requires durable process identity, restart verification and attach/detach behavior that Hermes’s in-process executor does not provide.
+
+## D-014 — Ratify gaps and SLOs only after an exact three-way checkpoint
+
+**Status:** Accepted
+
+After the S2–S3 package/readiness work and O0–O8 Hermes lifecycle/service checkpoint, clone a fresh exact jcode revision and fetch an exact upstream Pi revision. Compare Recode, jcode and upstream Pi through mapped behavioral contracts, native/translated tests and matched lifecycle performance probes. Hermes remains lifecycle provenance, not a fourth product score. Raw test counts and unlike startup endpoints are not accepted as comparative evidence.
+
+**Reason:** Final performance targets and service optimization order should follow executable evidence from exact implementations, not README claims, moving branches or language-level assumptions.
+
+## D-015 — RePi Browser is a required first-party package
+
+**Status:** Accepted
+
+Include `repi-browser` in certified Recode package sets and the later Recode/jcode/upstream-Pi checkpoint even while its source package remains private. Use it as the first controlled S2 built-artifact/runtime-contract migration. Private status must not silently remove browser capability. Public redistribution remains blocked until explicit license/distribution terms replace the current `UNLICENSED` package state.
+
+**Reason:** Browser control is an intentional Recode product capability and the largest controlled extension graph. Excluding it would produce misleading startup and feature comparisons.
+
 ## Pending decisions
 
 - Whether a later `recode upstream prepare` command should create an isolated integration worktree

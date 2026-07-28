@@ -195,8 +195,22 @@ Implement only after measurement identifies a material cost:
 
 - Codex: app-server agent threads and a picker are the model for inspectable subagent/modal navigation; switching primary sessions still replaces the primary runtime.
 - Claude Code: a supervisor owning independent background session processes is the model for full attach/detach.
-- Hermes Agent (`NousResearch/hermes-agent`, reviewed at `339d9686`): reuse bounded asynchronous delegation, independent cancellation, completion queues, cached tool schemas, conservative safe-tool parallelism, stable prompt caching, and optional worktrees. Do not copy its broad gateway, deep delegation, or automatic memory machinery.
+- Hermes Agent (`NousResearch/hermes-agent`, lifecycle port frozen at `5b22bd955682a8fc7b07769784c5129e23f53eaf`): faithfully port the reviewed public lifecycle state machine, bounds, cancellation/results, iteration budgets and relevant turn-lease invariants through Recode worker/full-session adapters. Do not port its broad messaging gateway, automatic memory machinery or in-process `AIAgent` executor.
 - OpenClaw-derived browser orchestration remains a separate guarded browser-control boundary; reuse lifecycle concepts, not browser-specific control code.
+
+## Post-lifecycle three-way checkpoint
+
+Run only after the release-grade package/readiness work and the Hermes lifecycle/service implementation pass their gates.
+
+- [ ] Clone a fresh exact jcode revision into a temporary directory and record its commit/toolchain.
+- [ ] Fetch exact upstream Pi without switching the Recode worktree and record its commit/toolchain.
+- [ ] Map Recode, jcode and upstream Pi behavioral contracts before comparing test counts.
+- [ ] Distinguish passing implementation tests from proposed, ignored, environment-gated and documentation-only behavior.
+- [ ] Run native focused suites plus implementation-independent translated conformance cases where public contracts permit them.
+- [ ] Compare process-to-frame, rendered input echo, session/integration readiness, service cold start, warm attach and provider-to-first-event only at matched endpoints.
+- [ ] Use the checkpoint to ratify startup SLOs and shared-service optimization order.
+
+Hermes is lifecycle provenance for the Recode port, not a fourth product in this checkpoint.
 
 ## Memory retrieval hardening
 

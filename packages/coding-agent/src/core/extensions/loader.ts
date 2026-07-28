@@ -19,7 +19,7 @@ import { createJiti } from "jiti/static";
 import * as _bundledTypebox from "typebox";
 import * as _bundledTypeboxCompile from "typebox/compile";
 import * as _bundledTypeboxValue from "typebox/value";
-import { CONFIG_DIR_NAME, getAgentDir, isBunBinary } from "../../config.ts";
+import { CONFIG_DIR_NAME, getAgentDir, isBunBinary, VERSION } from "../../config.ts";
 // NOTE: This import works because loader.ts exports are NOT re-exported from index.ts,
 // avoiding a circular dependency. Extensions can import from @reitaard/repi-coding-agent.
 import * as _bundledPiCodingAgent from "../../index.ts";
@@ -29,6 +29,7 @@ import type { ExecOptions } from "../exec.ts";
 import { execCommand } from "../exec.ts";
 import { createSyntheticSourceInfo } from "../source-info.ts";
 import { time } from "../timings.ts";
+import { inspectExtensionPackageRuntime } from "./package-runtime-contract.ts";
 import type {
 	EntryRenderer,
 	Extension,
@@ -541,6 +542,7 @@ interface PiManifest {
 	themes?: string[];
 	skills?: string[];
 	prompts?: string[];
+	runtime?: unknown;
 }
 
 function readPiManifest(packageJsonPath: string): PiManifest | null {
@@ -569,10 +571,27 @@ function isExtensionFile(name: string): boolean {
  *
  * Returns resolved paths or null if no entry points found.
  */
-function resolveExtensionEntries(dir: string): string[] | null {
-	// Check for package.json with "pi" field first
+interface ExtensionEntryResolution {
+	entries: string[] | null;
+	error?: string;
+}
+
+function resolveExtensionEntries(dir: string): ExtensionEntryResolution {
+	// A declared runtime contract takes precedence and fails closed. Legacy packages
+	// without a contract continue through the source-only compatibility path below.
 	const packageJsonPath = path.join(dir, "package.json");
 	if (fs.existsSync(packageJsonPath)) {
+		const runtimeInspection = inspectExtensionPackageRuntime(packageJsonPath, VERSION);
+		if (runtimeInspection.status === "verified") {
+			return { entries: runtimeInspection.artifacts?.map((artifact) => artifact.resolvedEntry) ?? [] };
+		}
+		if (runtimeInspection.status === "invalid" || runtimeInspection.status === "incompatible") {
+			return {
+				entries: null,
+				error: `Extension runtime contract rejected: ${runtimeInspection.errors.join("; ")}`,
+			};
+		}
+
 		const manifest = readPiManifest(packageJsonPath);
 		if (manifest?.extensions?.length) {
 			const entries: string[] = [];
@@ -583,22 +602,21 @@ function resolveExtensionEntries(dir: string): string[] | null {
 				}
 			}
 			if (entries.length > 0) {
-				return entries;
+				return { entries };
 			}
 		}
 	}
 
-	// Check for index.ts or index.js
 	const indexTs = path.join(dir, "index.ts");
 	const indexJs = path.join(dir, "index.js");
 	if (fs.existsSync(indexTs)) {
-		return [indexTs];
+		return { entries: [indexTs] };
 	}
 	if (fs.existsSync(indexJs)) {
-		return [indexJs];
+		return { entries: [indexJs] };
 	}
 
-	return null;
+	return { entries: null };
 }
 
 /**
@@ -611,12 +629,13 @@ function resolveExtensionEntries(dir: string): string[] | null {
  *
  * No recursion beyond one level. Complex packages must use package.json manifest.
  */
-function discoverExtensionsInDir(dir: string): string[] {
+function discoverExtensionsInDir(dir: string): { paths: string[]; errors: Array<{ path: string; error: string }> } {
 	if (!fs.existsSync(dir)) {
-		return [];
+		return { paths: [], errors: [] };
 	}
 
 	const discovered: string[] = [];
+	const errors: Array<{ path: string; error: string }> = [];
 
 	try {
 		const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -632,17 +651,22 @@ function discoverExtensionsInDir(dir: string): string[] {
 
 			// 2 & 3. Subdirectories
 			if (entry.isDirectory() || entry.isSymbolicLink()) {
-				const entries = resolveExtensionEntries(entryPath);
-				if (entries) {
-					discovered.push(...entries);
+				const resolution = resolveExtensionEntries(entryPath);
+				if (resolution.error) {
+					errors.push({ path: entryPath, error: resolution.error });
+				} else if (resolution.entries) {
+					discovered.push(...resolution.entries);
 				}
 			}
 		}
-	} catch {
-		return [];
+	} catch (error) {
+		errors.push({
+			path: dir,
+			error: `Failed to discover extensions: ${error instanceof Error ? error.message : String(error)}`,
+		});
 	}
 
-	return discovered;
+	return { paths: discovered, errors };
 }
 
 /**
@@ -657,6 +681,7 @@ export async function discoverAndLoadExtensions(
 	const resolvedCwd = resolvePath(cwd);
 	const resolvedAgentDir = resolvePath(agentDir);
 	const allPaths: string[] = [];
+	const discoveryErrors: Array<{ path: string; error: string }> = [];
 	const seen = new Set<string>();
 
 	const addPaths = (paths: string[]) => {
@@ -671,29 +696,39 @@ export async function discoverAndLoadExtensions(
 
 	// 1. Project-local extensions: cwd/${CONFIG_DIR_NAME}/extensions/
 	const localExtDir = path.join(resolvedCwd, CONFIG_DIR_NAME, "extensions");
-	addPaths(discoverExtensionsInDir(localExtDir));
+	const localDiscovery = discoverExtensionsInDir(localExtDir);
+	addPaths(localDiscovery.paths);
+	discoveryErrors.push(...localDiscovery.errors);
 
 	// 2. Global extensions: agentDir/extensions/
 	const globalExtDir = path.join(resolvedAgentDir, "extensions");
-	addPaths(discoverExtensionsInDir(globalExtDir));
+	const globalDiscovery = discoverExtensionsInDir(globalExtDir);
+	addPaths(globalDiscovery.paths);
+	discoveryErrors.push(...globalDiscovery.errors);
 
 	// 3. Explicitly configured paths
 	for (const p of configuredPaths) {
 		const resolved = resolvePath(p, resolvedCwd, { normalizeUnicodeSpaces: true });
 		if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
-			// Check for package.json with pi manifest or index.ts
-			const entries = resolveExtensionEntries(resolved);
-			if (entries) {
-				addPaths(entries);
+			const resolution = resolveExtensionEntries(resolved);
+			if (resolution.error) {
+				discoveryErrors.push({ path: resolved, error: resolution.error });
 				continue;
 			}
-			// No explicit entries - discover individual files in directory
-			addPaths(discoverExtensionsInDir(resolved));
+			if (resolution.entries) {
+				addPaths(resolution.entries);
+				continue;
+			}
+			const discovery = discoverExtensionsInDir(resolved);
+			addPaths(discovery.paths);
+			discoveryErrors.push(...discovery.errors);
 			continue;
 		}
 
 		addPaths([resolved]);
 	}
 
-	return loadExtensions(allPaths, resolvedCwd, eventBus);
+	const loaded = await loadExtensions(allPaths, resolvedCwd, eventBus);
+	loaded.errors.unshift(...discoveryErrors);
+	return loaded;
 }

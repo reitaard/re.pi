@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -121,6 +122,81 @@ describe("extensions discovery", () => {
 		expect(result.extensions).toHaveLength(1);
 		expect(result.extensions[0].path).toContain("src");
 		expect(result.extensions[0].path).toContain("main.ts");
+	});
+
+	it("prefers a verified built runtime artifact over its TypeScript source", async () => {
+		const subdir = path.join(extensionsDir, "built-package");
+		const distDir = path.join(subdir, "dist");
+		fs.mkdirSync(distDir, { recursive: true });
+		fs.writeFileSync(path.join(subdir, "index.ts"), extensionCodeWithTool("from-source"));
+		const builtCode = extensionCodeWithTool("from-built");
+		fs.writeFileSync(path.join(distDir, "index.js"), builtCode);
+		fs.writeFileSync(
+			path.join(subdir, "package.json"),
+			JSON.stringify({
+				name: "built-package",
+				pi: {
+					extensions: ["./index.ts"],
+					runtime: {
+						contractVersion: 1,
+						codingAgent: ">=0.81.4 <0.82.0",
+						extensions: [
+							{
+								source: "./index.ts",
+								entry: "./dist/index.js",
+								sha256: createHash("sha256").update(builtCode).digest("hex"),
+								activation: "session",
+								readiness: "registered",
+								shutdown: "session-shutdown",
+							},
+						],
+					},
+				},
+			}),
+		);
+
+		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+
+		expect(result.errors).toEqual([]);
+		expect(result.extensions).toHaveLength(1);
+		expect(result.extensions[0].resolvedPath).toBe(path.join(distDir, "index.js"));
+		expect(result.extensions[0].tools.has("from-built")).toBe(true);
+		expect(result.extensions[0].tools.has("from-source")).toBe(false);
+	});
+
+	it("fails closed when a declared built runtime artifact is tampered", async () => {
+		const subdir = path.join(extensionsDir, "tampered-package");
+		const distDir = path.join(subdir, "dist");
+		fs.mkdirSync(distDir, { recursive: true });
+		fs.writeFileSync(path.join(subdir, "index.ts"), extensionCode);
+		fs.writeFileSync(path.join(distDir, "index.js"), extensionCode);
+		fs.writeFileSync(
+			path.join(subdir, "package.json"),
+			JSON.stringify({
+				pi: {
+					runtime: {
+						contractVersion: 1,
+						codingAgent: ">=0.81.4 <0.82.0",
+						extensions: [
+							{
+								source: "./index.ts",
+								entry: "./dist/index.js",
+								sha256: "0".repeat(64),
+								activation: "session",
+								readiness: "registered",
+								shutdown: "session-shutdown",
+							},
+						],
+					},
+				},
+			}),
+		);
+
+		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+
+		expect(result.extensions).toEqual([]);
+		expect(result.errors).toHaveLength(1);
+		expect(result.errors[0].error).toContain("SHA-256 does not match");
 	});
 
 	it("keeps package.json pi extension entries with leading tilde package-relative", async () => {

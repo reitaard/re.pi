@@ -105,6 +105,7 @@ import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../cor
 import { type SessionEntry, SessionManager, sessionEntryToContextMessages } from "../../core/session-manager.ts";
 import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
+import { emitStartupMilestone, isStartupProbeEnabled } from "../../core/startup-probe.ts";
 import { isInstallTelemetryEnabled } from "../../core/telemetry.ts";
 import type { TruncationResult } from "../../core/tools/truncate.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../../core/trust-manager.ts";
@@ -936,6 +937,10 @@ export class InteractiveMode {
 
 		// Start the UI before initializing extensions so session_start handlers can use interactive dialogs
 		this.ui.start();
+		if (isStartupProbeEnabled()) {
+			await new Promise<void>((resolve) => setImmediate(resolve));
+			emitStartupMilestone("tui-frame-ready");
+		}
 		this.isInitialized = true;
 		this.signalCleanupHandlers.push(
 			subscribeLspLifecycle((event) => {
@@ -1844,7 +1849,23 @@ export class InteractiveMode {
 			}
 
 			const extensionDiagnostics: ResourceDiagnostic[] = [];
-			const extensionErrors = this.session.resourceLoader.getExtensions().errors;
+			const extensionsResult = this.session.resourceLoader.getExtensions();
+			for (const runtimeDiagnostic of extensionsResult.packageRuntimeDiagnostics ?? []) {
+				if (runtimeDiagnostic.status === "source-only") {
+					extensionDiagnostics.push({
+						type: "warning",
+						message: `Package ${runtimeDiagnostic.source} uses source-only extension loading; release startup includes runtime transpilation`,
+						path: runtimeDiagnostic.packagePath,
+					});
+				} else if (runtimeDiagnostic.readinessState === "pending") {
+					extensionDiagnostics.push({
+						type: "warning",
+						message: `Package ${runtimeDiagnostic.source} is registered but its declared backend readiness is still pending`,
+						path: runtimeDiagnostic.packagePath,
+					});
+				}
+			}
+			const extensionErrors = extensionsResult.errors;
 			if (extensionErrors.length > 0) {
 				for (const error of extensionErrors) {
 					extensionDiagnostics.push({ type: "error", message: error.error, path: error.path });

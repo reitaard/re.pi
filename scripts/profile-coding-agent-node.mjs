@@ -1,9 +1,16 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { spawn } from "node:child_process";
-import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { execFileSync, spawn } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { arch, platform, release, tmpdir } from "node:os";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
+import {
+	createStartupArtifact,
+	flattenStartupTimings,
+	parseStartupMilestones,
+	parseStartupTimings,
+	redactTimingGroups,
+} from "./profile-startup-artifact.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "..");
@@ -35,6 +42,8 @@ Options:
   --runtime <name>       node, bun, or auto (default: auto)
   --agent-dir <dir>      Use a specific PI_CODING_AGENT_DIR for the benchmark run
   --isolated-agent-dir   Use a fresh temporary agent dir instead of the normal one
+  --artifact-dir <dir>   Write one redacted JSON artifact for every child run
+  --cache-state <name>   uncontrolled, cold, or warm (default: uncontrolled)
   --no-offline           Do not force PI_OFFLINE=1 / PI_SKIP_VERSION_CHECK=1
   --skip-build           Reuse the current dist/cli.js without rebuilding first (Node only)
   --cpu-profile          Write CPU profiles for benchmark runs
@@ -42,7 +51,7 @@ Options:
 
 Notes:
   - By default the benchmark uses your normal configured agent dir, so global models/auth/settings work.
-  - TUI mode measures startup until the interactive UI reaches first usable state.
+  - TUI mode injects a unique sentinel after input readiness and measures its first rendered echo.
   - RPC mode measures startup until a real get_state request receives a response, then closes stdin to exit cleanly.
   - CPU profiles are kept in the selected profile directory for later analysis.
 `);
@@ -82,6 +91,8 @@ function parseArgs(argv) {
 		runtime: "auto",
 		agentDir: undefined,
 		isolatedAgentDir: false,
+		artifactDir: undefined,
+		cacheState: "uncontrolled",
 		cpuProfile: false,
 	};
 
@@ -120,7 +131,9 @@ function parseArgs(argv) {
 				arg === "--profile-dir" ||
 				arg === "--label" ||
 				arg === "--runtime" ||
-				arg === "--agent-dir") &&
+				arg === "--agent-dir" ||
+				arg === "--artifact-dir" ||
+				arg === "--cache-state") &&
 			index + 1 >= argv.length
 		) {
 			throw new Error(`Missing value for ${arg}`);
@@ -161,6 +174,20 @@ function parseArgs(argv) {
 			continue;
 		}
 
+		if (arg === "--artifact-dir") {
+			options.artifactDir = resolve(argv[++index]);
+			continue;
+		}
+
+		if (arg === "--cache-state") {
+			const cacheState = argv[++index];
+			if (cacheState !== "uncontrolled" && cacheState !== "cold" && cacheState !== "warm") {
+				throw new Error(`Invalid --cache-state: ${cacheState}`);
+			}
+			options.cacheState = cacheState;
+			continue;
+		}
+
 		throw new Error(`Unknown option: ${arg}`);
 	}
 
@@ -194,6 +221,67 @@ function formatMs(value) {
 	return `${value.toFixed(1)}ms`;
 }
 
+function readSourceIdentity() {
+	const packageMetadata = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8"));
+	let commit = "unknown";
+	try {
+		commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repoRoot, encoding: "utf8" }).trim();
+	} catch {
+		// A packaged profiler may run without repository metadata.
+	}
+	return {
+		commit,
+		packageName: packageMetadata.name,
+		packageVersion: packageMetadata.version,
+	};
+}
+
+function resolveRuntimeVersion(runtime) {
+	if (runtime === "node") {
+		return process.versions.node;
+	}
+	try {
+		return execFileSync("bun", ["--version"], { encoding: "utf8" }).trim();
+	} catch {
+		return "unknown";
+	}
+}
+
+function writeBenchmarkArtifact({ artifactDir, options, result, runIndex, measuredIndex, runtime, sourceIdentity }) {
+	const kind = measuredIndex === undefined ? "warmup" : "measured";
+	const kindIndex = measuredIndex ?? runIndex + 1;
+	const artifact = createStartupArtifact({
+		source: sourceIdentity,
+		runtime: { name: runtime, version: resolveRuntimeVersion(runtime) },
+		platform: { name: platform(), architecture: arch(), release: release() },
+		benchmark: {
+			label: options.label,
+			mode: options.mode,
+			lifecycleEndpoint: options.mode === "rpc" ? "rpc-get-state" : "tui-input-echo",
+			agentState: options.isolatedAgentDir ? "isolated" : options.agentDir ? "configured-explicit" : "configured-default",
+			cacheState: options.cacheState,
+			offline: options.offline,
+			cpuProfile: options.cpuProfile,
+		},
+		run: {
+			kind,
+			index: kindIndex,
+			sequence: runIndex + 1,
+			startedAt: result.startedAt,
+			elapsedMs: result.elapsedMs,
+			...(result.processElapsedMs === undefined ? {} : { processElapsedMs: result.processElapsedMs }),
+			profileFile: result.profilePath ? basename(result.profilePath) : null,
+		},
+		milestones: result.milestones,
+		timingGroups: result.timingGroups,
+	});
+
+	const safeLabel = options.label.replaceAll(/[^a-zA-Z0-9._-]+/g, "-").replaceAll(/^-+|-+$/g, "") || "startup";
+	const artifactPath = join(artifactDir, `${safeLabel}-${kind}-${String(kindIndex).padStart(3, "0")}.json`);
+	writeFileSync(artifactPath, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
+	return artifactPath;
+}
+
 function toDisplayPath(path) {
 	const relativePath = relative(repoRoot, path);
 	if (relativePath !== "" && !relativePath.startsWith("..")) {
@@ -213,32 +301,6 @@ function summarize(values) {
 		avg: total / sorted.length,
 		median,
 	};
-}
-
-function parseStartupTimings(stderr) {
-	const lines = stderr.split(/\r?\n/);
-	const timings = new Map();
-	let inBlock = false;
-
-	for (const line of lines) {
-		if (line.includes("--- Startup Timings ---")) {
-			inBlock = true;
-			continue;
-		}
-		if (!inBlock) {
-			continue;
-		}
-		if (line.includes("------------------------")) {
-			break;
-		}
-		const match = line.match(/^\s+([^:]+):\s+(\d+)ms$/);
-		if (!match) {
-			continue;
-		}
-		timings.set(match[1], Number.parseInt(match[2], 10));
-	}
-
-	return timings;
 }
 
 function summarizeTimingMaps(runs) {
@@ -357,12 +419,19 @@ function getRuntimeCommand(runtime, mode, profileDir, profileName, cpuProfile) {
 	};
 }
 
-function createBenchmarkEnv(options, isolatedAgentDir) {
+function createBenchmarkEnv(options, isolatedAgentDir, startupInput) {
 	const env = { ...process.env };
 	if (options.agentDir) {
 		env[agentDirEnvName] = options.agentDir;
 	} else if (isolatedAgentDir) {
 		env[agentDirEnvName] = isolatedAgentDir;
+	}
+	env.PI_STARTUP_PROBE = "1";
+	env.PI_TIMING = "1";
+	if (startupInput) {
+		env.PI_STARTUP_BENCHMARK_INPUT = startupInput;
+	} else {
+		delete env.PI_STARTUP_BENCHMARK_INPUT;
 	}
 	if (options.mode === "tui") {
 		env[startupBenchmarkEnvName] = "1";
@@ -385,22 +454,29 @@ async function runTuiBenchmarkRun({ runtime, runIndex, measuredIndex, options, p
 	}
 
 	const command = getRuntimeCommand(runtime, "tui", profileDir, profileName, options.cpuProfile);
+	const startupInput = `__RECODE_STARTUP_ECHO_${runNumber}__`;
 	const child = spawn(command.executable, command.args, {
 		cwd: packageDir,
-		env: createBenchmarkEnv(options, isolatedAgentDir),
-		stdio: ["inherit", "ignore", "pipe"],
+		env: createBenchmarkEnv(options, isolatedAgentDir, startupInput),
+		stdio: ["pipe", "ignore", "pipe"],
 		shell: process.platform === "win32" && runtime === "bun",
 	});
 
 	let stderr = "";
+	let inputSent = false;
 	child.stderr.setEncoding("utf8");
 	child.stderr.on("data", (chunk) => {
 		stderr += chunk;
+		if (!inputSent && parseStartupMilestones(stderr).some((milestone) => milestone.name === "tui-input-ready")) {
+			inputSent = true;
+			child.stdin.end(startupInput);
+		}
 	});
 
-	const startedAt = performance.now();
+	const startedAt = new Date().toISOString();
+	const startedAtPerformance = performance.now();
 	const exitCode = await waitForExit(child, `Benchmark ${measuredIndex === undefined ? `warmup ${runNumber}` : `run ${measuredIndex}`}`);
-	const elapsedMs = performance.now() - startedAt;
+	const elapsedMs = performance.now() - startedAtPerformance;
 
 	try {
 		if (exitCode !== 0) {
@@ -412,7 +488,21 @@ async function runTuiBenchmarkRun({ runtime, runIndex, measuredIndex, options, p
 			throw new Error(`CPU profile was not written: ${profilePath}`);
 		}
 
-		return { elapsedMs, profilePath, timings: parseStartupTimings(stderr) };
+		const milestones = parseStartupMilestones(stderr);
+		const targetMilestone = milestones.find((milestone) => milestone.name === "tui-input-echo");
+		if (!targetMilestone) {
+			throw new Error("TUI benchmark did not emit the tui-input-echo milestone");
+		}
+		const timingGroups = redactTimingGroups(parseStartupTimings(stderr), repoRoot);
+		return {
+			elapsedMs: targetMilestone.elapsedMs,
+			processElapsedMs: elapsedMs,
+			profilePath,
+			startedAt,
+			milestones,
+			timingGroups,
+			timings: flattenStartupTimings(timingGroups),
+		};
 	} finally {
 		if (tempRoot) {
 			rmSync(tempRoot, { recursive: true, force: true });
@@ -456,7 +546,8 @@ async function runRpcBenchmarkRun({ runtime, runIndex, measuredIndex, options, p
 	let readyElapsedMs;
 	let responseError;
 	const requestId = `startup-benchmark-${runNumber}`;
-	const startedAt = performance.now();
+	const startedAt = new Date().toISOString();
+	const startedAtPerformance = performance.now();
 
 	child.stdout.setEncoding("utf8");
 	child.stdout.on("data", (chunk) => {
@@ -482,7 +573,7 @@ async function runRpcBenchmarkRun({ runtime, runIndex, measuredIndex, options, p
 			}
 
 			if (readyElapsedMs === undefined) {
-				readyElapsedMs = performance.now() - startedAt;
+				readyElapsedMs = performance.now() - startedAtPerformance;
 				child.stdin.end();
 			}
 		});
@@ -514,7 +605,15 @@ async function runRpcBenchmarkRun({ runtime, runIndex, measuredIndex, options, p
 			throw new Error(`CPU profile was not written: ${profilePath}`);
 		}
 
-		return { elapsedMs: readyElapsedMs, profilePath, timings: parseStartupTimings(stderr) };
+		const timingGroups = redactTimingGroups(parseStartupTimings(stderr), repoRoot);
+		return {
+			elapsedMs: readyElapsedMs,
+			profilePath,
+			startedAt,
+			milestones: parseStartupMilestones(stderr),
+			timingGroups,
+			timings: flattenStartupTimings(timingGroups),
+		};
 	} finally {
 		if (tempRoot) {
 			rmSync(tempRoot, { recursive: true, force: true });
@@ -540,10 +639,6 @@ async function main() {
 		throw new Error("--agent-dir and --isolated-agent-dir cannot be combined");
 	}
 
-	if (options.mode === "tui" && (!process.stdin.isTTY || !process.stdout.isTTY)) {
-		throw new Error("TUI benchmark must be run from an interactive terminal.");
-	}
-
 	const runtime = resolveRuntime(options.runtime);
 	options.label = resolveLabel(options.mode, options.label);
 	const profileDir = resolveProfileDir(runtime, options.profileDir);
@@ -563,6 +658,10 @@ async function main() {
 	}
 
 	mkdirSync(profileDir, { recursive: true });
+	if (options.artifactDir) {
+		mkdirSync(options.artifactDir, { recursive: true });
+	}
+	const sourceIdentity = readSourceIdentity();
 
 	const measuredRuns = [];
 	const totalRuns = options.warmup + options.runs;
@@ -579,6 +678,18 @@ async function main() {
 		process.stdout.write(
 			`[${measuredIndex === undefined ? `warmup ${runIndex + 1}` : `run ${measuredIndex}`}] elapsed=${formatMs(result.elapsedMs)}\n`,
 		);
+		if (options.artifactDir) {
+			const artifactPath = writeBenchmarkArtifact({
+				artifactDir: options.artifactDir,
+				options,
+				result,
+				runIndex,
+				measuredIndex,
+				runtime,
+				sourceIdentity,
+			});
+			process.stdout.write(`  artifact=${toDisplayPath(artifactPath)}\n`);
+		}
 
 		if (measuredIndex !== undefined) {
 			measuredRuns.push(result);

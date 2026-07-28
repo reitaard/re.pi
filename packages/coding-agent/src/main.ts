@@ -40,6 +40,7 @@ import {
 } from "./core/session-cwd.ts";
 import { assertValidSessionId, SessionManager } from "./core/session-manager.ts";
 import { SettingsManager } from "./core/settings-manager.ts";
+import { emitStartupMilestone, waitForStartupMilestone } from "./core/startup-probe.ts";
 import { printTimings, resetTimings, time } from "./core/timings.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "./core/trust-manager.ts";
 import { runMigrations, showDeprecationWarnings } from "./migrations.ts";
@@ -557,7 +558,8 @@ export async function main(args: string[], options?: MainOptions) {
 		process.exit(0);
 	}
 
-	let appMode = resolveAppMode(parsed, process.stdin.isTTY, process.stdout.isTTY);
+	const startupBenchmark = isTruthyEnvFlag(process.env.PI_STARTUP_BENCHMARK);
+	let appMode = startupBenchmark ? "interactive" : resolveAppMode(parsed, process.stdin.isTTY, process.stdout.isTTY);
 	const shouldTakeOverStdout = appMode !== "interactive" && !isPlainRuntimeMetadataCommand(parsed);
 	if (shouldTakeOverStdout) {
 		takeOverStdout();
@@ -618,6 +620,8 @@ export async function main(args: string[], options?: MainOptions) {
 		sessionManager.appendSessionInfo(name);
 	}
 	time("createSessionManager");
+	const restoredSession = sessionManager.getEntries().length > 0;
+	emitStartupMilestone("session-selected", { restored: restoredSession });
 
 	const trustStore = new ProjectTrustStore(agentDir);
 	const sessionCwd = sessionManager.getCwd();
@@ -765,6 +769,17 @@ export async function main(args: string[], options?: MainOptions) {
 		sessionManager,
 	});
 	time("createAgentSessionRuntime");
+	const packageRuntimeDiagnostics = runtime.services.resourceLoader.getExtensions().packageRuntimeDiagnostics ?? [];
+	emitStartupMilestone("session-ready", {
+		restored: restoredSession,
+		sourceOnlyPackages: packageRuntimeDiagnostics.filter((diagnostic) => diagnostic.status === "source-only").length,
+		verifiedPackages: packageRuntimeDiagnostics.filter((diagnostic) => diagnostic.status === "verified").length,
+		rejectedPackages: packageRuntimeDiagnostics.filter(
+			(diagnostic) => diagnostic.status === "invalid" || diagnostic.status === "incompatible",
+		).length,
+		readyPackages: packageRuntimeDiagnostics.filter((diagnostic) => diagnostic.readinessState === "ready").length,
+		pendingPackages: packageRuntimeDiagnostics.filter((diagnostic) => diagnostic.readinessState === "pending").length,
+	});
 	const { services, session, modelFallbackMessage } = runtime;
 	const { settingsManager, modelRegistry, resourceLoader } = services;
 	const aizenRuntime = parsed.aizenRuntime ?? settingsManager.getAizenRuntime();
@@ -787,7 +802,7 @@ export async function main(args: string[], options?: MainOptions) {
 
 	// Read piped stdin content (if any) - skip for RPC mode which uses stdin for JSON-RPC
 	let stdinContent: string | undefined;
-	if (appMode !== "rpc") {
+	if (appMode !== "rpc" && !startupBenchmark) {
 		stdinContent = await readPipedStdin();
 		if (stdinContent !== undefined && appMode === "interactive") {
 			appMode = "print";
@@ -824,7 +839,6 @@ export async function main(args: string[], options?: MainOptions) {
 		process.exit(1);
 	}
 
-	const startupBenchmark = isTruthyEnvFlag(process.env.PI_STARTUP_BENCHMARK);
 	if (startupBenchmark && appMode !== "interactive") {
 		console.error(chalk.red("Error: PI_STARTUP_BENCHMARK only supports interactive mode"));
 		process.exit(1);
@@ -844,9 +858,15 @@ export async function main(args: string[], options?: MainOptions) {
 			initialMessages: parsed.messages,
 			verbose: parsed.verbose,
 		});
+		emitStartupMilestone("interactive-mode-created");
 		if (startupBenchmark) {
 			await interactiveMode.init();
 			time("interactiveMode.init");
+			emitStartupMilestone("tui-input-ready");
+			emitStartupMilestone("integration-ready");
+			if (process.env.PI_STARTUP_BENCHMARK_INPUT) {
+				await waitForStartupMilestone("tui-input-echo", 30_000);
+			}
 			// Give the TUI's stdin handler a brief chance to consume terminal query replies
 			// (Kitty keyboard protocol, device attributes, cell size) before restoring the terminal.
 			await new Promise((resolve) => setTimeout(resolve, 150));

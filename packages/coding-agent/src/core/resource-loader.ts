@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import chalk from "chalk";
-import { CONFIG_DIR_NAME } from "../config.ts";
+import { CONFIG_DIR_NAME, VERSION } from "../config.ts";
 import { loadThemeFromPath, type Theme } from "../modes/interactive/theme/theme.ts";
 import type { ResourceDiagnostic } from "./diagnostics.ts";
 
@@ -15,7 +15,14 @@ import {
 	loadExtensionFromFactory,
 	loadExtensionsCached,
 } from "./extensions/loader.ts";
-import type { Extension, ExtensionRuntime, InlineExtension, LoadExtensionsResult } from "./extensions/types.ts";
+import { inspectExtensionPackageRuntime } from "./extensions/package-runtime-contract.ts";
+import type {
+	Extension,
+	ExtensionPackageRuntimeDiagnostic,
+	ExtensionRuntime,
+	InlineExtension,
+	LoadExtensionsResult,
+} from "./extensions/types.ts";
 import { DefaultPackageManager, type PathMetadata, type ResolvedResource } from "./package-manager.ts";
 import type { PromptTemplate } from "./prompt-templates.ts";
 import { loadPromptTemplates } from "./prompt-templates.ts";
@@ -33,6 +40,109 @@ export interface ResourceExtensionPaths {
 
 export interface ResourceLoaderReloadOptions {
 	resolveProjectTrust?: (input: { extensionsResult: LoadExtensionsResult }) => Promise<boolean>;
+}
+
+interface PackageRuntimeResolution {
+	resources: ResolvedResource[];
+	diagnostics: ExtensionPackageRuntimeDiagnostic[];
+	errors: Array<{ path: string; error: string }>;
+}
+
+export function resolvePackageRuntimeExtensions(resources: ResolvedResource[]): PackageRuntimeResolution {
+	const diagnostics: ExtensionPackageRuntimeDiagnostic[] = [];
+	const errors: Array<{ path: string; error: string }> = [];
+	const inspections = new Map<string, ReturnType<typeof inspectExtensionPackageRuntime>>();
+	const resolvedResources: ResolvedResource[] = [];
+
+	for (const resource of resources) {
+		const packageRoot = resource.metadata.origin === "package" ? resource.metadata.baseDir : undefined;
+		if (!packageRoot) {
+			resolvedResources.push(resource);
+			continue;
+		}
+		const packageJsonPath = join(packageRoot, "package.json");
+		let inspection = inspections.get(packageJsonPath);
+		if (!inspection) {
+			inspection = inspectExtensionPackageRuntime(packageJsonPath, VERSION);
+			inspections.set(packageJsonPath, inspection);
+			diagnostics.push({
+				packagePath: packageJsonPath,
+				source: resource.metadata.source,
+				status: inspection.status,
+				readinessContracts: inspection.contract?.extensions.map((artifact) => artifact.readiness) ?? [],
+				registration:
+					inspection.status === "invalid" || inspection.status === "incompatible" ? "failed" : "pending",
+				readinessState:
+					inspection.status === "invalid" || inspection.status === "incompatible" ? "failed" : "pending",
+				errors: inspection.errors,
+			});
+			if (inspection.status === "invalid" || inspection.status === "incompatible") {
+				errors.push({
+					path: packageJsonPath,
+					error: `Extension runtime contract rejected: ${inspection.errors.join("; ")}`,
+				});
+			}
+		}
+		if (inspection.status === "invalid" || inspection.status === "incompatible") {
+			continue;
+		}
+		if (inspection.status === "source-only") {
+			resolvedResources.push(resource);
+			continue;
+		}
+		const artifact = inspection.artifacts?.find(
+			(candidate) => canonicalizePath(candidate.resolvedSource) === canonicalizePath(resource.path),
+		);
+		if (!artifact) {
+			errors.push({
+				path: resource.path,
+				error: "Extension source is not covered by its declared runtime contract",
+			});
+			continue;
+		}
+		resolvedResources.push({ ...resource, path: artifact.resolvedEntry });
+	}
+
+	return { resources: resolvedResources, diagnostics, errors };
+}
+
+function pathBelongsToPackage(candidatePath: string, packageRoot: string): boolean {
+	const relativePath = relative(packageRoot, candidatePath);
+	return relativePath === "" || (!relativePath.startsWith("..") && !relativePath.startsWith(sep));
+}
+
+function finalizePackageRuntimeDiagnostics(result: LoadExtensionsResult): void {
+	for (const diagnostic of result.packageRuntimeDiagnostics ?? []) {
+		if (diagnostic.registration === "failed") continue;
+		const packageRoot = dirname(diagnostic.packagePath);
+		const failed = result.errors.some((error) => pathBelongsToPackage(resolve(error.path), packageRoot));
+		const registered = result.extensions.some((extension) =>
+			pathBelongsToPackage(extension.resolvedPath, packageRoot),
+		);
+		if (failed || !registered) {
+			diagnostic.registration = "failed";
+			diagnostic.readinessState = "failed";
+			continue;
+		}
+		diagnostic.registration = "registered";
+		diagnostic.readinessState =
+			diagnostic.readinessContracts.length === 0 ||
+			diagnostic.readinessContracts.every((contract) => contract === "registered")
+				? "ready"
+				: "pending";
+	}
+}
+
+export function markExtensionPackagesSessionStarted(result: LoadExtensionsResult): void {
+	for (const diagnostic of result.packageRuntimeDiagnostics ?? []) {
+		if (
+			diagnostic.registration === "registered" &&
+			diagnostic.readinessState === "pending" &&
+			diagnostic.readinessContracts.every((contract) => contract !== "explicit")
+		) {
+			diagnostic.readinessState = "ready";
+		}
+	}
 }
 
 export interface ResourceLoader {
@@ -352,6 +462,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 		// reload() preserves SettingsManager.projectTrusted and reloads settings for that trust state.
 		await this.settingsManager.reload();
 		const resolvedPaths = await this.packageManager.resolve();
+		const packageRuntimeResolution = resolvePackageRuntimeExtensions(resolvedPaths.extensions);
 		const cliExtensionPaths = await this.packageManager.resolveExtensionSources(this.additionalExtensionPaths, {
 			temporary: true,
 		});
@@ -373,7 +484,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 
 		const getEnabledPaths = (resources: ResolvedResource[]): string[] =>
 			getEnabledResources(resources).map((r) => r.path);
-		const enabledExtensions = getEnabledPaths(resolvedPaths.extensions);
+		const enabledExtensions = getEnabledPaths(packageRuntimeResolution.resources);
 		const enabledSkillResources = getEnabledResources(resolvedPaths.skills);
 		const enabledPrompts = getEnabledPaths(resolvedPaths.prompts);
 		const enabledThemes = getEnabledPaths(resolvedPaths.themes);
@@ -402,6 +513,16 @@ export class DefaultResourceLoader implements ResourceLoader {
 			: this.mergePaths(cliEnabledExtensions, enabledExtensions);
 
 		const extensionsResult = await this.loadFinalExtensionSet(extensionPaths, preTrustExtensions);
+		extensionsResult.packageRuntimeDiagnostics = packageRuntimeResolution.diagnostics;
+		for (const runtimeError of packageRuntimeResolution.errors) {
+			if (
+				!extensionsResult.errors.some(
+					(error) => error.path === runtimeError.path && error.error === runtimeError.error,
+				)
+			) {
+				extensionsResult.errors.push(runtimeError);
+			}
+		}
 		for (const p of this.additionalExtensionPaths) {
 			if (isLocalPath(p)) {
 				const resolved = this.resolveResourcePath(p);
@@ -410,6 +531,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 				}
 			}
 		}
+		finalizePackageRuntimeDiagnostics(extensionsResult);
 		this.extensionsResult = this.extensionsOverride ? this.extensionsOverride(extensionsResult) : extensionsResult;
 		this.applyExtensionSourceInfo(this.extensionsResult.extensions, metadataByPath);
 
@@ -491,22 +613,27 @@ export class DefaultResourceLoader implements ResourceLoader {
 
 	private async loadCurrentExtensionSet(options: { includeInlineFactories: boolean }): Promise<LoadExtensionsResult> {
 		const resolvedPaths = await this.packageManager.resolve();
+		const packageRuntimeResolution = resolvePackageRuntimeExtensions(resolvedPaths.extensions);
 		const cliExtensionPaths = await this.packageManager.resolveExtensionSources(this.additionalExtensionPaths, {
 			temporary: true,
 		});
-		const enabledExtensions = resolvedPaths.extensions.filter((r) => r.enabled).map((r) => r.path);
+		const enabledExtensions = packageRuntimeResolution.resources.filter((r) => r.enabled).map((r) => r.path);
 		const cliEnabledExtensions = cliExtensionPaths.extensions.filter((r) => r.enabled).map((r) => r.path);
 		const extensionPaths = this.noExtensions
 			? cliEnabledExtensions
 			: this.mergePaths(cliEnabledExtensions, enabledExtensions);
 		const extensionsResult = await loadExtensionsCached(extensionPaths, this.cwd, this.eventBus);
+		extensionsResult.packageRuntimeDiagnostics = packageRuntimeResolution.diagnostics;
+		extensionsResult.errors.push(...packageRuntimeResolution.errors);
 		if (!options.includeInlineFactories) {
+			finalizePackageRuntimeDiagnostics(extensionsResult);
 			return extensionsResult;
 		}
 
 		const inlineExtensions = await this.loadExtensionFactories(extensionsResult.runtime);
 		extensionsResult.extensions.push(...inlineExtensions.extensions);
 		extensionsResult.errors.push(...inlineExtensions.errors);
+		finalizePackageRuntimeDiagnostics(extensionsResult);
 		return extensionsResult;
 	}
 

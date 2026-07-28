@@ -15,6 +15,7 @@ import { createHarnessModels } from "./harness-models.ts";
 import type { CustomMessage } from "./messages.ts";
 import { RecodeSessionControlHost } from "./recode-session-control.ts";
 import { RecodeSessionStorage } from "./recode-session-storage.ts";
+import { emitStartupMilestone } from "./startup-probe.ts";
 
 export interface AizenRuntime {
 	harness: AgentHarness;
@@ -91,7 +92,10 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 	});
 	harness.on("before_agent_start", hooks.beforeAgentStart);
 	harness.on("context", hooks.context);
-	harness.on("before_provider_payload", hooks.beforeProviderPayload);
+	harness.on("before_provider_payload", async (event) => {
+		emitStartupMilestone("provider-request");
+		return await hooks.beforeProviderPayload(event);
+	});
 	harness.on("after_provider_response", hooks.afterProviderResponse);
 	harness.on("tool_call", hooks.toolCall);
 	harness.on("tool_result", hooks.toolResult);
@@ -144,6 +148,7 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 		if (!isAgentLifecycleEvent(event)) return;
 		if (event.type === "message_update" && event.message.role === "assistant") {
 			sessionControl.setGenerating();
+			emitStartupMilestone("first-model-event");
 		}
 		await hooks.lifecycle?.(event);
 		if (event.type === "agent_end") pendingAgentEnd = event;
@@ -264,8 +269,10 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 			await sessionControl.stop().catch(() => undefined);
 		}
 	};
-	const prompt = async (text: string, promptOptions?: { images?: ImageContent[] }): Promise<AssistantMessage> =>
-		await runWithRecovery(async () => await harness.prompt(text, promptOptions));
+	const prompt = async (text: string, promptOptions?: { images?: ImageContent[] }): Promise<AssistantMessage> => {
+		emitStartupMilestone("prompt-accepted");
+		return await runWithRecovery(async () => await harness.prompt(text, promptOptions));
+	};
 
 	const sendCustomMessage = async <T = unknown>(
 		message: Pick<CustomMessage<T>, "customType" | "content" | "display" | "details">,

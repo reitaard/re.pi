@@ -1652,10 +1652,21 @@ export interface Extension {
 	shortcuts: Map<KeyId, ExtensionShortcut>;
 }
 
+export interface ExtensionPackageRuntimeDiagnostic {
+	packagePath: string;
+	source: string;
+	status: "source-only" | "verified" | "invalid" | "incompatible";
+	readinessContracts: Array<"registered" | "session-start" | "explicit">;
+	registration: "pending" | "registered" | "failed";
+	readinessState: "pending" | "ready" | "failed";
+	errors: string[];
+}
+
 /** Result of loading extensions. */
 export interface LoadExtensionsResult {
 	extensions: Extension[];
 	errors: Array<{ path: string; error: string }>;
+	packageRuntimeDiagnostics?: ExtensionPackageRuntimeDiagnostic[];
 	/** Shared runtime - actions are throwing stubs until runner.initialize() */
 	runtime: ExtensionRuntime;
 }
