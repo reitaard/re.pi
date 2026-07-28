@@ -10,6 +10,7 @@ import type { ImageContent, Model } from "@reitaard/repi-ai";
 import type { SessionStats } from "../../core/agent-session.ts";
 import type { BashResult } from "../../core/bash-executor.ts";
 import type { CompactionResult } from "../../core/compaction/index.ts";
+import type { LifecycleReadinessSnapshot } from "../../core/lifecycle-readiness.ts";
 import type { SessionEntry, SessionTreeNode } from "../../core/session-manager.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
 
@@ -120,6 +121,7 @@ export interface RpcSessionState {
 	autoCompactionEnabled: boolean;
 	messageCount: number;
 	pendingMessageCount: number;
+	readiness: LifecycleReadinessSnapshot;
 }
 
 // ============================================================================

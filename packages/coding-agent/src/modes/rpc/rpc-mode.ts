@@ -368,6 +368,7 @@ export async function runRpcMode(
 	};
 
 	const rebindSession = async (): Promise<void> => {
+		runtimeHost.readiness.markPending("integration-ready");
 		session = runtimeHost.session;
 		unsubscribe?.();
 		unsubscribeAizen?.();
@@ -466,6 +467,10 @@ export async function runRpcMode(
 				void checkShutdownRequested();
 			}
 		});
+		const packageRuntimeDiagnostics = session.resourceLoader.getExtensions().packageRuntimeDiagnostics ?? [];
+		if (!packageRuntimeDiagnostics.some((diagnostic) => diagnostic.readinessState === "pending")) {
+			runtimeHost.readiness.markReady("integration-ready");
+		}
 	};
 
 	const rebuildAizenRuntime = async (): Promise<void> => {
@@ -708,6 +713,7 @@ export async function runRpcMode(
 						? session.sessionManager.buildSessionContext().messages.length
 						: session.messages.length,
 					pendingMessageCount: aizen?.pendingMessageCount() ?? session.pendingMessageCount,
+					readiness: runtimeHost.readiness.snapshot(),
 				};
 				return success(id, "get_state", state);
 			}
@@ -723,6 +729,7 @@ export async function runRpcMode(
 					return error(id, "set_model", `Model not found: ${command.provider}/${command.modelId}`);
 				}
 				await session.setModel(model);
+				runtimeHost.readiness.markReady("model-ready");
 				await rebuildAizenRuntime();
 				return success(id, "set_model", model);
 			}
@@ -732,6 +739,7 @@ export async function runRpcMode(
 				if (!result) {
 					return success(id, "cycle_model", null);
 				}
+				runtimeHost.readiness.markReady("model-ready");
 				await rebuildAizenRuntime();
 				return success(id, "cycle_model", result);
 			}

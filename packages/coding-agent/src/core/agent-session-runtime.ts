@@ -11,6 +11,7 @@ import type {
 	SessionStartEvent,
 } from "./extensions/index.ts";
 import { emitSessionShutdownEvent } from "./extensions/runner.ts";
+import { LifecycleReadiness } from "./lifecycle-readiness.ts";
 import type { CreateAgentSessionResult } from "./sdk.ts";
 import { assertSessionCwdExists } from "./session-cwd.ts";
 import { SessionManager } from "./session-manager.ts";
@@ -80,6 +81,7 @@ export class AgentSessionRuntime {
 	private readonly createRuntime: CreateAgentSessionRuntimeFactory;
 	private _diagnostics: AgentSessionRuntimeDiagnostic[];
 	private _modelFallbackMessage?: string;
+	readonly readiness = new LifecycleReadiness();
 
 	constructor(
 		_session: AgentSession,
@@ -93,6 +95,7 @@ export class AgentSessionRuntime {
 		this.createRuntime = createRuntime;
 		this._diagnostics = _diagnostics;
 		this._modelFallbackMessage = _modelFallbackMessage;
+		this.readiness.beginSession(_session.model !== undefined);
 	}
 
 	get services(): AgentSessionServices {
@@ -183,6 +186,7 @@ export class AgentSessionRuntime {
 		this._services = result.services;
 		this._diagnostics = result.diagnostics;
 		this._modelFallbackMessage = result.modelFallbackMessage;
+		this.readiness.beginSession(result.session.model !== undefined);
 	}
 
 	private async finishSessionReplacement(withSession?: (ctx: ReplacedSessionContext) => Promise<void>): Promise<void> {

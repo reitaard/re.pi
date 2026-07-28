@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentSession } from "../src/core/agent-session.ts";
 import type { AgentSessionRuntime } from "../src/core/agent-session-runtime.ts";
 import { AuthStorage } from "../src/core/auth-storage.ts";
+import { LifecycleReadiness } from "../src/core/lifecycle-readiness.ts";
 import { ModelRegistry } from "../src/core/model-registry.ts";
 import type { createAizenRuntime } from "../src/core/recode-aizen-runtime.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
@@ -144,8 +145,11 @@ function createRuntimeHost(options: { withAuth: boolean; responseDelayMs: number
 		resourceLoader: createTestResourceLoader(),
 	});
 
+	const readiness = new LifecycleReadiness();
+	readiness.beginSession(options.model !== undefined);
 	const runtimeHost = {
 		session,
+		readiness,
 		newSession: vi.fn(async () => ({ cancelled: true })),
 		switchSession: vi.fn(async () => ({ cancelled: true })),
 		fork: vi.fn(async () => ({ cancelled: true, selectedText: "" })),
@@ -479,7 +483,16 @@ describe("RPC prompt response semantics", () => {
 					expect.objectContaining({
 						id: "aizen-state",
 						success: true,
-						data: expect.objectContaining({ isCompacting: true, pendingMessageCount: 2 }),
+						data: expect.objectContaining({
+							isCompacting: true,
+							pendingMessageCount: 2,
+							readiness: expect.objectContaining({
+								generation: 1,
+								levels: expect.objectContaining({
+									"integration-ready": expect.objectContaining({ status: "ready" }),
+								}),
+							}),
+						}),
 					}),
 				);
 			});

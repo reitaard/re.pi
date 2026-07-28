@@ -940,7 +940,10 @@ export class InteractiveMode {
 		if (isStartupProbeEnabled()) {
 			await new Promise<void>((resolve) => setImmediate(resolve));
 			emitStartupMilestone("tui-frame-ready");
+			emitStartupMilestone("tui-input-ready");
 		}
+		this.runtimeHost.readiness.markReady("frame-ready");
+		this.runtimeHost.readiness.markReady("input-ready");
 		this.isInitialized = true;
 		this.signalCleanupHandlers.push(
 			subscribeLspLifecycle((event) => {
@@ -1012,8 +1015,24 @@ export class InteractiveMode {
 		}
 		this.ui.requestRender();
 
-		// Initialize extensions first so resources are shown before messages
+		// Initialize extensions first so resources are shown before messages. The editor is already
+		// rendered and accepting input; optional integrations must not redefine frame/input readiness.
 		await this.rebindCurrentSession();
+		const packageRuntimeDiagnostics = this.session.resourceLoader.getExtensions().packageRuntimeDiagnostics ?? [];
+		const pendingPackages = packageRuntimeDiagnostics.filter(
+			(diagnostic) => diagnostic.readinessState === "pending",
+		).length;
+		if (pendingPackages === 0) {
+			this.runtimeHost.readiness.markReady("integration-ready");
+			emitStartupMilestone("integration-ready", {
+				readyPackages: packageRuntimeDiagnostics.filter((diagnostic) => diagnostic.readinessState === "ready")
+					.length,
+				rejectedPackages: packageRuntimeDiagnostics.filter(
+					(diagnostic) => diagnostic.status === "invalid" || diagnostic.status === "incompatible",
+				).length,
+				pendingPackages,
+			});
+		}
 
 		// Render initial messages AFTER showing loaded resources
 		this.renderInitialMessages();
@@ -2021,6 +2040,7 @@ export class InteractiveMode {
 	}
 
 	private async rebindCurrentSession(options: { renderBeforeBind?: boolean } = {}): Promise<void> {
+		this.runtimeHost.readiness.markPending("integration-ready");
 		this.stopRemoteSessionMonitoring();
 		this.unsubscribe?.();
 		this.unsubscribe = undefined;
@@ -4196,6 +4216,7 @@ export class InteractiveMode {
 				const msg = this.session.scopedModels.length > 0 ? "Only one model in scope" : "Only one model available";
 				this.showStatus(msg);
 			} else {
+				this.runtimeHost.readiness.markReady("model-ready");
 				this.rebuildAizenRuntime();
 				this.footer.invalidate();
 				this.updateEditorBorderColor();
@@ -4811,6 +4832,7 @@ export class InteractiveMode {
 		if (model) {
 			try {
 				await this.session.setModel(model);
+				this.runtimeHost.readiness.markReady("model-ready");
 				this.rebuildAizenRuntime();
 				this.footer.invalidate();
 				this.updateEditorBorderColor();
@@ -4945,6 +4967,7 @@ export class InteractiveMode {
 				async (model) => {
 					try {
 						await this.session.setModel(model);
+						this.runtimeHost.readiness.markReady("model-ready");
 						this.rebuildAizenRuntime();
 						this.footer.invalidate();
 						this.updateEditorBorderColor();
@@ -5585,6 +5608,7 @@ export class InteractiveMode {
 				} else {
 					try {
 						await this.session.setModel(selectedModel);
+						this.runtimeHost.readiness.markReady("model-ready");
 						this.rebuildAizenRuntime();
 					} catch (error: unknown) {
 						selectedModel = undefined;

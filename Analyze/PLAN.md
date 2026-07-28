@@ -591,9 +591,9 @@ After each code phase, run focused tests, `npm run check`, `git diff --check`, a
 1. S0 measurement repair — complete.
 2. S1 representative baseline — complete.
 3. S2 release-grade package runtime architecture — complete.
-4. **S3 now:** lifecycle readiness levels.
-5. **Checkpoint A:** configured packages preserve behavior and startup readiness contracts pass.
-6. O0 orchestrator characterization, upstream/Phase 4A delta review and frozen Hermes port mapping.
+4. S3 lifecycle readiness levels — complete.
+5. Checkpoint A configured-package behavior/readiness contract — complete.
+6. **O0 now:** orchestrator characterization, upstream/Phase 4A delta review and frozen Hermes port mapping.
 7. O1–O4 lifecycle port, persistence, cancellation and turn lease.
 8. O5–O7 attach/detach, completion and workspace safety.
 9. O8 TUI integration.

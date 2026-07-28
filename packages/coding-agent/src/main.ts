@@ -781,6 +781,9 @@ export async function main(args: string[], options?: MainOptions) {
 		pendingPackages: packageRuntimeDiagnostics.filter((diagnostic) => diagnostic.readinessState === "pending").length,
 	});
 	const { services, session, modelFallbackMessage } = runtime;
+	if (session.model) {
+		emitStartupMilestone("model-ready", { modelSelected: true });
+	}
 	const { settingsManager, modelRegistry, resourceLoader } = services;
 	const aizenRuntime = parsed.aizenRuntime ?? settingsManager.getAizenRuntime();
 	applyHttpProxySettings(settingsManager.getGlobalSettings().httpProxy);
@@ -862,8 +865,6 @@ export async function main(args: string[], options?: MainOptions) {
 		if (startupBenchmark) {
 			await interactiveMode.init();
 			time("interactiveMode.init");
-			emitStartupMilestone("tui-input-ready");
-			emitStartupMilestone("integration-ready");
 			if (process.env.PI_STARTUP_BENCHMARK_INPUT) {
 				await waitForStartupMilestone("tui-input-echo", 30_000);
 			}

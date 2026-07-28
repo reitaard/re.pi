@@ -201,3 +201,4 @@
 - Updated installed web/MCP packages and exact upstream Pi compatibility runtimes after the configured probe exposed a broken `pi-web-access` `./compat` import; all configured extension tools now register without errors.
 - Completed S2 and pushed private browser artifact commit `6105993645f3578bf989393704bcc97c0e06e156` to `origin/s2-runtime-contract`; global Recode settings pin the verified remote commit.
 - Post-S2 warm medians: configured RPC 3,761.5 ms, configured TUI input 4,264.9 ms, isolated RPC 1,521.3 ms, isolated TUI input 1,723.7 ms. All stayed inside the 10% regression guard.
+- Completed S3: added lifecycle readiness state/generations, exposed it through RPC, and separated session/model/frame/input readiness from integration completion. Configured warm medians measured input echo at 4,221.6 ms and integration readiness at 4,266.6 ms.

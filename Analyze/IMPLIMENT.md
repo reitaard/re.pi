@@ -225,9 +225,40 @@ Detailed evidence is in [`EXTENSIONAUDIT.md`](EXTENSIONAUDIT.md).
 - Installed package root `C:/Users/re_Lax/.pi/agent/npm`: exact updated web/MCP and compatibility dependencies plus refreshed lockfile.
 - `Analyze/EXTENSIONAUDIT.md` — installed-package audit, repaired web-access compatibility and completed local `repi-browser` migration status.
 
+### S3 — Split lifecycle readiness levels
+
+**Status:** complete
+**Started:** 2026-07-28
+**Completed:** 2026-07-28
+
+#### Implemented
+
+- Added the missing `model-ready` startup milestone and emit it only when a model is selected and provider dispatch can begin.
+- Moved `tui-input-ready` to the actual editor-ready point immediately after the first rendered frame, before extension session initialization completes.
+- Moved `integration-ready` to after awaited extension binding/session-start and emit it only when no package remains pending.
+- Removed the inaccurate benchmark-only readiness emissions that previously reported input and integrations ready together after full `InteractiveMode.init()`.
+- Added process-local `LifecycleReadiness` state with independent frame, input, session, integration and model levels, idempotent transitions, immutable detached snapshots, subscriptions and session generations.
+- Frame/input readiness survives session replacement; session/integration/model readiness resets for each generation.
+- Interactive and RPC rebinding explicitly returns integration state to pending until package session-start work completes.
+- Initial and subsequently selected models complete model readiness in both interactive and RPC modes.
+- RPC `get_state` now exposes the structured readiness snapshot for supervisors and future clients.
+
+#### Validation
+
+- Focused readiness, runtime-event, RPC, startup-probe and terminal tests: **19 passed**.
+- Full `npm run check` passed.
+- Configured warm five-run TUI milestone medians:
+  - session ready: **4,135.3 ms**;
+  - model ready: **4,135.4 ms**;
+  - frame/input ready: **4,160.1 ms**;
+  - rendered input echo: **4,221.6 ms**;
+  - integration ready: **4,266.6 ms**.
+- The measured editor accepted and rendered input before optional integration completion. No cold-cache state was manufactured.
+- Generated AI catalogue changes caused by the authorized benchmark build were restored without touching task or unrelated staged files.
+
 ## Comparison traceability
 
-The implementation is governed by [`analyze/COMPARE.md`](../analyze/COMPARE.md), not only its startup section. `Analyze/PLAN.md` now maps the complete comparison into startup/package work, lifecycle/service work, matched three-way validation and P0–P4 distribution, preservation, safety, memory and integrated-product work. S2 is current because package loading is both the measured startup bottleneck and the integration/distribution boundary identified by the comparison.
+The implementation is governed by [`analyze/COMPARE.md`](../analyze/COMPARE.md), not only its startup section. `Analyze/PLAN.md` maps the complete comparison into startup/package work, lifecycle/service work, matched three-way validation and P0–P4 distribution, preservation, safety, memory and integrated-product work. S3 is current because accurate independent readiness boundaries are required before lifecycle/service work can improve perceived and complete startup honestly.
 
 ## Accepted post-lifecycle checkpoint
 

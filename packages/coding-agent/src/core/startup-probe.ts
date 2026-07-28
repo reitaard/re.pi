@@ -10,6 +10,7 @@ export type StartupMilestoneName =
 	| "tui-input-ready"
 	| "tui-input-echo"
 	| "integration-ready"
+	| "model-ready"
 	| "prompt-accepted"
 	| "provider-request"
 	| "first-model-event";
