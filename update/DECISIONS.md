@@ -104,6 +104,14 @@ Include `repi-browser` in certified Recode package sets and the later Recode/jco
 
 **Reason:** Browser control is an intentional Recode product capability and the largest controlled extension graph. Excluding it would produce misleading startup and feature comparisons.
 
+## D-016 — Maestro is the full-session conductor
+
+**Status:** Accepted
+
+Name the orchestrator-owned full-session service **Recode Maestro**. The canonical command contract is `recode maestro <command>`; `recode` remains the default Aizen runtime and `recode aizen` becomes its explicit subcommand. After O0 characterizes current behavior, O1 removes the existing `--aizen` flag as explicitly approved. Direct named-worker chats use `recode worker <levi|mayuri|shiori>` with stable convenience aliases `--levi`, `--mayuri`, and `--shiori`; those aliases route directly to the private worker conversation and do not add an Aizen delegation/model turn. `packages/orchestrator` remains the implementation package until lifecycle stabilization makes a physical rename safe.
+
+**Reason:** Maestro accurately describes one conductor managing multiple full Aizen sessions. Subcommands provide a scalable namespace for lifecycle operations, while stable worker aliases keep direct specialist chats inexpensive and convenient without misclassifying workers as root runtimes.
+
 ## Pending decisions
 
 - Whether a later `recode upstream prepare` command should create an isolated integration worktree

@@ -1,7 +1,7 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, type SpawnOptions, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type {
 	AgentSessionEvent,
 	RpcCommand,
@@ -16,7 +16,7 @@ interface PendingRequest {
 	reject(error: Error): void;
 }
 
-const require = createRequire(import.meta.url);
+type RpcProcessSpawner = (command: string, args: string[], options: SpawnOptions) => ChildProcess;
 
 function toError(error: unknown): Error {
 	return error instanceof Error ? error : new Error(String(error));
@@ -34,9 +34,12 @@ export class RpcProcessInstance {
 	private readonly exitListeners = new Set<(error?: Error) => void>();
 	private uiRequestHandler: ((request: RpcExtensionUIRequest) => void) | undefined;
 
-	constructor(options: { cwd: string }) {
-		const rpcCommand = this.getSpawnCommand();
-		this.process = spawn(rpcCommand.command, rpcCommand.args, {
+	constructor(
+		options: { cwd: string },
+		spawnProcess: RpcProcessSpawner = spawn,
+		rpcCommand: { command: string; args: string[] } = this.getSpawnCommand(),
+	) {
+		this.process = spawnProcess(rpcCommand.command, rpcCommand.args, {
 			cwd: options.cwd,
 			env: process.env,
 			stdio: ["pipe", "pipe", "pipe"],
@@ -56,7 +59,7 @@ export class RpcProcessInstance {
 		}
 		return {
 			command: process.execPath,
-			args: [require.resolve("@reitaard/repi-coding-agent/rpc-entry")],
+			args: [fileURLToPath(import.meta.resolve("@reitaard/repi-coding-agent/rpc-entry"))],
 		};
 	}
 

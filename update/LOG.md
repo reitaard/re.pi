@@ -202,3 +202,7 @@
 - Completed S2 and pushed private browser artifact commit `6105993645f3578bf989393704bcc97c0e06e156` to `origin/s2-runtime-contract`; global Recode settings pin the verified remote commit.
 - Post-S2 warm medians: configured RPC 3,761.5 ms, configured TUI input 4,264.9 ms, isolated RPC 1,521.3 ms, isolated TUI input 1,723.7 ms. All stayed inside the 10% regression guard.
 - Completed S3: added lifecycle readiness state/generations, exposed it through RPC, and separated session/model/frame/input readiness from integration completion. Configured warm medians measured input echo at 4,221.6 ms and integration readiness at 4,266.6 ms.
+- Accepted D-016: Recode Maestro is the full-session conductor; CLI contract is `recode maestro`, explicit `recode aizen`, and direct worker command/aliases without an extra Aizen model turn.
+- Completed O0 source/Hermes mapping and four focused characterization tests. Upstream server contributes no lifecycle fix; Phase 4A routing is deferred. Corrected Node RPC-entry resolution from incompatible `createRequire().resolve()` to ESM resolution.
+- Completed O1 public Maestro lifecycle contract and private worker/full-session adapters with bounded records, fail-closed capabilities, lifecycle transitions, cancellation-safe acquisition, terminal retention, stale-owner generations and process identity validation. O1 lifecycle tests passed 10/10; all orchestrator tests passed 14/14.
+- Replaced the removed `--aizen` flag with explicit `recode aizen` parsing under D-016; argument tests passed 74/74.

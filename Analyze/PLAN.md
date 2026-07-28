@@ -267,7 +267,7 @@ The long-lived service in Track 2 should make subsequent attaches faster, but it
   - unexpected child exit isolation;
   - stop behavior;
   - current restart recovery behavior.
-- Decide the eventual command name (`recode server` preferred) without creating a second package implementation.
+- Freeze the accepted CLI contract without creating a second package implementation: `recode maestro <command>` for the full-session conductor, `recode aizen` for explicit Aizen, and direct `recode worker <name>` plus stable worker aliases. Characterize the existing `--aizen` flag in O0, then remove it at O1 entry as approved.
 - Freeze the Hermes port source at commit `5b22bd955682a8fc7b07769784c5129e23f53eaf` and review:
   - `agent/subagent_lifecycle.py`;
   - `agent/iteration_budget.py`;
@@ -593,15 +593,16 @@ After each code phase, run focused tests, `npm run check`, `git diff --check`, a
 3. S2 release-grade package runtime architecture — complete.
 4. S3 lifecycle readiness levels — complete.
 5. Checkpoint A configured-package behavior/readiness contract — complete.
-6. **O0 now:** orchestrator characterization, upstream/Phase 4A delta review and frozen Hermes port mapping.
-7. O1–O4 lifecycle port, persistence, cancellation and turn lease.
-8. O5–O7 attach/detach, completion and workspace safety.
-9. O8 TUI integration.
-10. **Checkpoint B:** Hermes lifecycle conformance passes against Recode adapters and the long-lived service is usable end to end.
-11. C0–C3 fresh exact-source three-way test/performance comparison of Recode, jcode and upstream Pi.
-12. C4 gap decision.
-13. S4 performance target ratification from matched evidence.
-14. O9 shared-service optimization in the measured order.
-15. P0–P4 overall product-gap work in the order ratified by C4.
+6. O0 Maestro characterization and frozen Hermes port mapping — complete.
+7. O1 public lifecycle-model port — complete.
+8. **O2 now:** atomic persistence and terminal retention, followed by O3–O4 cancellation and turn lease.
+9. O5–O7 attach/detach, completion and workspace safety.
+10. O8 TUI integration.
+11. **Checkpoint B:** Hermes lifecycle conformance passes against Recode adapters and the long-lived service is usable end to end.
+12. C0–C3 fresh exact-source three-way test/performance comparison of Recode, jcode and upstream Pi.
+13. C4 gap decision.
+14. S4 performance target ratification from matched evidence.
+15. O9 shared-service optimization in the measured order.
+16. P0–P4 overall product-gap work in the order ratified by C4.
 
 This order fixes observability first, replaces the package runtime boundary, ports the lifecycle subsystem to a tested checkpoint, and only then compares exact implementations before broader product-gap closure. The service is never used to conceal cold startup cost, jcode claims are never compared against unlike Recode lifecycle points, and startup gains are not treated as overall feature parity.

@@ -33,14 +33,24 @@ describe("parseArgs", () => {
 		});
 	});
 
-	describe("--print flag", () => {
-		test("parses the experimental Aizen runtime flag", () => {
-			const result = parseArgs(["-p", "--aizen", "Inspect the project"]);
+	describe("Aizen command", () => {
+		test("parses the explicit Aizen subcommand without treating it as a prompt", () => {
+			const result = parseArgs(["aizen", "-p", "Inspect the project"]);
 			expect(result.print).toBe(true);
 			expect(result.aizenRuntime).toBe(true);
 			expect(result.messages).toEqual(["Inspect the project"]);
 		});
 
+		test("rejects the removed --aizen flag with migration guidance", () => {
+			const result = parseArgs(["--aizen"]);
+			expect(result.aizenRuntime).toBeUndefined();
+			expect(result.diagnostics).toEqual([
+				{ type: "error", message: "--aizen was removed; use the `recode aizen` subcommand" },
+			]);
+		});
+	});
+
+	describe("--print flag", () => {
 		test("parses --print flag", () => {
 			const result = parseArgs(["--print"]);
 			expect(result.print).toBe(true);

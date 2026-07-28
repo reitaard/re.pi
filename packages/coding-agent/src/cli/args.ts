@@ -62,14 +62,16 @@ export function isValidThinkingLevel(level: string): level is ThinkingLevel {
 }
 
 export function parseArgs(args: string[]): Args {
+	const explicitAizen = args[0] === "aizen";
 	const result: Args = {
 		messages: [],
 		fileArgs: [],
 		unknownFlags: new Map(),
 		diagnostics: [],
+		aizenRuntime: explicitAizen ? true : undefined,
 	};
 
-	for (let i = 0; i < args.length; i++) {
+	for (let i = explicitAizen ? 1 : 0; i < args.length; i++) {
 		const arg = args[i];
 
 		if (arg === "--help" || arg === "-h") {
@@ -146,7 +148,7 @@ export function parseArgs(args: string[]): Args {
 				i++;
 			}
 		} else if (arg === "--aizen") {
-			result.aizenRuntime = true;
+			result.diagnostics.push({ type: "error", message: "--aizen was removed; use the `recode aizen` subcommand" });
 		} else if (arg === "--legacy") {
 			result.aizenRuntime = false;
 		} else if (arg === "--export" && i + 1 < args.length) {
@@ -228,9 +230,10 @@ export function printHelp(extensionFlags?: ExtensionFlag[]): void {
 	console.log(`${chalk.bold(APP_NAME)} - AI coding assistant with read, bash, edit, write tools
 
 ${chalk.bold("Usage:")}
-  ${APP_NAME} [options] [@files...] [messages...]
+  ${APP_NAME} [aizen] [options] [@files...] [messages...]
 
 ${chalk.bold("Commands:")}
+  ${APP_NAME} aizen                    Explicitly start the Aizen runtime
   ${APP_NAME} install <source> [-l]     Install extension source and add to settings
   ${APP_NAME} remove <source> [-l]      Remove extension source from settings
   ${APP_NAME} uninstall <source> [-l]   Alias for remove
@@ -248,7 +251,6 @@ ${chalk.bold("Options:")}
   --append-system-prompt <text>  Append text or file contents to the system prompt (can be used multiple times)
   --mode <mode>                  Output mode: text (default), json, or rpc
   --print, -p                    Non-interactive mode: process prompt and exit
-  --aizen                       Explicitly use Aizen (already the default)
   --legacy                      Temporarily use the legacy path
   --continue, -c                 Continue previous session
   --resume, -r                   Select a session to resume

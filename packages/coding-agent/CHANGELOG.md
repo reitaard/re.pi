@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Replaced the redundant `--aizen` runtime flag with the explicit `recode aizen` subcommand; bare `recode` remains Aizen by default.
+
 ### Added
 
 - Added isolated named-worker session, Kioku, state, and evaluation storage roots plus a direct-chat surface with worker health information.

@@ -256,6 +256,41 @@ Detailed evidence is in [`EXTENSIONAUDIT.md`](EXTENSIONAUDIT.md).
 - The measured editor accepted and rendered input before optional integration completion. No cold-cache state was manufactured.
 - Generated AI catalogue changes caused by the authorized benchmark build were restored without touching task or unrelated staged files.
 
+### O0 — Freeze Maestro contract and characterize inherited behavior
+
+**Status:** complete
+**Started:** 2026-07-28
+**Completed:** 2026-07-28
+
+- Locked Recode Maestro and the accepted CLI contract in `update/DECISIONS.md` D-016.
+- Compared exact current Recode, upstream Pi server and Phase 4A routing sources.
+- Froze Hermes source at `5b22bd955682a8fc7b07769784c5129e23f53eaf` and classified every reviewed lifecycle, budget, lineage and lease behavior.
+- Added one consolidated characterization suite covering first state/event/UI routing, unexpected exit, cooperative stop and restart normalization: **4 passed**.
+- Corrected the inherited Node spawn resolver: `createRequire().resolve()` could not resolve the import-only `./rpc-entry` export; Maestro now uses `import.meta.resolve()` plus `fileURLToPath()`.
+- Added an injectable spawn seam solely to keep lifecycle tests deterministic and token/network free.
+- Kept the suite dependency-free with `node:test`; no package or lockfile churn was retained.
+- Full `npm run check` and `git diff --check` passed.
+- Detailed source evidence and the Hermes mapping are in [`MAESTRO-O0.md`](MAESTRO-O0.md).
+
+### O1 — Port the public lifecycle model
+
+**Status:** complete
+**Started:** 2026-07-28
+**Completed:** 2026-07-28
+
+- Added contract version 1 with explicit pending, starting, running, cancellation and terminal states plus a closed legal-transition table.
+- Added bounded launch, handle, status, wait, cancel, result, reconnect, attach, subscribe, detach and destructive stop contracts.
+- Added random capability-bearing handles, parent-scoped correlation uniqueness, generation-safe interactive attachments, bounded progress/result snapshots, terminal hashes and one-hour configurable terminal retention.
+- Added private worker and full-session adapters; neither adapter exposes a worker, child process or session resource to callers.
+- Added fail-closed process/session identity validation for full sessions and isolated subscriber failures from lifecycle control flow.
+- Added cancellation-safe launch acquisition: early cancel/stop cannot leave a subsequently acquired full-session resource running.
+- Translated the relevant Hermes lifecycle conformance behaviors and added Recode-specific process/reconnect cases: **10 O1 tests passed**; with O0 characterization, **14 orchestrator tests passed**.
+- Levi's focused audit identified launch-acquisition, observer, retention and runtime-boundary defects; all four received focused regression coverage and fixes. A requested second audit run terminated without a result and was not retried.
+- Replaced `--aizen` with explicit `recode aizen` parsing and migration diagnostics as approved by D-016; bare `recode` remains settings/default driven.
+- Coding-agent argument suite: **74 passed**.
+- Full `npm run check` and `git diff --check` passed.
+- Persistence, process-safe capability durability, deadline/escalation, iteration-budget integration and session turn leases remain O2–O4 work.
+
 ## Comparison traceability
 
 The implementation is governed by [`analyze/COMPARE.md`](../analyze/COMPARE.md), not only its startup section. `Analyze/PLAN.md` maps the complete comparison into startup/package work, lifecycle/service work, matched three-way validation and P0–P4 distribution, preservation, safety, memory and integrated-product work. S3 is current because accurate independent readiness boundaries are required before lifecycle/service work can improve perceived and complete startup honestly.
