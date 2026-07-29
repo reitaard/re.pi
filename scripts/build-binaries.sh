@@ -81,6 +81,21 @@ if [[ "$OUTPUT_DIR" != /* ]]; then
     OUTPUT_DIR="$(pwd)/$OUTPUT_DIR"
 fi
 
+identity_mode="${RECODE_RELEASE_IDENTITY_MODE:-branch}"
+identity_args=(--mode "$identity_mode")
+if [[ "$identity_mode" == "tag" ]]; then
+    if [[ -z "${RECODE_RELEASE_TAG:-}" ]]; then
+        echo "RECODE_RELEASE_TAG is required when RECODE_RELEASE_IDENTITY_MODE=tag"
+        exit 1
+    fi
+    identity_args+=(--tag "$RECODE_RELEASE_TAG")
+fi
+node scripts/release-identity.mjs "${identity_args[@]}"
+if [[ "$identity_mode" == "tag" && "$SKIP_BUILD" == "true" ]]; then
+    echo "--skip-build is forbidden for tagged release artifacts"
+    exit 1
+fi
+
 if [[ "$SKIP_INSTALL" == "false" ]]; then
     echo "==> Installing dependencies..."
     npm ci --ignore-scripts
@@ -119,10 +134,13 @@ fi
 
 if [[ "$SKIP_BUILD" == "false" ]]; then
     echo "==> Building all packages..."
+    npm run clean
     npm run build
 else
     echo "==> Skipping package build (--skip-build)"
 fi
+node scripts/release-identity.mjs "${identity_args[@]}"
+node scripts/generate-release-manifest.mjs "${identity_args[@]}"
 
 echo "==> Building binaries..."
 cd packages/coding-agent
@@ -159,6 +177,7 @@ for platform in "${PLATFORMS[@]}"; do
     cp package.json "$OUTPUT_DIR/$platform/"
     cp README.md "$OUTPUT_DIR/$platform/"
     cp CHANGELOG.md "$OUTPUT_DIR/$platform/"
+    cp dist/recode-release.json "$OUTPUT_DIR/$platform/"
     cp ../../node_modules/@silvia-odwyer/photon-node/photon_rs_bg.wasm "$OUTPUT_DIR/$platform/"
     mkdir -p "$OUTPUT_DIR/$platform/theme"
     cp dist/modes/interactive/theme/*.json "$OUTPUT_DIR/$platform/theme/"
@@ -221,11 +240,17 @@ for platform in "${PLATFORMS[@]}"; do
     if [[ "$platform" == windows-* ]]; then
         # Windows (zip)
         echo "Creating recode-$platform.zip..."
-        (cd "$platform" && zip -r ../recode-$platform.zip .)
+        (
+            cd "$platform"
+            find . -exec touch -t 198001010000 {} +
+            find . -type f -print0 | sort -z | xargs -0 zip -X ../recode-$platform.zip
+        )
     else
         # Unix platforms (tar.gz) - use wrapper directory for mise compatibility
         echo "Creating recode-$platform.tar.gz..."
-        mv "$platform" recode && tar -czf recode-$platform.tar.gz recode && mv recode "$platform"
+        mv "$platform" recode
+        tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -czf recode-$platform.tar.gz recode
+        mv recode "$platform"
     fi
 done
 

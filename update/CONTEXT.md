@@ -114,6 +114,8 @@ Extend this package and lifecycle authority; do not add another supervisor.
 
 ## Release strategy
 
+The next stable compatibility release target is `@reitaard/repi-coding-agent@0.81.5`. Stable SemVer does not include development distance or source commit; provenance belongs in the release manifest. Publication remains deferred while release identity, manifests and certification are completed. A future standalone `recode` repository is planned, but its package identity and initial independent version remain a separate migration decision.
+
 The custom-first line starts from the exact currently installed source `c5ab200b`, which contains the AgentHarness, durable teach/session, memory, UI, and OpenAI OAuth work. Upstream Pi is analyzed from exact common baseline `1f9e846c`; raw upstream changes are reported but never automatically merged.
 
 The earlier published `@reitaard/repi-coding-agent@0.82.1-repi.1` is quarantined because it does not preserve full custom UI/runtime parity.
@@ -129,7 +131,7 @@ Relevant implementation:
 
 Current behavior:
 
-1. Query the configured update endpoint.
+1. Self-update discovery is disabled in the shipped CLI until a validated Recode-owned endpoint and manifest verification are built in.
 2. Require the returned package identity to equal `@reitaard/repi-coding-agent`.
 3. Refuse before package-manager mutation when the service returns upstream Pi or any foreign package.
 4. Allow extension-only updates independently.
@@ -137,7 +139,7 @@ Current behavior:
 
 At investigation time, the endpoint returned upstream package `@earendil-works/pi-coding-agent` version `0.82.1`. That package exposes the `pi` binary rather than `recode`.
 
-The fail-closed identity guard was validated against the live endpoint: `recode update --self` reports the foreign package and exits cleanly with status 1 without changing the global installation.
+The earlier fail-closed identity guard was validated against the live upstream endpoint: `recode update --self` reported the foreign package and exited cleanly with status 1 without changing the global installation. The default endpoint is now removed entirely until Recode-owned release metadata is available; extension-only updates remain enabled.
 
 ## MCP and research access
 

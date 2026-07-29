@@ -144,8 +144,28 @@ Every local IPC request and stream handshake requires a private current-user tok
 
 **Reason:** A long-lived unattended service needs deterministic authorization and secret minimization without misrepresenting same-user host execution as isolation.
 
+## D-021 — The next stable compatibility release is Recode 0.81.5
+
+**Status:** Accepted
+
+The next release candidate for the existing `@reitaard/repi-coding-agent` package is exactly `0.81.5`. Development-distance and source-commit suffixes remain limited to local development artifacts; stable versions do not encode commit identity. The immutable release manifest carries source commit and custom-baseline provenance instead. Publication from this repository is deferred. A later clean `recode` repository and any package-name/version-line reset require a separate explicit migration decision so npm ordering and `recode update` cannot interpret the new product as a downgrade.
+
+Self-update discovery remains disabled in the shipped CLI until a validated Recode-owned release endpoint and manifest-verification path are built in. Extension-only updates remain independent.
+
+**Reason:** Recode has materially diverged from upstream Pi, but the currently installed npm identity already has `0.81.x` versions. `0.81.5` provides one stable compatibility checkpoint without embedding development provenance in SemVer or prematurely committing the future repository to a package migration.
+
+## D-022 — Release provenance uses an embedded identity manifest and detached artifact index
+
+**Status:** Accepted
+
+Every npm package, Bun binary archive, Termux archive and source archive carries the same deterministic `recode-release.json` identity manifest. It binds product/package identity, stable version, exact tag when applicable, source commit, custom baseline, runtime requirement and supported artifact matrix. Final archive sizes and SHA-256 values live in a detached `recode-artifacts.json` index bound to the embedded manifest hash; `SHA256SUMS` covers both the release artifacts and detached index.
+
+**Reason:** An archive cannot embed its own final cryptographic hash without a circular value. The two-layer format preserves identical embedded provenance while giving release consumers final-byte hashes and sizes.
+
 ## Pending decisions
 
+- Final package identity and initial version for the future standalone `recode` repository
+- Exact curated source-transfer policy for the future standalone `recode` repository
 - Whether a later `recode upstream prepare` command should create an isolated integration worktree
 - Dependency-refresh policy
 - Final development symlink repoint procedure

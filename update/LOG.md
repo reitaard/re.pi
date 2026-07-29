@@ -251,3 +251,18 @@
 - Real isolated RPC child lifecycle smoke continued to pass after environment filtering.
 - Validation passed: all orchestrator tests **63/63**, catastrophic-command tests **18/18**, relevant bash/Aizen tests, `npm run check`, and `git diff --check`.
 - Release identity, updater completion and Windows/Linux artifact/service certification are now the next bounded phase.
+
+## 2026-07-29 — V2 release identity and manifest foundation
+
+- Accepted `@reitaard/repi-coding-agent@0.81.5` as the next stable compatibility target. Stable SemVer will not contain development distance or a source-commit suffix; publication remains deferred.
+- Added one shared fail-closed release identity gate for local packaging, custom packing, Bun binaries, Termux, npm publication, the release/tag script and GitHub release staging.
+- Required clean authoritative `agent-harness` source for development packaging, exact custom-baseline ancestry, lockstep expected package identities, or an exact `vX.Y.Z` tag matching both HEAD and package version for release artifacts.
+- Removed the workflow's independent `source_ref` recovery input so one release tag cannot label artifacts built from another source.
+- Corrected the release script to push the validated authoritative branch instead of unrelated `main`, reject pre-existing target tags and reverify the created tag before any push.
+- Added deterministic embedded `recode-release.json` provenance for npm, binary, Termux and source artifacts plus detached `recode-artifacts.json` size/SHA-256 indexing and `SHA256SUMS` coverage.
+- Closed a review-discovered stale-output provenance gap: tagged binaries cannot skip builds, direct custom/npm packaging performs a clean build, and source identity is rechecked after builds before manifests or publication.
+- Required the artifact verifier to match the exact filename set declared by the release manifest, reject duplicates and validate manifest binding, sizes and hashes.
+- Normalized binary archive ordering, timestamps, ownership metadata and ZIP metadata where practical.
+- Disabled self-update discovery in the shipped CLI until a Recode-owned endpoint and manifest-verification path are built in. Extension updates remain independent; controlled tests retain endpoint injection and foreign package identities remain rejected before mutation.
+- Focused validation passed: release identity/manifest/index tests **10/10**, version-check tests **8/8**, package-command tests **24/24**, shell syntax checks, `npm run check`, and `git diff --check`.
+- Repaired two Windows-only historical package-command expectations exposed by the release gate: platform-native extension path separators and realistic pnpm store-layout fallback for shim detection.

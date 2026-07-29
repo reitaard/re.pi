@@ -3,6 +3,8 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { createReleaseManifest, RELEASE_MANIFEST_FILENAME, writeReleaseManifest } from "./generate-release-manifest.mjs";
+import { assertReleaseIdentity } from "./release-identity.mjs";
 
 const packages = [
 	{ directory: "packages/ai", name: "@reitaard/repi-ai" },
@@ -19,6 +21,15 @@ if (unknownArgs.length > 0) {
 	console.error(`Usage: node scripts/publish.mjs [--dry-run]`);
 	process.exit(1);
 }
+
+const releaseTag = process.env.RECODE_RELEASE_TAG?.trim();
+if (!dryRun && !releaseTag) {
+	throw new Error("RECODE_RELEASE_TAG is required for publication");
+}
+const releaseIdentity = releaseTag
+	? assertReleaseIdentity({ expectedTag: releaseTag, mode: "tag" })
+	: assertReleaseIdentity({ mode: "branch" });
+console.log(`Verified Recode source ${releaseIdentity.commit}${releaseIdentity.tag ? ` at ${releaseIdentity.tag}` : ""}`);
 
 function commandForPlatform(command) {
 	return process.platform === "win32" ? `${command}.cmd` : command;
@@ -74,6 +85,14 @@ function isPublished(name, version) {
 	throw new Error(output ? `Failed to query ${name}@${version}\n${output}` : `Failed to query ${name}@${version}`);
 }
 
+run("npm", ["run", "clean"]);
+run("npm", ["run", "build"]);
+run("npm", ["run", "check"]);
+const rebuiltIdentity = releaseTag
+	? assertReleaseIdentity({ expectedTag: releaseTag, mode: "tag" })
+	: assertReleaseIdentity({ mode: "branch" });
+if (rebuiltIdentity.commit !== releaseIdentity.commit) throw new Error("Release source changed during the clean build");
+
 const packageVersions = new Map();
 for (const pkg of packages) {
 	const packageJson = readPackageJson(pkg.directory);
@@ -88,7 +107,7 @@ if (versions.length !== 1) {
 	throw new Error(`Publish packages are not lockstep versioned: ${versions.join(", ")}`);
 }
 
-console.log(`Publishing pi packages at ${versions[0]}${dryRun ? " (dry run)" : ""}\n`);
+console.log(`Publishing Recode packages at ${versions[0]}${dryRun ? " (dry run)" : ""}\n`);
 
 const packageStates = packages.map((pkg) => ({
 	...pkg,
@@ -96,8 +115,13 @@ const packageStates = packages.map((pkg) => ({
 	version: packageVersions.get(pkg.name),
 }));
 
+for (const pkg of packageStates) assertBuildOutputExists(pkg.directory);
+writeReleaseManifest(
+	createReleaseManifest(releaseIdentity),
+	packageStates.map((pkg) => join(pkg.directory, "dist", RELEASE_MANIFEST_FILENAME)),
+);
+
 for (const pkg of packageStates) {
-	assertBuildOutputExists(pkg.directory);
 	pkg.published = isPublished(pkg.name, pkg.version);
 
 	if (pkg.published) {

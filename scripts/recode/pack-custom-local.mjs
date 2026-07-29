@@ -2,10 +2,12 @@
 import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createReleaseManifest, RELEASE_MANIFEST_FILENAME, writeReleaseManifest } from "../generate-release-manifest.mjs";
+import { assertReleaseIdentity, RELEASE_IDENTITY_POLICY } from "../release-identity.mjs";
 
-const CUSTOM_BASE_COMMIT = "c5ab200bc43993d211e1e97baa0c9abd27c0ce79";
+const CUSTOM_BASE_COMMIT = RELEASE_IDENTITY_POLICY.customBaseCommit;
 const scriptDir = resolve(fileURLToPath(new URL(".", import.meta.url)));
 const root = resolve(scriptDir, "../..");
 const npmCli = process.env.npm_execpath;
@@ -51,11 +53,20 @@ function copyIfPresent(source, destination) {
 	if (existsSync(source)) cpSync(source, destination, { recursive: true });
 }
 
-const dirty = git(["status", "--porcelain=v1", "--untracked-files=normal"]);
-if (dirty) throw new Error("Refusing to package a checkout with uncommitted files");
-run("git", ["merge-base", "--is-ancestor", CUSTOM_BASE_COMMIT, "HEAD"]);
-
-const sourceCommit = git(["rev-parse", "HEAD"]);
+const releaseIdentity = assertReleaseIdentity({ mode: "branch", root });
+runNpm(["run", "clean"]);
+runNpm(["run", "build"]);
+const rebuiltIdentity = assertReleaseIdentity({ mode: "branch", root });
+if (rebuiltIdentity.commit !== releaseIdentity.commit) throw new Error("Release source changed during the clean build");
+const sourceCommit = releaseIdentity.commit;
+const releaseManifest = createReleaseManifest(releaseIdentity, { root });
+const releaseManifestPaths = RELEASE_IDENTITY_POLICY.packages.map((pkg) =>
+	join(root, pkg.directory, "dist", RELEASE_MANIFEST_FILENAME),
+);
+for (const path of releaseManifestPaths) {
+	if (!existsSync(dirname(path))) throw new Error(`Build output is missing for ${path}`);
+}
+writeReleaseManifest(releaseManifest, releaseManifestPaths);
 const shortCommit = git(["rev-parse", "--short=8", "HEAD"]);
 const distance = Number(git(["rev-list", "--count", `${CUSTOM_BASE_COMMIT}..HEAD`]));
 const version = process.env.RECODE_PACKAGE_VERSION?.trim() || `0.81.4-repi.2.dev.${distance}.${shortCommit}`;

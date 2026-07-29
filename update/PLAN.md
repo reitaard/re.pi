@@ -244,17 +244,17 @@ The repository already has one intended release path: `scripts/local-release.mjs
 - [x] Confirm binary targets exist for Linux x64/arm64 and Windows x64/arm64.
 - [x] Confirm a deterministic Termux Node archive exists.
 - [x] Confirm GitHub release assets receive SHA-256 checksums and a source archive.
-- [ ] Prove every path builds from the authoritative `agent-harness` release commit, remains descended from the exact custom baseline, and enables delegation by default.
+- [x] Prove every path builds from the authoritative `agent-harness` release commit, remains descended from the exact custom baseline, and enables delegation by default.
 - [x] Make the full local-release test runner execute `test.sh` through Bash on Windows instead of handing it to `cmd.exe`.
 - [ ] Separate Windows-incompatible historical tests from true release blockers so `release:local` has an authoritative cross-platform gate instead of a host-specific failure mode.
-- [ ] Reconcile release documentation with workflow reality: the current binary workflow stages/publishes GitHub assets but does not contain the documented npm trusted-publishing job.
-- [ ] Verify the release/tag script cannot accidentally release incomplete `main` or a raw upstream-derived tree.
+- [x] Reconcile release documentation with workflow reality: the current binary workflow stages/publishes GitHub assets but does not contain the documented npm trusted-publishing job.
+- [x] Verify the release/tag script cannot accidentally release incomplete `main` or a raw upstream-derived tree.
 
 ### R1 — One versioned release manifest
 
-- [ ] Generate one immutable manifest containing product/package identity, version, source commit, custom baseline, artifact names, sizes, SHA-256 hashes, runtime requirements, and supported platform/architecture.
-- [ ] Embed or bundle the same manifest in npm, binary, Termux, and source artifacts.
-- [ ] Fail packaging if the checkout is dirty, detached, not descended from the custom baseline, or package identity differs.
+- [x] Generate one immutable embedded identity manifest containing product/package identity, version, source commit, custom baseline, runtime requirements, and supported artifact/platform matrix.
+- [x] Embed or bundle the same identity manifest in npm, binary, Termux, and source artifacts; generate a detached manifest-bound index for final artifact names, sizes and SHA-256 hashes.
+- [x] Fail packaging if the checkout is dirty, detached, not descended from the custom baseline, or package identity differs.
 - [ ] Make artifact generation reproducible where practical: normalized archive ordering/timestamps and no live model-catalog drift during release builds.
 
 ### R2 — Certification matrix
@@ -284,4 +284,6 @@ The repository already has one intended release path: `scripts/local-release.mjs
 
 ## Immediate next step
 
-O1–O6 production lifecycle closure and local control-plane security are complete on `agent-harness`. Continue with release identity, updater completion and Windows/Linux artifact/service certification. Keep Telegram, O9 and broad jcode benchmarking deferred.
+The shared release-identity gate now binds the authoritative branch/custom baseline or exact release tag to HEAD, clean source, product identity and lockstep package versions across local, binary, Termux, npm and GitHub entrypoints. The stable compatibility target is `0.81.5`, with publication deferred and self-update discovery disabled until Recode-owned metadata exists.
+
+Continue with R1: generate one immutable release manifest and embed it in every artifact without putting commit provenance in SemVer. Keep Telegram, O9 and broad jcode benchmarking deferred.

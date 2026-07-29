@@ -28,7 +28,9 @@ describe("package commands", () => {
 	}
 
 	async function runPackageCommandDirectly(args: string[]): Promise<void> {
-		expect(await handlePackageCommand(args)).toBe(true);
+		expect(await handlePackageCommand(args, { selfUpdateEndpoint: "https://updates.recode.invalid/latest" })).toBe(
+			true,
+		);
 	}
 
 	function extensionPaths(
@@ -390,12 +392,12 @@ describe("package commands", () => {
 
 		selector.getResourceList().handleInput(" ");
 		expect(settingsManager.getProjectSettings().packages).toEqual([
-			{ source: "npm:pi-tools", autoload: false, extensions: ["-extensions/bar.ts"] },
+			{ source: "npm:pi-tools", autoload: false, extensions: [`-${join("extensions", "bar.ts")}`] },
 		]);
 
 		selector.getResourceList().handleInput(" ");
 		expect(settingsManager.getProjectSettings().packages).toEqual([
-			{ source: "npm:pi-tools", autoload: false, extensions: ["+extensions/bar.ts"] },
+			{ source: "npm:pi-tools", autoload: false, extensions: [`+${join("extensions", "bar.ts")}`] },
 		]);
 
 		selector.getResourceList().handleInput(" ");
@@ -428,6 +430,23 @@ describe("package commands", () => {
 			expect(stderr).toContain("Usage: recode install <source> [-l]");
 			expect(stderr).not.toContain("at ");
 			expect(process.exitCode).toBe(1);
+		} finally {
+			errorSpy.mockRestore();
+		}
+	});
+
+	it("keeps self-update disabled without a built-in validated Recode endpoint", async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		try {
+			expect(await handlePackageCommand(["update", "--self"])).toBe(true);
+			expect(process.exitCode).toBe(1);
+			expect(fetchMock).not.toHaveBeenCalled();
+			expect(errorSpy.mock.calls.map(([message]) => String(message)).join("\n")).toContain(
+				"Recode self-update is disabled until a validated Recode release endpoint is built in.",
+			);
 		} finally {
 			errorSpy.mockRestore();
 		}
@@ -557,7 +576,14 @@ else fs.writeFileSync(${JSON.stringify(recordPath)},JSON.stringify(args));
 
 	it("prints a pnpm metadata hint when self-update fails", async () => {
 		const globalRoot = join(tempDir, "pnpm", "global", "v11");
-		const selfPackageDir = join(globalRoot, "node_modules", "@earendil-works", "pi-coding-agent");
+		const selfPackageDir = join(
+			globalRoot,
+			".pnpm",
+			"@reitaard+repi-coding-agent@0.81.4",
+			"node_modules",
+			"@reitaard",
+			"repi-coding-agent",
+		);
 		const fakeBinDir = join(tempDir, "bin");
 		const fakePnpmPath = join(fakeBinDir, process.platform === "win32" ? "pnpm.cmd" : "pnpm");
 		mkdirSync(selfPackageDir, { recursive: true });

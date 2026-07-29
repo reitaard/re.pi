@@ -10,6 +10,18 @@ if [[ "$output_path" != /* ]]; then
     output_path="$repo_root/$output_path"
 fi
 
+identity_mode="${RECODE_RELEASE_IDENTITY_MODE:-branch}"
+identity_args=(--mode "$identity_mode")
+if [[ "$identity_mode" == "tag" ]]; then
+    if [[ -z "${RECODE_RELEASE_TAG:-}" ]]; then
+        echo "RECODE_RELEASE_TAG is required when RECODE_RELEASE_IDENTITY_MODE=tag"
+        exit 1
+    fi
+    identity_args+=(--tag "$RECODE_RELEASE_TAG")
+fi
+node scripts/release-identity.mjs "${identity_args[@]}"
+node scripts/generate-release-manifest.mjs "${identity_args[@]}"
+
 echo "==> Building Termux Node release..."
 termux_tmp=$(mktemp -d)
 cleanup_termux_tmp() {
@@ -41,6 +53,7 @@ npm pack "$coding_stage" --pack-destination "$termux_packages" --silent >/dev/nu
 cp "$repo_root/scripts/recode-termux" "$termux_root/recode"
 cp "$repo_root/scripts/install-recode-termux" "$termux_root/install"
 cp "$repo_root/scripts/README.termux.md" "$termux_root/README.md"
+cp "$repo_root/packages/coding-agent/dist/recode-release.json" "$termux_root/recode-release.json"
 chmod +x "$termux_root/recode" "$termux_root/install"
 tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
     -czf "$output_path" -C "$termux_tmp" recode

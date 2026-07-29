@@ -19,6 +19,7 @@
 - Added durable, idempotent Maestro completion handoffs that enter Aizen context only at an idle turn boundary and remain explicitly untrusted.
 - Added the `recode maestro` service/TUI command surface and a non-blocking Maestro health and live-session indicator in Aizen's footer.
 - Added an absolute-deny bash gate for recursive destruction of filesystem roots, home directories, credential stores, raw devices, and process-exhaustion fork bombs.
+- Added deterministic embedded release provenance plus a detached final-artifact size and SHA-256 index.
 
 ### Changed
 
@@ -28,6 +29,7 @@
 - Enabled named-worker delegation by default while retaining `REPI_DELEGATION=0` as an explicit opt-out.
 - Kept `Alt+Up` for queued-message restoration and added configurable `Ctrl+Shift+J` as a VS Code terminal-safe default fallback.
 - Applied independent provider-call iteration budgets to every Aizen run and named-worker/reviewer run.
+- Disabled self-update discovery until a validated Recode release endpoint is built in; extension updates remain available independently.
 
 ### Fixed
 

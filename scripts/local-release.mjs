@@ -4,6 +4,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symli
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { assertReleaseIdentity } from "./release-identity.mjs";
 
 const packages = [
 	{ directory: "packages/ai", name: "@reitaard/repi-ai" },
@@ -112,7 +113,7 @@ function isInsidePath(child, parent) {
 
 function prepareOutputDirectory(options, repoRoot) {
 	if (!options.outDir) {
-		return mkdtempSync(join(tmpdir(), "pi-local-release-"));
+		return mkdtempSync(join(tmpdir(), "recode-local-release-"));
 	}
 
 	const outDir = resolve(options.outDir);
@@ -202,6 +203,8 @@ const rootPackageJson = readPackageJson(repoRoot);
 if (rootPackageJson.name !== "repi-monorepo") {
 	throw new Error("Run this script from the repository root");
 }
+const releaseIdentity = assertReleaseIdentity({ mode: "branch", root: repoRoot });
+console.log(`Verified Recode source ${releaseIdentity.commit} on ${releaseIdentity.branch}`);
 
 const outDir = prepareOutputDirectory(options, repoRoot);
 const tarballDirectory = join(outDir, "tarballs");
@@ -222,6 +225,7 @@ for (const pkg of packages) {
 if (!options.skipTest) {
 	run("bash", ["./test.sh"], { cwd: repoRoot });
 }
+run("node", ["scripts/generate-release-manifest.mjs", "--mode", "branch"], { cwd: repoRoot });
 
 const tarballs = new Map();
 for (const pkg of packages) {

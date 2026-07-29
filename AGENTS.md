@@ -134,27 +134,27 @@ Attribution:
 
 **Lockstep versioning**: all packages share one version; every release updates all together. `patch` = fixes + additions, `minor` = breaking changes. No major releases.
 
-1. **Update CHANGELOGs**: ask whether `/cl` was run on the latest `main`. If not, run it before releasing.
+1. **Update CHANGELOGs**: ask whether `/cl` was run on the latest authoritative `agent-harness` commit. If not, run it before releasing.
 
 2. **Local smoke test**: build an unpublished release and test it outside the repo so workspace packages cannot mask missing dependencies:
 
    ```bash
-   npm run release:local -- --out /tmp/pi-local-release --force
+   npm run release:local -- --out /tmp/recode-local-release --force
    cd /tmp
 
    # Node package tests
-   /tmp/pi-local-release/node/pi --help
-   /tmp/pi-local-release/node/pi --version
-   /tmp/pi-local-release/node/pi --list-models
-   /tmp/pi-local-release/node/pi -p "Say exactly: ok"
+   /tmp/recode-local-release/node/recode --help
+   /tmp/recode-local-release/node/recode --version
+   /tmp/recode-local-release/node/recode --list-models
+   /tmp/recode-local-release/node/recode -p "Say exactly: ok"
 
    # Bun binary tests
-   /tmp/pi-local-release/bun/pi --help
-   /tmp/pi-local-release/bun/pi --version
-   /tmp/pi-local-release/bun/pi --list-models
-   /tmp/pi-local-release/bun/pi -p "Say exactly: ok"
+   /tmp/recode-local-release/bun/recode --help
+   /tmp/recode-local-release/bun/recode --version
+   /tmp/recode-local-release/bun/recode --list-models
+   /tmp/recode-local-release/bun/recode -p "Say exactly: ok"
    ```
-   Verify both Node and Bun startup, model/account listing, interactive startup, and at least one real prompt with the intended default provider. The bare commands `/tmp/pi-local-release/node/pi` and `/tmp/pi-local-release/bun/pi` start interactive mode; run each in tmux, submit a prompt, and wait for the model reply before considering the interactive smoke test passed. Failures are release blockers unless the user explicitly accepts the risk.
+   Verify both Node and Bun startup, model/account listing, interactive startup, and at least one real prompt with the intended default provider. The bare commands `/tmp/recode-local-release/node/recode` and `/tmp/recode-local-release/bun/recode` start interactive mode; run each in tmux, submit a prompt, and wait for the model reply before considering the interactive smoke test passed. Failures are release blockers unless the user explicitly accepts the risk.
 
 3. **Run the release script**:
 
@@ -165,7 +165,7 @@ Attribution:
 
    Use `npm_config_min_release_age=0` only for the release command. The repo's normal npm age gate can otherwise block the release lockfile refresh when the current workspace package version was published recently. Review any lockfile or shrinkwrap diffs the release creates before push.
 
-   The release script bumps all package versions, updates changelogs, regenerates release artifacts, runs `npm run check`, commits `Release vX.Y.Z`, tags `vX.Y.Z`, adds fresh `## [Unreleased]` changelog sections, commits `Add [Unreleased] section for next cycle`, then pushes `main` and the tag. Do not rerun the release script after a tag was pushed.
+   The release script verifies `agent-harness`, bumps all package versions, updates changelogs, regenerates release artifacts, runs `npm run check`, commits `Release vX.Y.Z`, tags `vX.Y.Z`, verifies the tag/source/package binding, adds fresh `## [Unreleased]` changelog sections, commits `Add [Unreleased] section for next cycle`, then pushes `agent-harness` and the tag. Do not rerun the release script after a tag was pushed.
 
 4. **Npm publication is currently blocked**: `.github/workflows/build-binaries.yml` currently builds and publishes approval-gated GitHub release assets but has no `publish-npm` job. Do not run a release until a reviewed npm trusted-publishing job and idempotent publish helper are restored. Never substitute local `npm publish`, `npm whoami`, OTP, or WebAuthn publication.
 

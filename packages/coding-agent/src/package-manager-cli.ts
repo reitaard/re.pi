@@ -149,22 +149,23 @@ Examples:
 			console.log(`${chalk.bold("Usage:")}
   ${getPackageCommandUsage("update")}
 
-Update RePi and installed packages.
+Update Recode and installed packages.
+Self-update remains unavailable until a validated Recode release endpoint is built in.
 
 Options:
-  --self                  Update RePi only (default when no target is given)
+  --self                  Update Recode only (default when no target is given)
   --extensions            Update installed packages only
-  --all                   Update RePi and installed packages
+  --all                   Update Recode and installed packages
   --extension <source>    Update one package only
   -a, --approve           Trust project-local files for this command
   -na, --no-approve       Ignore project-local files for this command
-  --force                 Reinstall RePi even if the current version is latest
+  --force                 Reinstall Recode even if the current version is latest
 
 Short forms:
-  ${APP_NAME} update                Update RePi only
-  ${APP_NAME} update --all          Update RePi and all extensions
+  ${APP_NAME} update                Update Recode only
+  ${APP_NAME} update --all          Update Recode and all extensions
   ${APP_NAME} update <source>       Update one package
-  ${APP_NAME} update self           Update RePi only
+  ${APP_NAME} update self           Update Recode only
 `);
 			return;
 
@@ -422,10 +423,13 @@ interface SelfUpdatePlan {
 	note?: string;
 }
 
-async function getSelfUpdatePlan(force: boolean): Promise<SelfUpdatePlan> {
+async function getSelfUpdatePlan(force: boolean, updateEndpoint?: string): Promise<SelfUpdatePlan> {
+	if (!updateEndpoint) {
+		throw new Error("Recode self-update is disabled until a validated Recode release endpoint is built in.");
+	}
 	let latestRelease: Awaited<ReturnType<typeof getLatestPiRelease>>;
 	try {
-		latestRelease = await getLatestPiRelease(VERSION);
+		latestRelease = await getLatestPiRelease(VERSION, { endpoint: updateEndpoint });
 	} catch (error: unknown) {
 		const message = error instanceof Error ? error.message : String(error);
 		throw new Error(`Could not determine latest ${APP_NAME} version: ${message}`);
@@ -490,6 +494,8 @@ function prepareWindowsNpmSelfUpdate(): void {
 
 export interface PackageCommandRuntimeOptions {
 	extensionFactories?: InlineExtension[];
+	/** Controlled host/test injection. The shipped CLI intentionally leaves this undefined. */
+	selfUpdateEndpoint?: string;
 }
 
 interface CommandSettingsResult {
@@ -776,7 +782,7 @@ export async function handlePackageCommand(
 					}
 				}
 				if (updateTargetIncludesSelf(target)) {
-					const selfUpdatePlan = await getSelfUpdatePlan(options.force);
+					const selfUpdatePlan = await getSelfUpdatePlan(options.force, runtimeOptions.selfUpdateEndpoint);
 					if (!selfUpdatePlan.shouldRun) {
 						return true;
 					}

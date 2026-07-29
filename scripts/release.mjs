@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Release script for pi-mono
+ * Release script for Recode
  *
  * Usage:
  *   node scripts/release.mjs <major|minor|patch>
@@ -15,12 +15,13 @@
  * 6. Commit and tag the release
  * 7. Add new [Unreleased] section to changelogs
  * 8. Commit next-cycle changelog updates
- * 9. Push main and the tag to trigger CI publishing
+ * 9. Push the authoritative branch and tag to trigger CI release staging
  */
 
 import { execSync } from "child_process";
 import { readFileSync, writeFileSync, readdirSync, existsSync } from "fs";
 import { join } from "path";
+import { assertReleaseIdentity } from "./release-identity.mjs";
 
 const RELEASE_TARGET = process.argv[2];
 const BUMP_TYPES = new Set(["major", "minor", "patch"]);
@@ -47,6 +48,14 @@ function run(cmd, options = {}) {
 function getVersion() {
 	const pkg = JSON.parse(readFileSync("packages/ai/package.json", "utf-8"));
 	return pkg.version;
+}
+
+function nextVersion(currentVersion, target) {
+	if (!BUMP_TYPES.has(target)) return target;
+	const parts = currentVersion.split(".").map(Number);
+	if (target === "major") return `${parts[0] + 1}.0.0`;
+	if (target === "minor") return `${parts[0]}.${parts[1] + 1}.0`;
+	return `${parts[0]}.${parts[1]}.${parts[2] + 1}`;
 }
 
 function compareVersions(a, b) {
@@ -145,15 +154,26 @@ function addUnreleasedSection() {
 // Main flow
 console.log("\n=== Release Script ===\n");
 
-// 1. Check for uncommitted changes
-console.log("Checking for uncommitted changes...");
-const status = run("git status --porcelain", { silent: true });
-if (status && status.trim()) {
-	console.error("Error: Uncommitted changes detected. Commit or stash first.");
-	console.error(status);
+// 1. Verify the authoritative clean Recode source before any mutation.
+console.log("Verifying release source identity...");
+const initialIdentity = assertReleaseIdentity({ mode: "branch" });
+const plannedVersion = nextVersion(getVersion(), RELEASE_TARGET);
+const declaredStableVersion = JSON.parse(readFileSync("repi/product.json", "utf8")).nextStableVersion;
+if (plannedVersion !== declaredStableVersion) {
+	console.error(
+		`Error: requested release ${plannedVersion} does not match declared next stable version ${declaredStableVersion ?? "missing"}.`,
+	);
 	process.exit(1);
 }
-console.log("  Working directory clean\n");
+const existingTag = run(`git rev-parse --verify --quiet refs/tags/v${plannedVersion}`, {
+	ignoreError: true,
+	silent: true,
+});
+if (existingTag) {
+	console.error(`Error: release tag v${plannedVersion} already exists at ${existingTag.trim()}.`);
+	process.exit(1);
+}
+console.log(`  Verified ${initialIdentity.branch} at ${initialIdentity.commit}\n`);
 
 // 2. Bump or set version
 const version = bumpOrSetVersion(RELEASE_TARGET);
@@ -178,7 +198,7 @@ run("npm run check");
 console.log();
 
 console.log("Running tests...");
-run("./test.sh");
+run("bash ./test.sh");
 console.log();
 
 // 6. Commit and tag
@@ -186,6 +206,8 @@ console.log("Committing and tagging...");
 stageChangedFiles();
 run(`git commit -m "Release v${version}"`);
 run(`git tag v${version}`);
+const taggedIdentity = assertReleaseIdentity({ expectedTag: `v${version}`, mode: "tag" });
+console.log(`  Verified tag ${taggedIdentity.tag} at ${taggedIdentity.commit}`);
 console.log();
 
 // 7. Add new [Unreleased] sections
@@ -201,7 +223,7 @@ console.log();
 
 // 9. Push
 console.log("Pushing to remote...");
-run("git push origin main");
+run(`git push origin ${initialIdentity.branch}`);
 run(`git push origin v${version}`);
 console.log();
 

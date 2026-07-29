@@ -9,6 +9,7 @@ import {
 
 const originalSkipVersionCheck = process.env.PI_SKIP_VERSION_CHECK;
 const originalOffline = process.env.PI_OFFLINE;
+const testUpdateEndpoint = "https://updates.recode.invalid/latest";
 
 afterEach(() => {
 	vi.unstubAllGlobals();
@@ -38,8 +39,10 @@ describe("version checks", () => {
 		const fetchMock = vi.fn(async () => Response.json({ version: "1.2.3" }));
 		vi.stubGlobal("fetch", fetchMock);
 
-		await expect(checkForNewPiVersion("1.2.3")).resolves.toBeUndefined();
-		await expect(checkForNewPiVersion("1.2.2")).resolves.toEqual({ version: "1.2.3" });
+		await expect(checkForNewPiVersion("1.2.3", undefined, { endpoint: testUpdateEndpoint })).resolves.toBeUndefined();
+		await expect(checkForNewPiVersion("1.2.2", undefined, { endpoint: testUpdateEndpoint })).resolves.toEqual({
+			version: "1.2.3",
+		});
 	});
 
 	it("suppresses newer releases for a foreign package identity", async () => {
@@ -48,20 +51,24 @@ describe("version checks", () => {
 		);
 		vi.stubGlobal("fetch", fetchMock);
 
-		await expect(checkForNewPiVersion("0.81.4", "@reitaard/repi-coding-agent")).resolves.toBeUndefined();
-		await expect(checkForNewPiVersion("0.81.4", "@earendil-works/pi-coding-agent")).resolves.toEqual({
+		await expect(
+			checkForNewPiVersion("0.81.4", "@reitaard/repi-coding-agent", { endpoint: testUpdateEndpoint }),
+		).resolves.toBeUndefined();
+		await expect(
+			checkForNewPiVersion("0.81.4", "@earendil-works/pi-coding-agent", { endpoint: testUpdateEndpoint }),
+		).resolves.toEqual({
 			packageName: "@earendil-works/pi-coding-agent",
 			version: "0.82.1",
 		});
 	});
 
-	it("uses the pi.dev version check api with a pi user agent", async () => {
+	it("uses an explicitly supplied Recode update endpoint", async () => {
 		const fetchMock = vi.fn(async () => Response.json({ version: "1.2.4" }));
 		vi.stubGlobal("fetch", fetchMock);
 
-		await expect(getLatestPiVersion("1.2.3")).resolves.toBe("1.2.4");
+		await expect(getLatestPiVersion("1.2.3", { endpoint: testUpdateEndpoint })).resolves.toBe("1.2.4");
 		expect(fetchMock).toHaveBeenCalledWith(
-			"https://pi.dev/api/latest-version",
+			testUpdateEndpoint,
 			expect.objectContaining({
 				headers: expect.objectContaining({
 					"User-Agent": expect.stringMatching(/^pi\/1\.2\.3 /),
@@ -80,7 +87,7 @@ describe("version checks", () => {
 		);
 		vi.stubGlobal("fetch", fetchMock);
 
-		await expect(getLatestPiRelease("1.2.3")).resolves.toEqual({
+		await expect(getLatestPiRelease("1.2.3", { endpoint: testUpdateEndpoint })).resolves.toEqual({
 			packageName: "@new-scope/pi",
 			version: "1.2.4",
 		});
@@ -90,15 +97,23 @@ describe("version checks", () => {
 		const fetchMock = vi.fn(async () => Response.json({ note: " **Read this** ", version: "1.2.4" }));
 		vi.stubGlobal("fetch", fetchMock);
 
-		await expect(getLatestPiRelease("1.2.3")).resolves.toEqual({ note: "**Read this**", version: "1.2.4" });
+		await expect(getLatestPiRelease("1.2.3", { endpoint: testUpdateEndpoint })).resolves.toEqual({
+			note: "**Read this**",
+			version: "1.2.4",
+		});
 	});
 
-	it("skips api calls when version checks are disabled", async () => {
-		process.env.PI_SKIP_VERSION_CHECK = "1";
+	it("skips api calls when no validated Recode endpoint is built in", async () => {
 		const fetchMock = vi.fn();
 		vi.stubGlobal("fetch", fetchMock);
 
 		await expect(getLatestPiVersion("1.2.3")).resolves.toBeUndefined();
 		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it("rejects non-HTTPS update endpoints", async () => {
+		await expect(getLatestPiVersion("1.2.3", { endpoint: "http://updates.recode.invalid/latest" })).rejects.toThrow(
+			"Recode update endpoint must use HTTPS",
+		);
 	});
 });
