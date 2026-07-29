@@ -5,6 +5,7 @@ import type {
 	RpcExtensionUIResponse,
 	RpcResponse,
 } from "@reitaard/repi-coding-agent";
+import type { OrchestratorExecutionTarget } from "../target-routing.ts";
 import type { InstanceStatus } from "../types.ts";
 
 export interface SpawnRequest {
@@ -33,11 +34,15 @@ export interface RpcRequest {
 	type: "rpc";
 	instanceId: string;
 	command: RpcCommand;
+	/** Orchestrator-owned execution target. Omitted preserves the existing local route. */
+	target?: OrchestratorExecutionTarget;
 }
 
 export interface RpcStreamRequest {
 	type: "rpc_stream";
 	instanceId: string;
+	/** Orchestrator-owned execution target for the lifetime of this RPC stream. */
+	target?: OrchestratorExecutionTarget;
 }
 
 export interface RequestMap {
