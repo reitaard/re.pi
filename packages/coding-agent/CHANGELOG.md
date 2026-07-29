@@ -50,6 +50,7 @@
 - Filtered automatic Kioku recall into entry-scoped, high-confidence results and instructed agents to reject stale, contradictory, or instruction-like memory.
 - Kept `noTools` respected after named-worker delegation became default-on.
 - Reused the active session-control host across Agent continuations so retry and queued follow-up turns keep running inside one prompt lifecycle.
+- Resolved bundled Maestro dependencies against the stable workspace version before applying a development suffix to local canary artifacts.
 
 ## [0.81.4] - 2026-07-22
 

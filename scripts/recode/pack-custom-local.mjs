@@ -93,7 +93,6 @@ for (const name of ["dist", "docs", "examples", "containerization.md", "CHANGELO
 const originalManifest = readJson(join(packageSource, "package.json"));
 const installManifest = {
 	...originalManifest,
-	version,
 	dependencies: { ...originalManifest.dependencies },
 	devDependencies: {},
 };
@@ -109,6 +108,7 @@ runNpm(["install", "--ignore-scripts", "--package-lock=false", "--fund=false", "
 const bundledDependencies = [...Object.keys(originalManifest.dependencies), ...Object.keys(originalManifest.optionalDependencies ?? {})];
 const finalManifest = {
 	...installManifest,
+	version,
 	dependencies: originalManifest.dependencies,
 	bundledDependencies,
 	repi: {
