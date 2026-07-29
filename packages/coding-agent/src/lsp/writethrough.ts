@@ -11,7 +11,7 @@ import {
 } from "./diagnostics.ts";
 import { fileToUri } from "./utils.ts";
 
-const INLINE_DIAGNOSTICS_WAIT_MS = 500;
+const INLINE_DIAGNOSTICS_WAIT_MS = 1_200;
 const DEFERRED_DIAGNOSTICS_WAIT_MS = 12_000;
 const SERVER_INITIALIZE_TIMEOUT_MS = 5_000;
 
@@ -59,6 +59,7 @@ async function collectDiagnostics(
 	cwd: string,
 	servers: ReturnType<typeof getServersForFile>,
 ): Promise<CollectedDiagnostics> {
+	const deadline = Date.now() + DEFERRED_DIAGNOSTICS_WAIT_MS;
 	const results = await Promise.all(
 		servers.map(async ([name, config]) => {
 			try {
@@ -69,7 +70,7 @@ async function collectDiagnostics(
 				await notifySaved(client, absolutePath, content);
 				const diagnostics = await waitForDiagnostics(client, fileToUri(absolutePath), {
 					expectedVersion,
-					timeoutMs: DEFERRED_DIAGNOSTICS_WAIT_MS,
+					timeoutMs: Math.max(0, deadline - Date.now()),
 				});
 				return {
 					entries: diagnostics.map((diagnostic) => ({ filePath: absolutePath, diagnostic, server: name })),
@@ -139,7 +140,6 @@ export function createLspWritethrough(cwd: string, controls?: LspControlSettings
 			collection.then(() => true),
 			new Promise<false>((resolve) => {
 				timeout = setTimeout(() => resolve(false), INLINE_DIAGNOSTICS_WAIT_MS);
-				timeout.unref();
 			}),
 		]);
 		if (timeout) clearTimeout(timeout);

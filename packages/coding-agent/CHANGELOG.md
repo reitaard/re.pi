@@ -23,6 +23,7 @@
 
 ### Changed
 
+- Gave post-edit and post-write LSP diagnostics a 1.2-second inline budget, a shared 12-second completion deadline, and a structured severity-aware result card.
 - Organized Levi, Mayuri, and Shiori-owned definitions, tools, and reviewer modules under dedicated worker folders while keeping shared delegation runtime generic.
 - Made `/<worker> <task>` launch an independent handoff to Aizen, `/<worker>` open private chat, and `/shiori review [path]` invoke isolated memory review explicitly.
 - Applied equal default limits of eight active conversations globally and per worker.

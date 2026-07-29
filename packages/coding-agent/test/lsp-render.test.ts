@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { formatLspCall, renderLspResult } from "../src/lsp/render.ts";
+import { formatLspCall, renderLspResult, renderMutationLspDiagnostics } from "../src/lsp/render.ts";
 import { CachedOutputBlock } from "../src/modes/interactive/components/cached-output-block.ts";
 import { initTheme, theme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
@@ -90,6 +90,37 @@ describe("LSP renderer", () => {
 		);
 		const output = component.render(80).map(stripAnsi).join("\n");
 		expect(output).toContain("character 23 (0-based)");
+	});
+
+	test("renders post-mutation warnings with the violet and pink diagnostic card palette", () => {
+		const rendered = renderMutationLspDiagnostics(
+			{
+				summary: "LSP: 2 warnings",
+				messages: ["sample.ts", "  2 warnings", "    1:1 [biome] unused import"],
+				errored: false,
+				servers: ["biome"],
+			},
+			theme,
+		).render(80);
+		const output = rendered.map(stripAnsi).join("\n");
+		expect(output).toContain("! LSP diagnostics");
+		expect(output).toContain("Response");
+		expect(rendered.join("\n")).toContain(theme.fg("borderMuted", theme.bold("LSP")));
+		expect(rendered.join("\n")).toContain(theme.fg("accent", "Response"));
+		expect(rendered.join("\n")).toContain(theme.fg("toolOutput", "LSP: 2 warnings"));
+	});
+
+	test("renders post-mutation errors in the error color", () => {
+		const rendered = renderMutationLspDiagnostics(
+			{
+				summary: "LSP: 1 error",
+				messages: ["sample.ts", "  1 error"],
+				errored: true,
+				servers: ["typescript-language-server"],
+			},
+			theme,
+		).render(80);
+		expect(rendered.join("\n")).toContain(theme.fg("error", "LSP: 1 error"));
 	});
 
 	test("caches identical card layouts and invalidates explicitly", () => {

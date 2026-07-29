@@ -1,8 +1,9 @@
 import type { AgentTool } from "@reitaard/repi-agent-core";
-import { Container, Text } from "@reitaard/repi-tui";
+import { Container, Spacer, Text } from "@reitaard/repi-tui";
 import { mkdir as fsMkdir, writeFile as fsWriteFile } from "fs/promises";
 import { dirname } from "path";
 import { type Static, Type } from "typebox";
+import { renderMutationLspDiagnostics } from "../../lsp/render.ts";
 import {
 	type LspFileDiagnosticsResult,
 	type LspWritethrough,
@@ -172,18 +173,13 @@ function formatWriteCall(
 	return text;
 }
 
-function formatWriteResult(
+function formatWriteError(
 	result: {
 		content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
-		details?: WriteToolDetails;
 		isError?: boolean;
 	},
 	theme: Theme,
 ): string | undefined {
-	if (!result.isError && result.details?.diagnostics) {
-		const diagnostics = result.details.diagnostics;
-		return `\n${theme.fg(diagnostics.errored ? "error" : diagnostics.checking ? "warning" : "success", [diagnostics.summary, ...diagnostics.messages].join("\n"))}`;
-	}
 	if (!result.isError) return undefined;
 	const output = result.content
 		.filter((c) => c.type === "text")
@@ -278,15 +274,16 @@ export function createWriteToolDefinition(
 			return component;
 		},
 		renderResult(result, _options, theme, context) {
-			const output = formatWriteResult({ ...result, isError: context.isError }, theme);
-			if (!output) {
-				const component = (context.lastComponent as Container | undefined) ?? new Container();
-				component.clear();
-				return component;
+			const output = formatWriteError({ ...result, isError: context.isError }, theme);
+			const diagnostics = !context.isError ? result.details?.diagnostics : undefined;
+			const component = (context.lastComponent as Container | undefined) ?? new Container();
+			component.clear();
+			if (output) component.addChild(new Text(output, 0, 0));
+			if (diagnostics) {
+				component.addChild(new Spacer(1));
+				component.addChild(renderMutationLspDiagnostics(diagnostics, theme));
 			}
-			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-			text.setText(output);
-			return text;
+			return component;
 		},
 	};
 }

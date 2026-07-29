@@ -94,9 +94,7 @@ const lspSchema = Type.Object({
 			description: "Only return diagnostics at this severity",
 		}),
 	),
-	wait_ms: Type.Optional(
-		Type.Number({ minimum: 0, maximum: 5000, description: "Wait briefly for background diagnostics" }),
-	),
+	wait_ms: Type.Optional(Type.Number({ minimum: 0, maximum: 12_000, description: "Wait for background diagnostics" })),
 	apply: Type.Optional(Type.Boolean({ description: "Apply the returned edit; defaults to preview only" })),
 });
 
@@ -525,7 +523,7 @@ export function createLspToolDefinition(
 			const uri = fileToUri(filePath);
 
 			if (input.action === "diagnostics") {
-				const waitMs = Math.max(0, Math.min(5000, input.wait_ms ?? 0));
+				const waitMs = Math.max(0, Math.min(12_000, input.wait_ms ?? 0));
 				const snapshot =
 					waitMs > 0
 						? await waitForLspDiagnosticSnapshot(cwd, filePath, { timeoutMs: waitMs, signal })

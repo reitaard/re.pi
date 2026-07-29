@@ -3,6 +3,7 @@ import { Box, Container, Spacer, Text } from "@reitaard/repi-tui";
 import { constants } from "fs";
 import { access as fsAccess, readFile as fsReadFile, writeFile as fsWriteFile } from "fs/promises";
 import { type Static, Type } from "typebox";
+import { renderMutationLspDiagnostics } from "../../lsp/render.ts";
 import {
 	type LspFileDiagnosticsResult,
 	type LspWritethrough,
@@ -227,18 +228,10 @@ function formatEditResult(
 	}
 
 	const resultDiff = result.details?.diff;
-	const diagnostics = result.details?.diagnostics;
-	const diagnosticOutput = diagnostics
-		? theme.fg(
-				diagnostics.errored ? "error" : diagnostics.checking ? "warning" : "success",
-				[diagnostics.summary, ...diagnostics.messages].join("\n"),
-			)
-		: undefined;
 	if (resultDiff && resultDiff !== previewDiff) {
-		const diff = renderDiff(resultDiff, { filePath: rawPath ?? undefined });
-		return diagnosticOutput ? `${diff}\n\n${diagnosticOutput}` : diff;
+		return renderDiff(resultDiff, { filePath: rawPath ?? undefined });
 	}
-	return diagnosticOutput;
+	return undefined;
 }
 
 function buildEditCallComponent(
@@ -430,13 +423,17 @@ export function createEditToolDefinition(
 			}
 
 			const output = formatEditResult(context.args, callComponent?.preview, typedResult, theme, context.isError);
+			const diagnostics = !context.isError ? typedResult.details?.diagnostics : undefined;
 			const component = (context.lastComponent as Container | undefined) ?? new Container();
 			component.clear();
-			if (!output) {
-				return component;
+			if (output) {
+				component.addChild(new Spacer(1));
+				component.addChild(new Text(output, 1, 0));
 			}
-			component.addChild(new Spacer(1));
-			component.addChild(new Text(output, 1, 0));
+			if (diagnostics) {
+				component.addChild(new Spacer(1));
+				component.addChild(renderMutationLspDiagnostics(diagnostics, theme));
+			}
 			return component;
 		},
 	};

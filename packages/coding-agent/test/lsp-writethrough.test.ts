@@ -84,9 +84,38 @@ describe("LSP writethrough", () => {
 		}
 	});
 
-	test("returns promptly and stores diagnostics published by a slow server", async () => {
-		const root = mkdtempSync(join(tmpdir(), "repi-lsp-writethrough-slow-"));
+	test("includes diagnostics that arrive within the inline budget", async () => {
+		const root = mkdtempSync(join(tmpdir(), "repi-lsp-writethrough-inline-"));
 		const serverPath = createFakeServer(root, 750);
+		const filePath = join(root, "sample.ts");
+		writeFileSync(join(root, "package.json"), "{}\n");
+		writeFileSync(filePath, "const value = 2;\n");
+		mkdirSync(join(root, ".pi"));
+		writeFileSync(
+			join(root, ".pi", "lsp.json"),
+			JSON.stringify({
+				servers: {
+					"typescript-language-server": { disabled: true },
+					fake: {
+						command: process.execPath,
+						args: [serverPath],
+						fileTypes: [".ts"],
+						rootMarkers: ["package.json"],
+						useLspmux: false,
+					},
+				},
+			}),
+		);
+
+		const result = await createLspWritethrough(root)(filePath, "const value = 2;\n");
+		expect(result?.summary).toBe("LSP: 1 warning");
+		expect(result?.checking).toBe(false);
+		expect(result?.messages.join("\n")).toContain("fresh warning");
+	});
+
+	test("returns after the inline budget and stores diagnostics published by a slow server", async () => {
+		const root = mkdtempSync(join(tmpdir(), "repi-lsp-writethrough-slow-"));
+		const serverPath = createFakeServer(root, 1600);
 		const filePath = join(root, "sample.ts");
 		writeFileSync(join(root, "package.json"), "{}\n");
 		writeFileSync(filePath, "const value = 2;\n");
@@ -109,7 +138,7 @@ describe("LSP writethrough", () => {
 
 		const started = Date.now();
 		const result = await createLspWritethrough(root)(filePath, "const value = 2;\n");
-		expect(Date.now() - started).toBeLessThan(700);
+		expect(Date.now() - started).toBeLessThan(1500);
 		expect(result?.summary).toBe("LSP: checking in background");
 		expect(result?.checking).toBe(true);
 

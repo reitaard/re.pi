@@ -5,6 +5,7 @@ import { CachedOutputBlock } from "../modes/interactive/components/cached-output
 import { keyHint } from "../modes/interactive/components/keybinding-hints.ts";
 import type { Theme } from "../modes/interactive/theme/theme.ts";
 import type { LspToolDetails, LspToolInput } from "./tool.ts";
+import type { LspFileDiagnosticsResult } from "./writethrough.ts";
 
 const LSP_SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
 const LSP_SPINNER_INTERVAL_MS = 80;
@@ -96,6 +97,36 @@ function formatLspResultLines(
 		text += ` ${keyHint("app.tools.expand", "to expand")}`;
 	}
 	return text;
+}
+
+export function renderMutationLspDiagnostics(diagnostics: LspFileDiagnosticsResult, theme: Theme): Component {
+	const block = new CachedOutputBlock();
+	const warning = !diagnostics.errored && !diagnostics.checking && /\bwarnings?\b/.test(diagnostics.summary);
+	const stateIcon = diagnostics.errored
+		? theme.fg("toolErrorStatus", "×")
+		: diagnostics.checking
+			? theme.fg("warning", "…")
+			: warning
+				? theme.fg("warning", "!")
+				: theme.fg("toolSuccessStatus", "✓");
+	const bodyColor = diagnostics.errored ? "error" : diagnostics.checking ? "warning" : "toolOutput";
+	const body = [diagnostics.summary, ...diagnostics.messages].map((line) => theme.fg(bodyColor, line));
+	return {
+		render(width: number): string[] {
+			return block.render(
+				{
+					header: `${stateIcon} ${theme.fg("borderMuted", theme.bold("LSP"))} ${theme.fg("accent", "diagnostics")}`,
+					sections: [{ label: theme.fg("accent", "Response"), lines: body }],
+					width,
+					borderColor: diagnostics.errored ? "toolErrorStatus" : "borderMuted",
+				},
+				theme,
+			);
+		},
+		invalidate(): void {
+			block.invalidate();
+		},
+	};
 }
 
 export function renderLspResult(
