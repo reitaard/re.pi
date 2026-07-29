@@ -30,13 +30,13 @@ Make `recode update` update the customized Recode product safely instead of repl
 - [x] Define behavior for clean, dirty, diverged, detached, and conflicted checkouts.
 - [x] Define how upstream changes are integrated: prepared canonical release branch plus fast-forward clients.
 - [x] Define rollback/checkpoint behavior: preserve the prior commit in error output; never reset automatically.
-- [ ] Define interactive confirmation and `--force` semantics.
+- [x] Define interactive confirmation and `--force` semantics.
 
 **Gate:** Record the selected policy in `DECISIONS.md` before implementation.
 
 ## Phase 3 — Separate update strategies
 
-- [ ] Introduce an explicit installation/update classification:
+- [x] Introduce an explicit installation/update classification:
   - published global package,
   - linked source checkout,
   - compiled binary,
@@ -278,12 +278,12 @@ The repository already has one intended release path: `scripts/local-release.mjs
 - [ ] Primary Windows machine canary.
 - [ ] Work PC canary from the exact same artifact.
 - [x] VPS inventory and backup under a separately authorized SSH task; previous `/usr/local/bin/recode -> /opt/repi/v0.81.4/recode` symlink target recorded under `/opt/recode/rollback`.
-- [x] VPS upgrade from the exact certified npm artifact into `/opt/recode/0.81.4-repi.2.dev.27.9e818840`, followed by version, help, model-listing, source metadata, update-guard, non-symlink wrapper, and rollback-path checks.
+- [x] VPS upgraded from the exact `0.81.5` artifact at source `98bcccfe6`; Linux x64 Node, real prompt, Maestro service/read-only session, Telegram restart, rollback/rollforward, artifact hash and update-guard evidence are retained under `/opt/recode/certification`.
 - [ ] Termux rollout only from the certified Termux archive.
 - [ ] Never clone/build independently on deployment machines unless performing an explicitly approved source-development task.
 
 ## Immediate next step
 
-The shared release-identity gate now binds the authoritative branch/custom baseline or exact release tag to HEAD, clean source, product identity and lockstep package versions across local, binary, Termux, npm and GitHub entrypoints. The stable compatibility target is `0.81.5`, with publication deferred and self-update discovery disabled until Recode-owned metadata exists.
+The shared release-identity gate and immutable manifest/index now bind the authoritative branch/custom baseline or exact release tag to HEAD, clean source, product identity, lockstep package versions and artifact hashes. The stable compatibility target is `0.81.5`; self-update discovery remains disabled until Recode-owned metadata exists. Update planning classifies installation type, requires explicit approval and writes a rollback receipt before mutation.
 
-Continue with R1: generate one immutable release manifest and embed it in every artifact without putting commit provenance in SemVer. Keep Telegram, O9 and broad jcode benchmarking deferred.
+Continue with R2 certification of the exact `0.81.5` artifact, first on Windows Node and then on Linux Node/Bun. Keep Telegram, O9 and broad jcode benchmarking deferred until the V1 release gate passes.

@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import type { RpcCommand, RpcExtensionUIResponse } from "@reitaard/repi-coding-agent";
 import { getSocketPath } from "./config.ts";
 import { runMaestroDashboard } from "./dashboard.ts";
+import { createMaestroDiagnosticBundle } from "./diagnostics.ts";
 import { sendIpcRequest } from "./ipc/client.ts";
 import { encodeMessage } from "./ipc/protocol.ts";
 import { type NativeServiceAction, NativeServiceManager } from "./native-service.ts";
@@ -21,7 +22,7 @@ const packageJson = JSON.parse(readFileSync(join(__dirname, "../package.json"), 
 
 function printHelp(): void {
 	console.log(
-		`Recode Maestro v${packageJson.version}\n\nUsage:\n  recode maestro tui\n  recode maestro service <install|uninstall|start|stop|restart|status>\n  recode maestro service run [--supervision <manual|systemd|windows-task>]\n  recode maestro health\n  recode maestro list\n  recode maestro spawn (--read-only | --write) [--cwd <path>] [--label <label>] [--parent <instance-id>]\n  recode maestro status <instance-id>\n  recode maestro cancel <instance-id>\n  recode maestro stop <instance-id>\n  recode maestro rpc <instance-id> <json-command>\n  recode maestro rpc-stream <instance-id>\n  recode maestro --help\n  recode maestro --version\n\nThe native service owns all full-session children. Closing the TUI detaches; stop is destructive.`,
+		`Recode Maestro v${packageJson.version}\n\nUsage:\n  recode maestro tui\n  recode maestro service <install|uninstall|start|stop|restart|status>\n  recode maestro service run [--supervision <manual|systemd|windows-task>]\n  recode maestro health\n  recode maestro diagnose\n  recode maestro list\n  recode maestro spawn (--read-only | --write) [--cwd <path>] [--label <label>] [--parent <instance-id>]\n  recode maestro status <instance-id>\n  recode maestro cancel <instance-id>\n  recode maestro stop <instance-id>\n  recode maestro rpc <instance-id> <json-command>\n  recode maestro rpc-stream <instance-id>\n  recode maestro --help\n  recode maestro --version\n\nThe native service owns all full-session children. Closing the TUI detaches; stop is destructive.`,
 	);
 }
 
@@ -139,6 +140,16 @@ async function main(): Promise<void> {
 		return;
 	}
 
+	if (args[0] === "diagnose") {
+		printResponse(
+			createMaestroDiagnosticBundle({
+				version: packageJson.version,
+				releaseManifestPath: join(__dirname, "recode-release.json"),
+			}),
+		);
+		return;
+	}
+
 	if (args[0] === "list") {
 		printResponse(await sendIpcRequest({ type: "list" }));
 		return;
@@ -228,4 +239,15 @@ async function main(): Promise<void> {
 	process.exit(1);
 }
 
-await main();
+try {
+	await main();
+} catch (error) {
+	const code = error instanceof Error && "code" in error ? error.code : undefined;
+	const message = error instanceof Error ? error.message : String(error);
+	if (code === "ENOENT" || code === "ECONNREFUSED" || message.includes("start the service first")) {
+		console.error("Recode Maestro service is not running. Start it with: recode maestro service start");
+	} else {
+		console.error(`Error: ${message}`);
+	}
+	process.exitCode = 1;
+}

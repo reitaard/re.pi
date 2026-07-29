@@ -71,11 +71,14 @@ describe("Maestro native service supervision", () => {
 		const host = createWindowsJobHost("C:\\Program Files\\nodejs\\node.exe", "C:\\Recode App\\cli.js");
 		assert.match(host, /JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE/);
 		assert.match(host, /AssignProcessToJobObject/);
+		assert.match(host, /CreateNoWindow = true/);
+		assert.match(host, /WindowStyle = ProcessWindowStyle\.Hidden/);
 		assert.match(host, /windows-task/);
 		const xml = createWindowsTaskXml("C:\\Recode App\\maestro.ps1", "domain\\creator");
 		assert.match(xml, /<RestartOnFailure>/);
 		assert.match(xml, /<MultipleInstancesPolicy>IgnoreNew<\/MultipleInstancesPolicy>/);
 		assert.match(xml, /<AllowHardTerminate>true<\/AllowHardTerminate>/);
+		assert.match(xml, /-WindowStyle Hidden/);
 	});
 
 	test("serves ready health and completes a classified planned shutdown", { timeout: 20_000 }, async () => {

@@ -29,13 +29,19 @@ import type {
 	StopRequest,
 	StopResponse,
 } from "./ipc/protocol.ts";
+import { projectMaestroState } from "./state-projection.ts";
 import { supervisor } from "./supervisor.ts";
 import type { InstanceRecord } from "./types.ts";
 
 function toInstanceSummary(instance: InstanceRecord): InstanceSummary {
+	const lifecycleStatus = supervisor.getLifecycleStatus(instance.id);
+	const projection = projectMaestroState(instance, lifecycleStatus?.state);
 	return {
 		id: instance.id,
 		status: instance.status,
+		lifecycleState: projection.state,
+		stateConsistent: projection.consistent,
+		stateDiagnostic: projection.diagnostic,
 		cwd: instance.cwd,
 		label: instance.label,
 		createdAt: instance.createdAt,

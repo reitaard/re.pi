@@ -28,9 +28,18 @@ describe("package commands", () => {
 	}
 
 	async function runPackageCommandDirectly(args: string[]): Promise<void> {
-		expect(await handlePackageCommand(args, { selfUpdateEndpoint: "https://updates.recode.invalid/latest" })).toBe(
-			true,
-		);
+		expect(
+			await handlePackageCommand(args, {
+				selfUpdateEndpoint: "https://updates.recode.invalid/latest",
+				selfUpdateApproved: true,
+				installationClassification: {
+					kind: "published-global-package",
+					installMethod: "npm",
+					selfUpdateEligible: true,
+					reason: "test fixture",
+				},
+			}),
+		).toBe(true);
 	}
 
 	function extensionPaths(

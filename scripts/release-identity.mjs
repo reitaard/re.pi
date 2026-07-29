@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
-import { readFileSync, realpathSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -40,14 +40,6 @@ function git(root, args, options = {}) {
 		const detail = error instanceof Error ? error.message : String(error);
 		throw new Error(`Release identity Git check failed: git ${args.join(" ")}\n${detail}`);
 	}
-}
-
-function samePath(left, right) {
-	const normalizedLeft = realpathSync(left).replaceAll("\\", "/");
-	const normalizedRight = realpathSync(right).replaceAll("\\", "/");
-	return process.platform === "win32"
-		? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
-		: normalizedLeft === normalizedRight;
 }
 
 export function validateReleaseIdentitySnapshot(snapshot, options = {}) {
@@ -125,7 +117,7 @@ export function assertReleaseIdentity(options = {}) {
 	const mode = options.mode ?? "branch";
 	const expectedTag = options.expectedTag;
 	const policy = options.policy ?? RELEASE_IDENTITY_POLICY;
-	const gitRoot = git(root, ["rev-parse", "--show-toplevel"]);
+	const repositoryPrefix = git(root, ["rev-parse", "--show-prefix"]);
 	const head = git(root, ["rev-parse", "HEAD"]);
 	const branch = git(root, ["symbolic-ref", "--quiet", "--short", "HEAD"], { optional: true, silentError: true });
 	const dirty = Boolean(git(root, ["status", "--porcelain=v1", "--untracked-files=normal"]));
@@ -145,7 +137,7 @@ export function assertReleaseIdentity(options = {}) {
 		head,
 		packages,
 		product: readJson(join(root, "repi", "product.json")),
-		repositoryRootMatches: samePath(root, gitRoot),
+		repositoryRootMatches: repositoryPrefix === "",
 		rootPackageName: readJson(join(root, "package.json")).name,
 		tagCommit:
 			mode === "tag" && expectedTag?.match(TAG_PATTERN)

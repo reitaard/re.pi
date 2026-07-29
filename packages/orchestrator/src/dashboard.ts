@@ -44,11 +44,11 @@ function formatElapsed(startedAt: string, now = Date.now()): string {
 	return `${hours}h${minutes % 60}m`;
 }
 
-function statusColor(status: InstanceSummary["status"], text: string): string {
-	if (status === "online") return chalk.green(text);
-	if (status === "waiting-input") return chalk.yellow(text);
-	if (status === "failed" || status === "error") return chalk.red(text);
-	if (status === "starting" || status === "stopping") return chalk.cyan(text);
+function statusColor(state: InstanceSummary["lifecycleState"], text: string): string {
+	if (state === "RUNNING" || state === "SUCCEEDED") return chalk.green(text);
+	if (state === "WAITING_INPUT") return chalk.yellow(text);
+	if (state === "FAILED" || state === "UNKNOWN") return chalk.red(text);
+	if (state === "PENDING" || state === "STARTING" || state === "CANCEL_REQUESTED") return chalk.cyan(text);
 	return chalk.gray(text);
 }
 
@@ -337,7 +337,8 @@ export class MaestroDashboard implements Component, Focusable {
 				const pending = instance.pendingInput ? chalk.yellow(" INPUT") : "";
 				const branch = safeText(instance.workspace?.branch, safeText(instance.workspace?.worktreeRoot));
 				const label = safeText(instance.label, "untitled");
-				const row = `${marker} ${chalk.bold(label)} ${chalk.gray(instance.id.slice(0, 8))}  ${statusColor(instance.status, instance.status)}  ${chalk.gray(formatElapsed(instance.createdAt, this.now()))}  ${chalk.dim(branch)}${pending}${attached}`;
+				const state = instance.lifecycleState.toLowerCase().replaceAll("_", "-");
+				const row = `${marker} ${chalk.bold(label)} ${chalk.gray(instance.id.slice(0, 8))}  ${statusColor(instance.lifecycleState, state)}  ${chalk.gray(formatElapsed(instance.createdAt, this.now()))}  ${chalk.dim(branch)}${pending}${attached}`;
 				lines.push(truncateToWidth(row, width));
 			}
 		}
@@ -352,6 +353,9 @@ export class MaestroDashboard implements Component, Focusable {
 			);
 			const output = selected.id === this.attachedInstanceId ? this.attachedOutput : (selected.latestOutput ?? "");
 			lines.push(truncateToWidth(`  ${chalk.gray("LATEST")}    ${safeText(output, "No output yet")}`, width));
+			if (selected.stateDiagnostic) {
+				lines.push(truncateToWidth(`  ${chalk.red("STATE")}     ${safeText(selected.stateDiagnostic)}`, width));
+			}
 		}
 		if (this.pendingUiRequest) {
 			lines.push(chalk.gray("─".repeat(width)));

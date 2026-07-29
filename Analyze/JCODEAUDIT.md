@@ -1,5 +1,7 @@
 # jcode audit
 
+> **2026-07-30 release checkpoint:** the current cross-product decision now uses exact jcode tag `v0.54.4` at `fb7a5ea501e56084fa665b91b52ece9ab7761c3c` and the official Windows x64 binary with SHA-256 `2572765b72f776ef4bfdd41efc055e0078910d60aae600aa35c6b1fcb5f54523`. Binary version/help and bounded daemon-control probes were executed. See [`analyze/COMPARE.md`](../analyze/COMPARE.md). The audit below remains the later-master static source review at `a92b270b`.
+
 ## Scope and provenance
 
 - Repository: <https://github.com/1jehuang/jcode>

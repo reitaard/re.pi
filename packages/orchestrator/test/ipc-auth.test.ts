@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { getIpcAuthPath, getSocketPath } from "../src/config.ts";
-import { sendIpcRequest } from "../src/ipc/client.ts";
+import { getDefaultIpcRequestTimeoutMs, sendIpcRequest } from "../src/ipc/client.ts";
 import { encodeMessage, type OrchestratorRequest, type OrchestratorResponse } from "../src/ipc/protocol.ts";
 import { closeIpcServer, type IpcRequestHandler, startIpcServer } from "../src/ipc/server.ts";
 import { authenticateIpcToken, ensureIpcAuthToken, readIpcAuthToken } from "../src/ipc-auth.ts";
@@ -40,6 +40,18 @@ async function rawRequest(message: string): Promise<string> {
 }
 
 describe("Maestro IPC authentication", () => {
+	it("gives cold spawn and mutating requests bounded operation-specific deadlines", () => {
+		assert.equal(
+			getDefaultIpcRequestTimeoutMs({ type: "spawn", cwd: process.cwd(), workspaceAccess: "read-only" }),
+			60_000,
+		);
+		assert.equal(
+			getDefaultIpcRequestTimeoutMs({ type: "rpc", instanceId: "instance", command: { type: "get_state" } }),
+			30_000,
+		);
+		assert.equal(getDefaultIpcRequestTimeoutMs({ type: "list" }), 5_000);
+	});
+
 	it("creates one private stable token and rejects malformed or over-permissive files", () => {
 		useDirectory();
 		const first = ensureIpcAuthToken();

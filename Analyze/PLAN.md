@@ -465,6 +465,8 @@ Run this checkpoint only after O0–O8 pass their gates. Its purpose is to compa
 
 ## C0 — Freeze exact comparison sources
 
+**Status:** complete for the 2026-07-30 checkpoint. Recode, jcode `v0.54.4`, upstream Pi and Hermes provenance are recorded in `analyze/COMPARE.md` with exact commits and artifact hashes where executed.
+
 - Record the Recode commit and dirty-state fingerprint used for the checkpoint.
 - Clone jcode into a fresh temporary directory and record its exact commit.
 - Fetch upstream `earendil-works/pi` without changing the Recode branch and record its exact commit.
@@ -476,6 +478,8 @@ Run this checkpoint only after O0–O8 pass their gates. Its purpose is to compa
 Every result names an exact source commit, runtime/toolchain version, platform and lifecycle endpoint.
 
 ## C1 — Map test contracts before counting tests
+
+**Status:** complete for the current checkpoint. The refreshed comparison covers lifecycle/readiness, sessions, workers, memory, tools/LSP, browser/MCP, safety, providers, distribution and user experience rather than raw test counts.
 
 Create a three-way contract matrix covering:
 
@@ -497,6 +501,8 @@ Each claimed feature maps to source plus at least one executable test, or is exp
 
 ## C2 — Run native and translated conformance suites
 
+**Status:** partial. Recode focused conformance is retained; jcode source and the verified release binary were inspected, but native Rust tests remain unavailable without a Rust toolchain. Unsupported execution is recorded rather than treated as passing.
+
 - Run each project’s focused native tests for mapped contracts using its documented toolchain.
 - Translate only implementation-independent contract cases into a small shared fixture format.
 - Run translated Hermes lifecycle conformance against Recode’s worker and full-session adapters.
@@ -508,6 +514,8 @@ Each claimed feature maps to source plus at least one executable test, or is exp
 The report distinguishes product defects, unsupported features, test-harness differences and environment failures.
 
 ## C3 — Run matched performance probes
+
+**Status:** partial. Exact jcode warm daemon-control latency and the Recode cold-spawn timeout defect were observed. jcode cold start hit the probe deadline and was rejected; unmatched first-frame/session-ready values are not ratio-compared.
 
 On the same machine, compare only equivalent endpoints:
 
@@ -527,6 +535,8 @@ Publish cold, warm and uncontrolled cache states separately. A persistent-server
 No headline ratio combines unlike lifecycle points, cache states, provider models or already-running service state.
 
 ## C4 — Gap decision
+
+**Status:** complete for product prioritization. `analyze/COMPARE.md` records adopt/preserve/reject decisions and the measured V2/V3 order. Absolute cross-product SLO ratification remains pending matched native probes.
 
 Write one evidence-backed checkpoint report that decides:
 

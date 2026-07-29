@@ -31,6 +31,7 @@
 - Kept `Alt+Up` for queued-message restoration and added configurable `Ctrl+Shift+J` as a VS Code terminal-safe default fallback.
 - Applied independent provider-call iteration budgets to every Aizen run and named-worker/reviewer run.
 - Disabled self-update discovery until a validated Recode release endpoint is built in; extension updates remain available independently.
+- Classified published global packages, linked source checkouts, compiled binaries, and unsupported installations before selecting any self-update mutation strategy, required explicit confirmation, and persisted a pre-mutation rollback receipt.
 
 ### Fixed
 

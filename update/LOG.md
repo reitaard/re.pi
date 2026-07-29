@@ -267,3 +267,21 @@
 - Disabled self-update discovery in the shipped CLI until a Recode-owned endpoint and manifest-verification path are built in. Extension updates remain independent; controlled tests retain endpoint injection and foreign package identities remain rejected before mutation.
 - Focused validation passed: release identity/manifest/index tests **10/10**, version-check tests **8/8**, package-command tests **24/24**, shell syntax checks, `npm run check`, and `git diff --check`.
 - Repaired two Windows-only historical package-command expectations exposed by the release gate: platform-native extension path separators and realistic pnpm store-layout fallback for shim detection.
+
+## 2026-07-30 — V1 release and control-plane qualification
+
+- Built and isolated-smoke-tested `@reitaard/repi-coding-agent@0.81.5` from exact source `98bcccfe6477af8795ece5835dba75fbebcc7f50`; artifact SHA-256 is `0abaed2ae364753e091a832cf981668fb6cd9fc67b37893784374bc151ddcee0`.
+- Verified version, help, model listing, embedded release identity and configured RPC startup from the staged package.
+- Replaced fragile Windows release-root path round-tripping with a Git root-prefix invariant.
+- Added one fail-closed Maestro lifecycle projection across IPC, service health and dashboard state, plus an offline redacted diagnostic bundle.
+- Confirmed the existing detached mutation gate already requires the current interactive owner generation for every write-capable RPC operation.
+- Added explicit installation classification, interactive/non-interactive approval semantics and an atomic pre-mutation rollback receipt; self-update discovery remains disabled.
+- Focused policy/projection/dashboard checks and `npm run check` passed.
+- With explicit Creator authorization, inventoried `root@157.173.127.84` (`vmi3286400`) and preserved the existing wrapper/version as rollback evidence without touching `/root/.pi/agent`.
+- Transferred the exact `0.81.5` artifact, verified matching SHA-256, installed it under `/opt/recode/0.81.5`, and atomically moved `/usr/local/bin/recode` to the new runtime.
+- Linux x64 Node certification passed version, help, model listing, embedded source identity, configured RPC startup, one real prompt, systemd-user Maestro readiness, a read-only Maestro session, Telegram gateway restart, self-update refusal, rollback to the prior runtime, and rollforward to `0.81.5`.
+- Maestro and Telegram services are active. Machine-readable evidence is retained at `/opt/recode/certification/0.81.5-vps-linux-x64.json`; the exact artifact remains under `/opt/recode/artifacts`.
+- The certified `98bcccfe6` artifact predates the later local diagnostic/state-projection changes, so those changes were not falsely included in its VPS certification and require the next exact package checkpoint.
+- Froze the exact product checkpoint at jcode `v0.54.4` (`fb7a5ea5`, official Windows x64 SHA-256 `2572765b72f776ef4bfdd41efc055e0078910d60aae600aa35c6b1fcb5f54523`) and upstream Pi `c820aa26`; refreshed the full feature/user-experience comparison in `analyze/COMPARE.md`.
+- Rejected an invalid jcode cold-server number after its command held through the 120-second probe deadline; retained only bounded warm daemon-control observations and did not ratio-compare unmatched endpoints.
+- A Windows ten-session probe exposed two concrete Recode UX defects before measurement: the scheduled-task service opened a visible console, and a cold spawn exceeded the five-second client deadline while still creating an online child. Added hidden Windows service startup and operation-specific IPC deadlines.

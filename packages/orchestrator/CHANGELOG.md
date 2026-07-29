@@ -15,6 +15,8 @@
 - Added the modern minimal Maestro board with live service health, workspace-aware session activity, bounded output, interactive attach/detach, pending-input handling, cancel, and confirmed stop actions.
 - Integrated the versioned full-session lifecycle service and adapter as the production launch, cancellation, attachment, waiting-input, result, and stop authority.
 - Added authenticated IPC request/stream handshakes, private Unix socket/authentication modes, restricted Windows named-pipe access flags, and a filtered child-environment policy with explicit integration overrides.
+- Added one fail-closed lifecycle state projection across IPC, service health, and the Maestro board, including explicit divergence diagnostics.
+- Added an offline redacted Maestro diagnostic bundle with release/runtime identity, bounded health and restart evidence, and hashed child/workspace identities.
 
 ### Fixed
 
@@ -23,6 +25,9 @@
 - Prevented timed-out requests, stale command IDs, stale attachments, hung children, and throwing observers from corrupting or indefinitely blocking Maestro lifecycle control.
 - Wired real child terminal transitions to exactly one durable completion record before parent delivery and acknowledgement.
 - Rejected detached mutating RPC commands unless they carry the current interactive owner and attachment generation.
+- Replaced unavailable-service stack traces with a concise command to start Maestro.
+- Hid the Windows scheduled-task host and child process instead of opening a visible Maestro console window.
+- Gave cold session spawn and mutating IPC requests operation-specific deadlines instead of the five-second control-plane deadline.
 
 ## [0.81.4] - 2026-07-22
 

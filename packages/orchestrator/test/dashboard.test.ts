@@ -23,6 +23,8 @@ function createInstance(): InstanceSummary {
 		id: "instance-12345678",
 		label: "Release audit",
 		status: "waiting-input",
+		lifecycleState: "WAITING_INPUT",
+		stateConsistent: true,
 		cwd: "/workspace/recode",
 		createdAt: "2026-07-29T00:00:00.000Z",
 		lastSeenAt: "2026-07-29T00:01:00.000Z",

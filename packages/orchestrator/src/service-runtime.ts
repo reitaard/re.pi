@@ -6,6 +6,7 @@ import type { OrchestratorRequest, OrchestratorResponse } from "./ipc/protocol.t
 import { closeIpcServer, type IpcRequestHandler, startIpcServer } from "./ipc/server.ts";
 import { getRadiusOrchestratorBaseUrl, isRadiusEnabled, radiusPresence } from "./radius.ts";
 import { acquireServiceOwnership, persistServiceHealth } from "./service-ownership.ts";
+import { projectMaestroState } from "./state-projection.ts";
 import { supervisor } from "./supervisor.ts";
 import type {
 	MaestroAdapterState,
@@ -66,13 +67,24 @@ export async function serveMaestro(options: { supervisionMode?: MaestroSupervisi
 	};
 	const refreshHealth = (updates: Partial<MaestroServiceHealth> = {}, persist = true): MaestroServiceHealth => {
 		const instances = supervisor.listLiveInstances();
+		const divergence = instances
+			.map((instance) => projectMaestroState(instance, supervisor.getLifecycleStatus(instance.id)?.state))
+			.find((projection) => !projection.consistent);
+		const requestedState = updates.state ?? health.state;
+		const operational = requestedState === "ready" || requestedState === "degraded";
+		const degraded = adapterState === "degraded" || ownership.restartLoopDetected || divergence !== undefined;
+		const previousDiagnostic = updates.diagnostic ?? health.diagnostic;
 		health = {
 			...health,
 			...updates,
+			state: operational ? (degraded ? "degraded" : "ready") : requestedState,
 			updatedAt: new Date().toISOString(),
 			liveInstances: instances.length,
 			waitingInput: instances.filter((instance) => instance.status === "waiting-input").length,
 			adapters: { radius: adapterState },
+			diagnostic:
+				divergence?.diagnostic ??
+				(previousDiagnostic?.startsWith("STATE_DIVERGENCE:") ? undefined : previousDiagnostic),
 		};
 		if (persist) persistServiceHealth(health);
 		return health;

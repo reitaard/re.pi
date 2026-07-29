@@ -5,6 +5,7 @@ import type {
 	RpcExtensionUIResponse,
 	RpcResponse,
 } from "@reitaard/repi-coding-agent";
+import type { MaestroLifecycleState } from "../lifecycle-contract.ts";
 import type { RpcCancellationResult } from "../rpc-process.ts";
 import type {
 	InstanceStatus,
@@ -87,6 +88,9 @@ export type AuthenticatedOrchestratorRequest = OrchestratorRequest & { authToken
 export interface InstanceSummary {
 	id: string;
 	status: InstanceStatus;
+	lifecycleState: MaestroLifecycleState;
+	stateConsistent: boolean;
+	stateDiagnostic?: string;
 	cwd: string;
 	label?: string;
 	createdAt: string;

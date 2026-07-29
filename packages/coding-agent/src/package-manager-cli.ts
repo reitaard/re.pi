@@ -1,3 +1,4 @@
+import { createInterface } from "node:readline/promises";
 import { Markdown, type MarkdownTheme } from "@reitaard/repi-tui";
 import chalk from "chalk";
 import { selectConfig } from "./cli/config-selector.ts";
@@ -5,11 +6,13 @@ import { createProjectTrustContext } from "./cli/project-trust.ts";
 import {
 	APP_NAME,
 	CONFIG_DIR_NAME,
+	classifyCurrentInstallation,
 	detectInstallMethod,
 	getAgentDir,
 	getPackageDir,
 	getSelfUpdateCommand,
 	getSelfUpdateUnavailableInstruction,
+	type InstallationClassification,
 	PACKAGE_NAME,
 	type SelfUpdateCommand,
 	type SelfUpdatePackageTarget,
@@ -21,6 +24,7 @@ import { type AppMode, resolveProjectTrusted } from "./core/project-trust.ts";
 import { DefaultResourceLoader } from "./core/resource-loader.ts";
 import { SettingsManager } from "./core/settings-manager.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "./core/trust-manager.ts";
+import { evaluateSelfUpdateConfirmation, writeSelfUpdateRollbackReceipt } from "./self-update-policy.ts";
 import { spawnProcess } from "./utils/child-process.ts";
 import { getLatestPiRelease, isNewerPackageVersion } from "./utils/version-check.ts";
 import {
@@ -159,7 +163,7 @@ Options:
   --extension <source>    Update one package only
   -a, --approve           Trust project-local files for this command
   -na, --no-approve       Ignore project-local files for this command
-  --force                 Reinstall Recode even if the current version is latest
+  --force                 Explicitly approve non-interactive update and reinstall even if current
 
 Short forms:
   ${APP_NAME} update                Update Recode only
@@ -496,6 +500,10 @@ export interface PackageCommandRuntimeOptions {
 	extensionFactories?: InlineExtension[];
 	/** Controlled host/test injection. The shipped CLI intentionally leaves this undefined. */
 	selfUpdateEndpoint?: string;
+	/** Controlled host/test classification. Production always inspects the active installation. */
+	installationClassification?: InstallationClassification;
+	/** Controlled host/test approval. Production requires a TTY confirmation or --force. */
+	selfUpdateApproved?: boolean;
 }
 
 interface CommandSettingsResult {
@@ -786,6 +794,33 @@ export async function handlePackageCommand(
 					if (!selfUpdatePlan.shouldRun) {
 						return true;
 					}
+					const installation =
+						runtimeOptions.installationClassification ?? classifyCurrentInstallation(selfUpdateNpmCommand);
+					if (!installation.selfUpdateEligible) {
+						throw new Error(
+							`Recode self-update refuses ${installation.kind} installations: ${installation.reason}.`,
+						);
+					}
+					let confirmation = evaluateSelfUpdateConfirmation({
+						force: options.force || runtimeOptions.selfUpdateApproved === true,
+						interactive: process.stdin.isTTY === true && process.stdout.isTTY === true,
+					});
+					if (confirmation.requiresPrompt) {
+						const prompt = createInterface({ input: process.stdin, output: process.stdout });
+						try {
+							const answer = await prompt.question(
+								`Update ${APP_NAME} from ${VERSION} to ${selfUpdatePlan.version}? [y/N] `,
+							);
+							confirmation = evaluateSelfUpdateConfirmation({ force: false, interactive: true, answer });
+						} finally {
+							prompt.close();
+						}
+					}
+					if (!confirmation.approved) {
+						if (confirmation.diagnostic) throw new Error(confirmation.diagnostic);
+						console.log(chalk.dim(`${APP_NAME} update cancelled.`));
+						return true;
+					}
 					const installMethod = detectInstallMethod();
 					if (process.platform === "win32" && installMethod !== "npm" && installMethod !== "pnpm") {
 						console.error(
@@ -809,6 +844,14 @@ export async function handlePackageCommand(
 						printSelfUpdateNote(selfUpdatePlan.note);
 					}
 					try {
+						const rollbackReceipt = writeSelfUpdateRollbackReceipt({
+							agentDir,
+							currentVersion: VERSION,
+							targetVersion: selfUpdatePlan.version,
+							packageName: PACKAGE_NAME,
+							installation,
+						});
+						console.log(chalk.dim(`Rollback receipt: ${rollbackReceipt}`));
 						if (installMethod === "npm") {
 							prepareWindowsNpmSelfUpdate();
 						}

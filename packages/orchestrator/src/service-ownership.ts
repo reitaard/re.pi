@@ -71,7 +71,7 @@ function atomicWriteJson(path: string, value: unknown): void {
 	renameSync(temporaryPath, path);
 }
 
-function loadRestartDiagnostics(): MaestroRestartDiagnostic[] {
+export function readRestartDiagnostics(): MaestroRestartDiagnostic[] {
 	try {
 		const value = parseJsonFile(getServiceRestartHistoryPath());
 		if (!Array.isArray(value)) return [];
@@ -94,7 +94,7 @@ function loadRestartDiagnostics(): MaestroRestartDiagnostic[] {
 }
 
 function appendRestartDiagnostic(diagnostic: MaestroRestartDiagnostic): MaestroRestartDiagnostic[] {
-	const diagnostics = [...loadRestartDiagnostics(), diagnostic].slice(-MAX_RESTART_DIAGNOSTICS);
+	const diagnostics = [...readRestartDiagnostics(), diagnostic].slice(-MAX_RESTART_DIAGNOSTICS);
 	atomicWriteJson(getServiceRestartHistoryPath(), diagnostics);
 	return diagnostics;
 }
@@ -147,7 +147,7 @@ export function acquireServiceOwnership(options: AcquireServiceOwnershipOptions)
 	if (!processIdentity) throw new Error("Unable to establish the Maestro service process-start receipt");
 	const ownerPath = getServiceOwnerPath();
 	mkdirSync(dirname(ownerPath), { recursive: true, mode: 0o700 });
-	let restartDiagnostics = loadRestartDiagnostics();
+	let restartDiagnostics = readRestartDiagnostics();
 
 	for (let attempt = 0; attempt < 4; attempt++) {
 		const receipt: MaestroServiceOwnerReceipt = {

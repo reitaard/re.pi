@@ -4,6 +4,17 @@ import { readIpcAuthToken } from "../ipc-auth.ts";
 import { encodeMessage, type OrchestratorRequest, type OrchestratorResponse, parseResponseLine } from "./protocol.ts";
 
 const MAX_RESPONSE_BUFFER_BYTES = 1_048_576;
+const DEFAULT_CONTROL_REQUEST_TIMEOUT_MS = 5_000;
+const DEFAULT_SPAWN_REQUEST_TIMEOUT_MS = 60_000;
+const DEFAULT_MUTATION_REQUEST_TIMEOUT_MS = 30_000;
+
+export function getDefaultIpcRequestTimeoutMs(request: OrchestratorRequest): number {
+	if (request.type === "spawn") return DEFAULT_SPAWN_REQUEST_TIMEOUT_MS;
+	if (request.type === "rpc" || request.type === "cancel" || request.type === "stop" || request.type === "shutdown") {
+		return DEFAULT_MUTATION_REQUEST_TIMEOUT_MS;
+	}
+	return DEFAULT_CONTROL_REQUEST_TIMEOUT_MS;
+}
 
 export async function sendIpcRequest(
 	request: OrchestratorRequest,
@@ -11,7 +22,7 @@ export async function sendIpcRequest(
 ): Promise<OrchestratorResponse> {
 	const socketPath = getSocketPath();
 	const authToken = readIpcAuthToken();
-	const timeoutMs = options.timeoutMs ?? 5_000;
+	const timeoutMs = options.timeoutMs ?? getDefaultIpcRequestTimeoutMs(request);
 	if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error("IPC timeoutMs must be a positive finite number");
 
 	return new Promise<OrchestratorResponse>((resolve, reject) => {

@@ -27,6 +27,21 @@ export const isBunRuntime = !!process.versions.bun;
 // =============================================================================
 
 export type InstallMethod = "bun-binary" | "npm" | "pnpm" | "yarn" | "bun" | "unknown";
+export type InstallationKind = "published-global-package" | "linked-source" | "compiled-binary" | "unsupported";
+
+export interface InstallationClassification {
+	kind: InstallationKind;
+	installMethod: InstallMethod;
+	selfUpdateEligible: boolean;
+	reason: string;
+}
+
+export interface InstallationClassificationSnapshot {
+	installMethod: InstallMethod;
+	hasReleaseProvenance: boolean;
+	hasSourceTree: boolean;
+	managedByGlobalPackageManager: boolean;
+}
 
 interface SelfUpdateCommandStep {
 	command: string;
@@ -67,6 +82,41 @@ function makeSelfUpdateCommandStep(command: string, args: string[]): SelfUpdateC
 		command,
 		args,
 		display: [command, ...args].map((arg) => (/\s/.test(arg) ? `"${arg}"` : arg)).join(" "),
+	};
+}
+
+export function classifyInstallationSnapshot(snapshot: InstallationClassificationSnapshot): InstallationClassification {
+	if (snapshot.installMethod === "bun-binary") {
+		return {
+			kind: "compiled-binary",
+			installMethod: snapshot.installMethod,
+			selfUpdateEligible: false,
+			reason: "compiled binaries require a verified artifact replacement",
+		};
+	}
+	if (snapshot.hasSourceTree) {
+		return {
+			kind: "linked-source",
+			installMethod: snapshot.installMethod,
+			selfUpdateEligible: false,
+			reason: "source checkouts require the clean fast-forward source-update strategy",
+		};
+	}
+	if (snapshot.hasReleaseProvenance && snapshot.managedByGlobalPackageManager) {
+		return {
+			kind: "published-global-package",
+			installMethod: snapshot.installMethod,
+			selfUpdateEligible: true,
+			reason: "verified Recode package managed by its global package manager",
+		};
+	}
+	return {
+		kind: "unsupported",
+		installMethod: snapshot.installMethod,
+		selfUpdateEligible: false,
+		reason: snapshot.hasReleaseProvenance
+			? "verified package is not managed by a supported global package manager"
+			: "installation has no verified Recode release provenance",
 	};
 }
 
@@ -312,6 +362,34 @@ function isManagedByGlobalPackageManager(method: InstallMethod, packageName: str
 	});
 }
 
+export function classifyCurrentInstallation(npmCommand?: string[]): InstallationClassification {
+	const installMethod = detectInstallMethod();
+	if (installMethod === "bun-binary") {
+		return classifyInstallationSnapshot({
+			installMethod,
+			hasReleaseProvenance: true,
+			hasSourceTree: false,
+			managedByGlobalPackageManager: false,
+		});
+	}
+	const packageDir = getPackageDir();
+	let metadata: PackageJson = {};
+	try {
+		metadata = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8")) as PackageJson;
+	} catch {
+		// Missing or malformed package metadata is unsupported and must fail closed.
+	}
+	return classifyInstallationSnapshot({
+		installMethod,
+		hasReleaseProvenance:
+			metadata.name === "@reitaard/repi-coding-agent" &&
+			typeof metadata.repi?.sourceCommit === "string" &&
+			/^[0-9a-f]{40}$/.test(metadata.repi.sourceCommit),
+		hasSourceTree: existsSync(join(packageDir, "src")),
+		managedByGlobalPackageManager: isManagedByGlobalPackageManager(installMethod, PACKAGE_NAME, npmCommand),
+	});
+}
+
 export function getSelfUpdateCommand(
 	packageName: string,
 	npmCommand?: string[],
@@ -470,6 +548,9 @@ export function getBundledInteractiveAssetPath(name: string): string {
 interface PackageJson {
 	name?: string;
 	version?: string;
+	repi?: {
+		sourceCommit?: string;
+	};
 	piConfig?: {
 		name?: string;
 		configDir?: string;

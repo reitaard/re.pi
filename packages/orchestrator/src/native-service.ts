@@ -121,7 +121,11 @@ public static class MaestroJobHost {
                 Marshal.StructureToPtr(limits, memory, false);
                 if (!SetInformationJobObject(job, 9, memory, (uint)size)) throw new Win32Exception();
             } finally { Marshal.FreeHGlobal(memory); }
-            var start = new ProcessStartInfo(executable, arguments) { UseShellExecute = false };
+            var start = new ProcessStartInfo(executable, arguments) {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden
+            };
             using (Process child = Process.Start(start)) {
                 if (child == null) throw new InvalidOperationException("Unable to start Maestro");
                 if (!AssignProcessToJobObject(job, child.Handle)) {
@@ -155,7 +159,7 @@ export function createWindowsTaskXml(hostScriptPath: string, userId: string): st
     <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
     <RestartOnFailure><Interval>PT1M</Interval><Count>3</Count></RestartOnFailure>
   </Settings>
-  <Actions Context="Author"><Exec><Command>powershell.exe</Command><Arguments>-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;${xmlEscape(hostScriptPath)}&quot;</Arguments></Exec></Actions>
+  <Actions Context="Author"><Exec><Command>powershell.exe</Command><Arguments>-NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File &quot;${xmlEscape(hostScriptPath)}&quot;</Arguments></Exec></Actions>
 </Task>
 `;
 }
