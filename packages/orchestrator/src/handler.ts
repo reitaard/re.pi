@@ -9,6 +9,8 @@ import type {
 	CancelRequest,
 	CancelResponse,
 	ErrorResponse,
+	HealthRequest,
+	HealthResponse,
 	InstanceSummary,
 	ListRequest,
 	ListResponse,
@@ -18,6 +20,8 @@ import type {
 	RpcReadyResponse,
 	RpcRequest,
 	RpcStreamRequest,
+	ShutdownRequest,
+	ShutdownResponse,
 	SpawnRequest,
 	SpawnResponse,
 	StatusRequest,
@@ -34,12 +38,28 @@ function toInstanceSummary(instance: InstanceRecord): InstanceSummary {
 		status: instance.status,
 		cwd: instance.cwd,
 		label: instance.label,
+		createdAt: instance.createdAt,
+		lastSeenAt: instance.lastSeenAt,
+		parentInstanceId: instance.parentInstanceId,
+		parentSessionId: instance.parentSessionId,
+		workspace: instance.workspaceReceipt
+			? {
+					access: instance.workspaceReceipt.access,
+					worktreeRoot: instance.workspaceReceipt.worktreeRoot,
+					worktreeIdentity: instance.workspaceReceipt.worktreeIdentity,
+					branch: instance.workspaceReceipt.branch,
+				}
+			: undefined,
 		sessionId: instance.sessionId,
 		sessionFile: instance.sessionFile,
 		radiusPiId: instance.radiusPiId,
 		completedAt: instance.completedAt,
 		terminationOutcome: instance.terminationOutcome,
 		terminalDiagnostic: instance.terminalDiagnostic,
+		currentActivity: instance.currentActivity,
+		activityUpdatedAt: instance.activityUpdatedAt,
+		latestOutput: instance.latestOutput,
+		pendingInput: instance.pendingUiRequest !== undefined || instance.status === "waiting-input",
 	};
 }
 
@@ -54,6 +74,8 @@ function unknownInstanceError(instanceId: string): ErrorResponse {
 // Overhead types
 export async function handleIpcRequest(request: SpawnRequest): Promise<SpawnResponse | ErrorResponse>;
 export async function handleIpcRequest(request: ListRequest): Promise<ListResponse | ErrorResponse>;
+export async function handleIpcRequest(request: HealthRequest): Promise<HealthResponse | ErrorResponse>;
+export async function handleIpcRequest(request: ShutdownRequest): Promise<ShutdownResponse | ErrorResponse>;
 export async function handleIpcRequest(request: StopRequest): Promise<StopResponse | ErrorResponse>;
 export async function handleIpcRequest(request: CancelRequest): Promise<CancelResponse | ErrorResponse>;
 export async function handleIpcRequest(request: StatusRequest): Promise<StatusResponse | ErrorResponse>;
@@ -65,7 +87,10 @@ export async function handleIpcRequest(request: OrchestratorRequest): Promise<Or
 		case "spawn": {
 			const instance = await supervisor.spawnInstance({
 				cwd: request.cwd,
+				workspaceAccess: request.workspaceAccess,
 				label: request.label,
+				parentInstanceId: request.parentInstanceId,
+				parentSessionId: request.parentSessionId,
 			});
 			return {
 				type: "spawn_result",
@@ -81,6 +106,14 @@ export async function handleIpcRequest(request: OrchestratorRequest): Promise<Or
 				instances: supervisor.listInstances().map(toInstanceSummary),
 			};
 		}
+
+		case "health":
+		case "shutdown":
+			return {
+				type: "error",
+				ok: false,
+				error: "Maestro service control is unavailable outside the service owner",
+			};
 
 		case "status": {
 			const instance = supervisor.getInstance(request.instanceId);
@@ -118,7 +151,10 @@ export async function handleIpcRequest(request: OrchestratorRequest): Promise<Or
 		}
 
 		case "rpc": {
-			const response = await supervisor.handleRpc(request.instanceId, request.command);
+			const response = await supervisor.handleRpc(request.instanceId, request.command, {
+				ownerId: request.ownerId,
+				ownerGeneration: request.ownerGeneration,
+			});
 			if (!response) {
 				return unknownInstanceError(request.instanceId);
 			}
@@ -149,18 +185,23 @@ export function openRpcStream(
 	onResponse: (response: RpcResponse) => void,
 	onSessionEvent: (event: AgentSessionEvent) => void,
 	onUiRequest: (request: RpcExtensionUIRequest) => void,
+	options?: { mode?: "interactive" | "read-only"; ownerId?: string },
 ):
 	| {
+			attachment: NonNullable<RpcReadyResponse["attachment"]>;
+			replay: NonNullable<RpcReadyResponse["replay"]>;
 			handleRequest(request: RpcCommand | RpcExtensionUIResponse): Promise<void>;
 			close(): void;
 	  }
 	| undefined {
-	const handle = supervisor.openRpcStream(instanceId, onSessionEvent, onUiRequest);
+	const handle = supervisor.openRpcStream(instanceId, onSessionEvent, onUiRequest, options);
 	if (!handle) {
 		return undefined;
 	}
 
 	return {
+		attachment: handle.attachment,
+		replay: handle.replay,
 		async handleRequest(request): Promise<void> {
 			if (request.type === "extension_ui_response") {
 				handle.handleUiResponse(request);

@@ -177,6 +177,7 @@ export class AgentHarness<
 	private pendingSessionWrites: PendingSessionWrite[] = [];
 	private model: Model<any>;
 	private thinkingLevel: ThinkingLevel;
+	private readonly maxIterations?: number;
 	private systemPrompt: AgentHarnessOptions<TSkill, TPromptTemplate, TTool>["systemPrompt"];
 	private streamOptions: AgentHarnessStreamOptions;
 	private resources: AgentHarnessResources<TSkill, TPromptTemplate>;
@@ -207,6 +208,7 @@ export class AgentHarness<
 		}
 		this.model = options.model;
 		this.thinkingLevel = options.thinkingLevel ?? "off";
+		this.maxIterations = options.maxIterations;
 		this.activeToolNames = options.activeToolNames
 			? [...options.activeToolNames]
 			: (options.tools ?? []).map((tool) => tool.name);
@@ -414,6 +416,7 @@ export class AgentHarness<
 		const turnState = getTurnState();
 		return {
 			model: turnState.model,
+			maxIterations: this.maxIterations,
 			reasoning: turnState.thinkingLevel === "off" ? undefined : turnState.thinkingLevel,
 			convertToLlm,
 			transformContext: async (messages) => {

@@ -282,6 +282,8 @@ The existing Recode behavior is reproducible under tests, every upstream/Phase 4
 
 ## O1 — Port the public lifecycle model
 
+**Status:** complete — 2026-07-29. `MaestroLifecycleService` and `MaestroFullSessionLifecycleAdapter` now own the production full-session launch, cancellation, attachment, waiting-input, result, and stop path over the existing supervisor backend. The named-worker adapter remains the conformance boundary for lightweight in-process workers rather than creating a second process supervisor.
+
 Translate Hermes’s versioned lifecycle contract and state machine into Recode’s coding conventions. Preserve operation names and state semantics unless a documented Recode requirement forces a difference:
 
 ```text
@@ -348,6 +350,8 @@ Tests cover interrupted writes, corrupt current file, valid backup recovery, sta
 
 ## O3 — Deadlines, cancellation and shutdown
 
+**Status:** complete — 2026-07-29. In addition to bounded RPC/process behavior, every Aizen and named-worker run now receives an independent race-safe provider-call iteration budget.
+
 ### Work
 
 - Add a deadline to every RPC request and remove timed-out requests from the pending map.
@@ -394,6 +398,8 @@ Client loss does not kill the session, duplicate owners are rejected, and restar
 
 ## O6 — Completion queue and Aizen handoff
 
+**Status:** complete — 2026-07-29. Queue, claim/ack and Aizen handoff primitives are connected to real supervised child terminal transitions with one idempotent durable record per child result.
+
 ### Work
 
 - Persist bounded completion summaries keyed by parent/root session.
@@ -407,15 +413,27 @@ A restart or reconnect cannot duplicate, lose or silently inject a completion in
 
 ## O7 — Workspace safety
 
+**Status:** complete — 2026-07-28
+
 - Read-only background sessions may share the selected workspace.
 - Concurrent write-capable full sessions require an explicitly selected sibling worktree sharing the same Git common directory.
 - Never create, merge, reset, stash or delete a worktree automatically.
 - Persist worktree ownership receipts and refuse ambiguous cleanup.
 - Show the agent only its active workspace and minimal linked-worktree context.
 
-## O8 — TUI/service integration
+## O8 — Core service supervision and TUI integration
 
-Add a compact live-session view containing:
+**Status:** complete — 2026-07-29
+
+First harden Maestro as the single core Windows/Linux service boundary:
+
+- add one verified service owner with readiness, health and restart-loop diagnostics;
+- support systemd on Linux and a reviewed native startup path on Windows;
+- use option A restart semantics: planned stop or restart drains within a deadline, then terminates all owned child processes;
+- distinguish planned stop, degraded adapter state and process crash;
+- never run a fallback watcher concurrently with native service supervision.
+
+Then add a compact live-session view containing:
 
 - label and short id;
 - workspace/branch;
@@ -543,7 +561,9 @@ Track 4 is derived from [`analyze/COMPARE.md`](../analyze/COMPARE.md) and is int
 
 ## P2 — Safety gap
 
-Add deterministic catastrophic-target/destructive-command defenses without claiming sandboxing. Preserve project trust and extension policy boundaries. Treat enforced containment as separate deployment work.
+**Status:** local control-plane phase complete — 2026-07-29. Maestro now authenticates local clients, restricts endpoint access, filters child environments, rejects detached mutation and denies narrowly defined catastrophic shell targets. Recode remains explicitly non-sandboxed; stronger containment remains deployment work.
+
+Preserve project trust and extension policy boundaries. Treat enforced containment as separate deployment work.
 
 ## P3 — Memory retrieval gap
 
@@ -597,14 +617,16 @@ After each code phase, run focused tests, `npm run check`, `git diff --check`, a
 7. O1 public lifecycle-model port — complete.
 8. O2 atomic persistence and terminal retention — complete.
 9. O3 deadlines, cancellation and shutdown — complete.
-10. **O4 now:** durable-session turn leases and rotation-safe rebind.
-11. O5–O7 attach/detach, completion and workspace safety.
-12. O8 TUI integration.
-13. **Checkpoint B:** Hermes lifecycle conformance passes against Recode adapters and the long-lived service is usable end to end.
-14. C0–C3 fresh exact-source three-way test/performance comparison of Recode, jcode and upstream Pi.
-15. C4 gap decision.
-16. S4 performance target ratification from matched evidence.
-17. O9 shared-service optimization in the measured order.
-18. P0–P4 overall product-gap work in the order ratified by C4.
+10. O4 durable-session turn leases and rotation-safe rebind — complete.
+11. O5 attach, detach, waiting input and verified reconnect — complete.
+12. O6 bounded completion queue and idempotent Aizen handoff primitives — complete.
+13. O7 workspace safety — complete.
+14. O8 service supervision and TUI integration — complete as a component.
+15. V1 lifecycle closure — complete: O1 is connected to production execution, O3 includes independent iteration budgets, and production terminal transitions feed O6.
+16. **Checkpoint B now:** Hermes lifecycle conformance passes against the actual production authority and the long-lived service is usable end to end.
+17. Local control-plane security — complete; release identity/update/certification is the next bounded phase.
+18. C0–C3 fresh exact-source three-way test/performance comparison of Recode, jcode and upstream Pi.
+19. C4 gap decision and S4 performance-target ratification.
+20. O9 shared-service optimization, then V2/V3 product work in the measured order.
 
 This order fixes observability first, replaces the package runtime boundary, ports the lifecycle subsystem to a tested checkpoint, and only then compares exact implementations before broader product-gap closure. The service is never used to conceal cold startup cost, jcode claims are never compared against unlike Recode lifecycle points, and startup gains are not treated as overall feature parity.

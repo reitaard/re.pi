@@ -1,12 +1,15 @@
-import { existsSync, unlinkSync } from "node:fs";
-import { createConnection, createServer, type Server } from "node:net";
+import { chmodSync, existsSync, unlinkSync } from "node:fs";
+import { createConnection, createServer, type Server, type Socket } from "node:net";
 import type { AgentSessionEvent, RpcExtensionUIRequest, RpcResponse } from "@reitaard/repi-coding-agent";
-import { getSocketPath } from "../config.ts";
+import { getSocketPath, isFilesystemSocketPath } from "../config.ts";
+import { authenticateIpcToken, ensureIpcAuthToken } from "../ipc-auth.ts";
 import {
 	type CancelRequest,
 	type CancelResponse,
 	type ErrorResponse,
 	encodeMessage,
+	type HealthRequest,
+	type HealthResponse,
 	type ListRequest,
 	type ListResponse,
 	type OrchestratorRequest,
@@ -16,6 +19,8 @@ import {
 	type RpcReadyResponse,
 	type RpcRequest,
 	type RpcStreamRequest,
+	type ShutdownRequest,
+	type ShutdownResponse,
 	type SpawnRequest,
 	type SpawnResponse,
 	type StatusRequest,
@@ -26,10 +31,13 @@ import {
 
 const MAX_IPC_MESSAGE_BYTES = 1_048_576;
 const MAX_QUEUED_RPC_REQUESTS = 64;
+const serverSockets = new WeakMap<Server, Set<Socket>>();
 
 export interface IpcRequestHandler {
 	(request: SpawnRequest): Promise<SpawnResponse | ErrorResponse> | SpawnResponse | ErrorResponse;
 	(request: ListRequest): Promise<ListResponse | ErrorResponse> | ListResponse | ErrorResponse;
+	(request: HealthRequest): Promise<HealthResponse | ErrorResponse> | HealthResponse | ErrorResponse;
+	(request: ShutdownRequest): Promise<ShutdownResponse | ErrorResponse> | ShutdownResponse | ErrorResponse;
 	(request: StopRequest): Promise<StopResponse | ErrorResponse> | StopResponse | ErrorResponse;
 	(request: CancelRequest): Promise<CancelResponse | ErrorResponse> | CancelResponse | ErrorResponse;
 	(request: StatusRequest): Promise<StatusResponse | ErrorResponse> | StatusResponse | ErrorResponse;
@@ -41,8 +49,11 @@ export interface IpcRequestHandler {
 		onResponse: (response: RpcResponse) => void,
 		onSessionEvent: (event: AgentSessionEvent) => void,
 		onUiRequest: (request: RpcExtensionUIRequest) => void,
+		options?: { mode?: "interactive" | "read-only"; ownerId?: string },
 	):
 		| {
+				attachment: NonNullable<RpcReadyResponse["attachment"]>;
+				replay: NonNullable<RpcReadyResponse["replay"]>;
 				handleRequest(request: RpcRequest["command"] | { type: "extension_ui_response" }): Promise<void>;
 				close(): void;
 		  }
@@ -51,9 +62,13 @@ export interface IpcRequestHandler {
 
 export async function startIpcServer(handler: IpcRequestHandler): Promise<Server> {
 	const socketPath = getSocketPath();
-	await removeStaleSocketIfNeeded(socketPath);
+	const expectedAuthToken = ensureIpcAuthToken();
+	if (isFilesystemSocketPath(socketPath)) await removeStaleSocketIfNeeded(socketPath);
 
+	const sockets = new Set<Socket>();
 	const server = createServer((socket) => {
+		sockets.add(socket);
+		socket.once("close", () => sockets.delete(socket));
 		let buffer = "";
 		const writeBounded = (
 			message: OrchestratorResponse | RpcResponse | AgentSessionEvent | RpcExtensionUIRequest,
@@ -86,7 +101,13 @@ export async function startIpcServer(handler: IpcRequestHandler): Promise<Server
 			}
 
 			try {
-				const request = parseRequestLine(line);
+				const authenticatedRequest = parseRequestLine(line);
+				if (!authenticateIpcToken(expectedAuthToken, authenticatedRequest.authToken)) {
+					socket.end(encodeMessage({ type: "error", ok: false, error: "Maestro IPC authentication failed" }));
+					return;
+				}
+				const { authToken: _authToken, ...requestPayload } = authenticatedRequest;
+				const request = requestPayload as OrchestratorRequest;
 				if (request.type === "rpc_stream") {
 					const response = await handler(request);
 					if (!response.ok || response.type !== "rpc_ready" || !response.instance) {
@@ -100,6 +121,7 @@ export async function startIpcServer(handler: IpcRequestHandler): Promise<Server
 						(response) => writeBounded(response),
 						(event) => writeBounded(event),
 						(uiRequest) => writeBounded(uiRequest),
+						{ mode: request.mode, ownerId: request.ownerId },
 					);
 					if (!rpcStream) {
 						socket.end(
@@ -108,7 +130,7 @@ export async function startIpcServer(handler: IpcRequestHandler): Promise<Server
 						return;
 					}
 
-					writeBounded(response);
+					writeBounded({ ...response, attachment: rpcStream.attachment, replay: rpcStream.replay });
 					let rpcRequestQueue = Promise.resolve();
 					let queuedRpcRequests = 0;
 					socket.on("data", (rpcChunk: Buffer | string) => {
@@ -174,13 +196,24 @@ export async function startIpcServer(handler: IpcRequestHandler): Promise<Server
 
 	await new Promise<void>((resolve, reject) => {
 		server.once("error", reject);
-		server.listen(socketPath, () => {
+		server.listen({ path: socketPath, readableAll: false, writableAll: false }, () => {
 			server.off("error", reject);
 			resolve();
 		});
 	});
 
+	if (isFilesystemSocketPath(socketPath)) chmodSync(socketPath, 0o600);
+	serverSockets.set(server, sockets);
 	return server;
+}
+
+export async function closeIpcServer(server: Server): Promise<void> {
+	const sockets = serverSockets.get(server);
+	for (const socket of sockets ?? []) socket.destroy();
+	await new Promise<void>((resolve) => {
+		server.close(() => resolve());
+	});
+	serverSockets.delete(server);
 }
 
 async function removeStaleSocketIfNeeded(socketPath: string): Promise<void> {

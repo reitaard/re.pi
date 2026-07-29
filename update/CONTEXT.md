@@ -5,8 +5,9 @@
 The authoritative repository is the customized Recode monorepo derived from Pi.
 
 - Main repository: `C:\Users\re_Lax\Desktop\chat7\re.pi`
-- Feature-complete custom-first integration branch: `repi/preserve-custom`
-- Exact preserved source commit: `c5ab200bc43993d211e1e97baa0c9abd27c0ce79`
+- Authoritative development branch: `agent-harness`
+- Historical custom-first release-line reference: `repi/preserve-custom`
+- Exact preserved custom baseline: `c5ab200bc43993d211e1e97baa0c9abd27c0ce79`
 - Earlier incomplete 0.82 port (retained for reference): `repi/canonical`
 - Legacy OAuth worktree: `C:\Users\re_Lax\Desktop\chat7\re.pi-0.81.4-oauth`
 - Root package: `repi-monorepo`
@@ -23,7 +24,7 @@ Core packages:
 - `packages/agent` — reusable agent runtime and AgentHarness
 - `packages/ai` — provider and model abstraction
 - `packages/tui` — terminal UI
-- `packages/orchestrator` — experimental orchestration
+- `packages/orchestrator` — Recode Maestro full-session lifecycle and service supervision
 
 ## Repository relationships
 
@@ -70,18 +71,23 @@ The behavior-preserving worker-folder restructure is committed and pushed at `c6
 - Every worker receives the loaded shared read-only `kioku_search` extension tool. No worker receives Kioku write access, and Shiori/Cardinal/Teach Mode admission boundaries remain unchanged.
 - Opening a worker modal does not inherit Aizen's abort signal. Runtime teardown still owns final worker cleanup through the shared directory.
 
-## Existing orchestrator foundation
+## Maestro lifecycle and service foundation
 
-`packages/orchestrator` already implements most of the process-supervisor substrate needed for multiple full Aizen sessions:
+`packages/orchestrator` is Recode Maestro's single full-session supervisor:
 
-- `OrchestratorSupervisor` owns multiple live RPC child processes and persisted `InstanceRecord` metadata.
-- Each instance already has an id, label, cwd, status, session id/file, event subscribers, UI-request routing, and independent stop lifecycle.
-- The newline-delimited IPC protocol already supports spawn, list, status, stop, RPC, and streaming RPC attachment.
-- Unexpected child exits are isolated and persisted as instance errors.
-- Current restart recovery marks previously live children stopped; it does not reattach to orphaned processes.
-- Current JSON persistence rewrites the whole instance array synchronously and should be hardened atomically before becoming a durable session supervisor.
+- `MaestroLifecycleService` and `MaestroFullSessionLifecycleAdapter` own the production full-session lifecycle over `OrchestratorSupervisor`; named workers remain lightweight in-process conversations.
+- Each instance has bounded versioned lifecycle state, verified process/session/workspace identity, attachment generations, turn leases, event/output tails and retained terminal results.
+- Atomic validated manifests retain instance, service-health, restart and completion-outbox state with backup recovery.
+- Every RPC request and process shutdown is bounded; Windows/Linux process-start receipts gate reconnect/adoption.
+- Real child terminal transitions create one durable O6 completion, including idempotent recovery across before/after-enqueue crash windows.
+- Native Windows/Linux supervision uses option A containment and terminates owned children on planned service restart.
+- Aizen and named-worker runs have independent provider-call iteration budgets.
+- IPC requests and stream handshakes require a private current-user token; Unix files/sockets are mode-restricted and Windows pipe creation does not grant all-user access.
+- Child RPC processes receive a reviewed runtime/provider environment allowlist. Exceptional integration variables require explicit `REPI_MAESTRO_CHILD_ENV_ALLOW` names.
+- Detached sessions cannot mutate state; mutating RPC requires the current interactive owner generation.
+- Bash denies a narrow set of catastrophic root/home/credential/device targets, but Recode remains non-sandboxed and same-user processes remain trusted.
 
-The minimal next architecture should extend this package rather than adding another orchestrator.
+Extend this package and lifecycle authority; do not add another supervisor.
 
 ## Memory retrieval audit
 

@@ -1,6 +1,7 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const CONFIG_DIR_NAME = ".pi";
@@ -64,6 +65,37 @@ export function getInstancesPath(): string {
 	return join(getOrchestratorDir(), "instances.json");
 }
 
+export function getCompletionsPath(): string {
+	return join(getOrchestratorDir(), "completions.json");
+}
+
+export function getIpcAuthPath(): string {
+	return join(getOrchestratorDir(), "ipc-auth.json");
+}
+
+export function getServiceOwnerPath(): string {
+	return join(getOrchestratorDir(), "service-owner.json");
+}
+
+export function getServiceHealthPath(): string {
+	return join(getOrchestratorDir(), "service-health.json");
+}
+
+export function getServiceRestartHistoryPath(): string {
+	return join(getOrchestratorDir(), "service-restarts.json");
+}
+
 export function getSocketPath(): string {
-	return join(getOrchestratorDir(), "orchestrator.sock");
+	if (process.platform === "win32") {
+		const identity = createHash("sha256")
+			.update(resolve(getOrchestratorDir()).toLowerCase())
+			.digest("hex")
+			.slice(0, 24);
+		return `\\\\.\\pipe\\recode-maestro-${identity}`;
+	}
+	return join(getOrchestratorDir(), "maestro.sock");
+}
+
+export function isFilesystemSocketPath(path: string): boolean {
+	return !path.startsWith("\\\\.\\pipe\\");
 }

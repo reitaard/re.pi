@@ -28,6 +28,7 @@ function launchRequest(kind: "worker" | "full-session" = "worker") {
 		goal: "Inspect the lifecycle contract",
 		role: kind === "worker" ? "audit" : "aizen",
 		cwd: process.cwd(),
+		workspaceAccess: "read-only",
 		parentInstanceId: "parent-instance",
 		parentSessionId: "parent-session",
 		correlationId: "correlation-1",
@@ -51,8 +52,9 @@ describe("Maestro lifecycle contract", () => {
 	it("defines every legal transition and rejects terminal or UNKNOWN transitions", () => {
 		const legal: Readonly<Record<Exclude<MaestroLifecycleState, "UNKNOWN">, readonly MaestroLifecycleState[]>> = {
 			PENDING: ["STARTING", "CANCEL_REQUESTED", "FAILED"],
-			STARTING: ["RUNNING", "CANCEL_REQUESTED", "FAILED", "INTERRUPTED"],
-			RUNNING: ["CANCEL_REQUESTED", "SUCCEEDED", "FAILED", "INTERRUPTED"],
+			STARTING: ["RUNNING", "WAITING_INPUT", "CANCEL_REQUESTED", "FAILED", "INTERRUPTED"],
+			RUNNING: ["WAITING_INPUT", "CANCEL_REQUESTED", "SUCCEEDED", "FAILED", "INTERRUPTED"],
+			WAITING_INPUT: ["RUNNING", "CANCEL_REQUESTED", "SUCCEEDED", "FAILED", "INTERRUPTED"],
 			CANCEL_REQUESTED: ["SUCCEEDED", "CANCELLED", "FAILED", "INTERRUPTED"],
 			SUCCEEDED: [],
 			FAILED: [],
@@ -78,6 +80,15 @@ describe("Maestro lifecycle contract", () => {
 		assert.throws(() => service.launch({ ...launchRequest(), metadata: cyclic }), /JSON-serializable/);
 		service.launch(launchRequest());
 		assert.throws(() => service.launch(launchRequest()), /Duplicate correlationId/);
+		const recovered = service.launch(
+			{ ...launchRequest(), correlationId: undefined },
+			{ instanceId: "recovered-instance" },
+		);
+		assert.equal(recovered.instanceId, "recovered-instance");
+		assert.throws(
+			() => service.launch({ ...launchRequest(), correlationId: undefined }, { instanceId: "recovered-instance" }),
+			/lifecycle instance already exists/i,
+		);
 	});
 
 	it("returns bounded terminal results and deterministic result hashes", async () => {
@@ -128,7 +139,7 @@ describe("Maestro lifecycle contract", () => {
 		assert.equal((await service.cancel(handle, "again")).alreadyTerminal, true);
 	});
 
-	it("fails forged handles closed and rejects stale attachment generations", async () => {
+	it("fails forged handles closed, rejects duplicate owners, and rejects stale generations", async () => {
 		const service = new MaestroLifecycleService({ adapters: [terminalAdapter("worker")] });
 		const handle = service.launch(launchRequest());
 		const forged = { ...handle, capability: "x".repeat(handle.capability.length) };
@@ -139,13 +150,16 @@ describe("Maestro lifecycle contract", () => {
 			/Invalid, stale, or forged/,
 		);
 		const first = service.attach(handle, "owner-1");
+		assert.throws(() => service.attach(handle, "owner-2"), /Interactive owner already attached/);
+		const unchangedState = service.status(handle).state;
+		assert.deepEqual(service.detach(first), { detached: true, stale: false, state: unchangedState });
 		const second = service.attach(handle, "owner-2");
 		const staleCancellation = await service.cancelAttached(handle, first, "stale owner");
 		assert.equal(staleCancellation.staleOwner, true);
-		const unchangedState = service.status(handle).state;
-		assert.notEqual(unchangedState, "CANCEL_REQUESTED");
-		assert.deepEqual(service.detach(first), { detached: false, stale: true, state: unchangedState });
-		assert.deepEqual(service.detach(second), { detached: true, stale: false, state: unchangedState });
+		const currentState = service.status(handle).state;
+		assert.notEqual(currentState, "CANCEL_REQUESTED");
+		assert.deepEqual(service.detach(first), { detached: false, stale: true, state: currentState });
+		assert.deepEqual(service.detach(second), { detached: true, stale: false, state: currentState });
 	});
 
 	it("expires terminal handles consistently and releases their correlation IDs", async () => {

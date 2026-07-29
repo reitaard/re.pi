@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added independent race-safe iteration budgets for agent and harness runs, with configurable provider-call caps and explicit exhaustion errors.
+
 ## [0.81.4] - 2026-07-22
 
 ### Added

@@ -13,6 +13,7 @@ import type {
 	ToolResultMessage,
 } from "@reitaard/repi-ai";
 import type { Static, TSchema } from "typebox";
+import type { IterationBudget } from "./iteration-budget.ts";
 
 /**
  * Stream function used by the agent loop. `Models.streamSimple` satisfies
@@ -139,6 +140,12 @@ export interface PrepareNextTurnContext extends ShouldStopAfterTurnContext {}
 
 export interface AgentLoopConfig extends SimpleStreamOptions {
 	model: Model<any>;
+
+	/** Maximum provider calls allowed in this run. Defaults to 500. */
+	maxIterations?: number;
+
+	/** Optional caller-owned budget. Prefer maxIterations for an independent per-run budget. */
+	iterationBudget?: IterationBudget;
 
 	/**
 	 * Converts AgentMessage[] to LLM-compatible Message[] before each LLM call.

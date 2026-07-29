@@ -120,6 +120,7 @@ describe("orchestrator durable lifecycle storage", () => {
 		useTestDir();
 		let disposed = false;
 		const rpc: SupervisorRpcProcess = {
+			processIdentity: { pid: process.pid, startReceipt: "storage-stop" },
 			async send(command) {
 				assert.equal(command.type, "get_state");
 				return {
@@ -153,8 +154,14 @@ describe("orchestrator durable lifecycle storage", () => {
 			},
 		});
 		const running = await supervisor.spawnInstance({ cwd: process.cwd() });
+		assert.equal(supervisor.getLifecycleStatus(running.id)?.state, "RUNNING");
 		const stopped = await supervisor.stopInstance(running.id);
 		assert.equal(disposed, true);
+		assert.equal(supervisor.getLifecycleStatus(running.id)?.state, "CANCELLED");
+		assert.equal(supervisor.getLifecycleResult(running.id)?.ready, true);
+		const repeatedCancellation = await supervisor.cancelInstance(running.id);
+		assert.equal(repeatedCancellation.completed, true);
+		assert.equal(repeatedCancellation.alreadyTerminal, true);
 		assert.equal(stopped?.status, "cancelled");
 		assert.ok(stopped?.completedAt);
 		assert.deepEqual(
@@ -166,6 +173,7 @@ describe("orchestrator durable lifecycle storage", () => {
 	it("records an unverified forced termination as failed", async () => {
 		useTestDir();
 		const rpc: SupervisorRpcProcess = {
+			processIdentity: { pid: process.pid, startReceipt: "storage-force" },
 			async send() {
 				return {
 					type: "response",
@@ -211,6 +219,7 @@ describe("orchestrator durable lifecycle storage", () => {
 			releaseDisposals = resolve;
 		});
 		const createRpcProcess = (): SupervisorRpcProcess => ({
+			processIdentity: { pid: process.pid, startReceipt: `storage-bounded-${disposeStarted}` },
 			async send() {
 				return {
 					type: "response",

@@ -22,6 +22,10 @@ import type {
 	WorkingIndicatorOptions,
 } from "../../core/extensions/index.ts";
 import {
+	deliverMaestroCompletionHandoff,
+	MAESTRO_COMPLETION_CUSTOM_TYPE,
+} from "../../core/maestro-completion-handoff.ts";
+import {
 	flushRawStdout,
 	takeOverStdout,
 	waitForRawStdoutBackpressure,
@@ -614,6 +618,37 @@ export async function runRpcMode(
 				const options = command.parentSession ? { parentSession: command.parentSession } : undefined;
 				const result = await runtimeHost.newSession(options);
 				return success(id, "new_session", result);
+			}
+
+			case "maestro_completion_handoff": {
+				if (!aizen) {
+					return error(id, "maestro_completion_handoff", "completion handoff requires the Aizen runtime");
+				}
+				const sessionManager = session.sessionManager;
+				const result = deliverMaestroCompletionHandoff(
+					{
+						deliveryId: command.deliveryId,
+						childInstanceId: command.childInstanceId,
+						childSessionId: command.childSessionId,
+						terminalState: command.terminalState,
+						summary: command.summary,
+						resultHash: command.resultHash,
+						completedAt: command.completedAt,
+					},
+					{
+						isRunning: () => aizen?.isRunning() ?? true,
+						isPersisted: () => sessionManager.isPersisted(),
+						entries: () => {
+							const leafId = sessionManager.getLeafId();
+							return leafId ? sessionManager.getBranch(leafId) : [];
+						},
+						append: (content, details) => {
+							sessionManager.appendCustomMessageEntry(MAESTRO_COMPLETION_CUSTOM_TYPE, content, false, details);
+						},
+						flush: () => sessionManager.flush(),
+					},
+				);
+				return success(id, "maestro_completion_handoff", result);
 			}
 
 			case "external_event": {

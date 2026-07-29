@@ -10,6 +10,7 @@ const packages = [
 	{ directory: "packages/tui", name: "@reitaard/repi-tui" },
 	{ directory: "packages/agent", name: "@reitaard/repi-agent-core" },
 	{ directory: "packages/coding-agent", name: "@reitaard/repi-coding-agent" },
+	{ directory: "packages/orchestrator", name: "@reitaard/repi-orchestrator" },
 ];
 
 function printUsage() {

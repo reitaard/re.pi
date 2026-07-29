@@ -71,6 +71,7 @@ mkdirSync(stage, { recursive: true });
 const workspaceTarballs = new Map([
 	["@reitaard/repi-ai", packWorkspace("packages/ai", dependencyTarballs)],
 	["@reitaard/repi-agent-core", packWorkspace("packages/agent", dependencyTarballs)],
+	["@reitaard/repi-orchestrator", packWorkspace("packages/orchestrator", dependencyTarballs)],
 	["@reitaard/repi-tui", packWorkspace("packages/tui", dependencyTarballs)],
 ]);
 

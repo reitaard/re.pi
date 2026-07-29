@@ -18,6 +18,7 @@ import { createWorkspaceToolCallGuard } from "./workspace-guard.ts";
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 4_096;
 const DEFAULT_MAX_RESULT_CHARACTERS = 16_000;
+const DEFAULT_WORKER_MAX_ITERATIONS = 50;
 
 export type NamedWorkerToolName =
 	| "read"
@@ -377,6 +378,7 @@ export async function runNamedWorker(options: RunNamedWorkerOptions): Promise<Na
 		models,
 		model: requestModel,
 		thinkingLevel: options.worker.thinkingLevel ?? "off",
+		maxIterations: DEFAULT_WORKER_MAX_ITERATIONS,
 		systemPrompt: buildWorkerSystemPrompt(options.worker, options.cwd),
 		resources: workerSkill ? { skills: [workerSkill] } : undefined,
 		tools,

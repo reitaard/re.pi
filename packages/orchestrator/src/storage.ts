@@ -11,9 +11,10 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { dirname } from "node:path";
-import { getInstancesPath, getMachinePath, getOrchestratorDir } from "./config.ts";
-import type { InstanceRecord, InstanceStatus, MachineRecord } from "./types.ts";
+import { getCompletionsPath, getInstancesPath, getMachinePath, getOrchestratorDir } from "./config.ts";
+import type { CompletionRecord, InstanceRecord, InstanceStatus, MachineRecord } from "./types.ts";
 
+const MAX_COMPLETIONS = 1_024;
 const MAX_INSTANCES = 1_024;
 const DEFAULT_TERMINAL_RETENTION_MS = 60 * 60 * 1_000;
 const TERMINAL_STATUSES: ReadonlySet<InstanceStatus> = new Set(["stopped", "succeeded", "failed", "cancelled"]);
@@ -79,6 +80,49 @@ function isTimestamp(value: unknown, optional = false): boolean {
 	return (optional && value === undefined) || (typeof value === "string" && Number.isFinite(Date.parse(value)));
 }
 
+const UI_REQUEST_METHODS: ReadonlySet<string> = new Set([
+	"select",
+	"confirm",
+	"input",
+	"editor",
+	"notify",
+	"setStatus",
+	"setWidget",
+	"setTitle",
+	"set_editor_text",
+]);
+
+function isPendingUiRequest(value: unknown): boolean {
+	if (value === undefined) return true;
+	if (
+		!isRecord(value) ||
+		value.type !== "extension_ui_request" ||
+		!isBoundedString(value.id, 512) ||
+		typeof value.method !== "string" ||
+		!UI_REQUEST_METHODS.has(value.method)
+	) {
+		return false;
+	}
+	return Buffer.byteLength(JSON.stringify(value)) <= 65_536;
+}
+
+function isWorkspaceReceipt(value: unknown): boolean {
+	return (
+		isRecord(value) &&
+		value.schemaVersion === 1 &&
+		isBoundedString(value.ownerInstanceId, 512) &&
+		(value.access === "read-only" || value.access === "write") &&
+		isBoundedString(value.selectedPath, 4096) &&
+		isBoundedString(value.worktreeRoot, 4096) &&
+		isBoundedString(value.gitCommonDir, 4096, true) &&
+		typeof value.worktreeIdentity === "string" &&
+		/^[a-f0-9]{64}$/.test(value.worktreeIdentity) &&
+		isBoundedString(value.branch, 512, true) &&
+		isTimestamp(value.selectedAt) &&
+		value.managed === false
+	);
+}
+
 function isMachineRecord(value: unknown): value is MachineRecord {
 	return (
 		isRecord(value) &&
@@ -89,9 +133,12 @@ function isMachineRecord(value: unknown): value is MachineRecord {
 	);
 }
 
+const COMPLETION_TERMINAL_STATES: ReadonlySet<string> = new Set(["SUCCEEDED", "FAILED", "INTERRUPTED", "CANCELLED"]);
+
 const INSTANCE_STATUSES: ReadonlySet<string> = new Set([
 	"starting",
 	"online",
+	"waiting-input",
 	"stopping",
 	"stopped",
 	"error",
@@ -111,14 +158,34 @@ function isInstanceRecord(value: unknown): value is InstanceRecord {
 		!isTimestamp(value.lastSeenAt, true) ||
 		!isTimestamp(value.completedAt, true) ||
 		!isBoundedString(value.label, 512, true) ||
+		!isBoundedString(value.parentInstanceId, 512, true) ||
+		!isBoundedString(value.parentSessionId, 512, true) ||
+		(value.workspaceReceipt !== undefined && !isWorkspaceReceipt(value.workspaceReceipt)) ||
 		!isBoundedString(value.sessionId, 512, true) ||
 		!isBoundedString(value.sessionFile, 4096, true) ||
 		!isBoundedString(value.radiusPiId, 512, true) ||
-		!isBoundedString(value.terminalDiagnostic, 4096, true)
+		!isBoundedString(value.terminalDiagnostic, 4096, true) ||
+		(value.terminalState !== undefined &&
+			(typeof value.terminalState !== "string" || !COMPLETION_TERMINAL_STATES.has(value.terminalState))) ||
+		!isBoundedString(value.terminalSummary, 4_000, true) ||
+		(value.terminalResultHash !== undefined &&
+			(typeof value.terminalResultHash !== "string" || !/^[a-f0-9]{64}$/.test(value.terminalResultHash))) ||
+		!isTimestamp(value.completionQueuedAt, true) ||
+		!isBoundedString(value.currentActivity, 256, true) ||
+		!isTimestamp(value.activityUpdatedAt, true) ||
+		!isBoundedString(value.latestOutput, 2_048, true) ||
+		!isPendingUiRequest(value.pendingUiRequest)
 	) {
 		return false;
 	}
 	if (TERMINAL_STATUSES.has(value.status as InstanceStatus) && value.completedAt === undefined) return false;
+	if (
+		value.workspaceReceipt !== undefined &&
+		((value.workspaceReceipt as Record<string, unknown>).ownerInstanceId !== value.id ||
+			(value.workspaceReceipt as Record<string, unknown>).selectedPath !== value.cwd)
+	) {
+		return false;
+	}
 	if (value.terminationOutcome !== undefined) {
 		if (
 			!isRecord(value.terminationOutcome) ||
@@ -145,6 +212,51 @@ function isInstanceRecord(value: unknown): value is InstanceRecord {
 function isInstanceArray(value: unknown): value is InstanceRecord[] {
 	if (!Array.isArray(value) || value.length > MAX_INSTANCES || !value.every(isInstanceRecord)) return false;
 	return new Set(value.map((instance) => instance.id)).size === value.length;
+}
+
+const COMPLETION_DELIVERY_STATES: ReadonlySet<string> = new Set(["pending", "claimed", "acknowledged"]);
+
+function isCompletionRecord(value: unknown): value is CompletionRecord {
+	if (
+		!isRecord(value) ||
+		!isBoundedString(value.id, 512) ||
+		!isBoundedString(value.parentInstanceId, 512, true) ||
+		!isBoundedString(value.parentSessionId, 512, true) ||
+		(value.parentInstanceId === undefined && value.parentSessionId === undefined) ||
+		!isBoundedString(value.childInstanceId, 512) ||
+		!isBoundedString(value.childSessionId, 512, true) ||
+		typeof value.terminalState !== "string" ||
+		!COMPLETION_TERMINAL_STATES.has(value.terminalState) ||
+		!isBoundedString(value.summary, 4_000, true) ||
+		typeof value.resultHash !== "string" ||
+		!/^[a-f0-9]{64}$/.test(value.resultHash) ||
+		!isTimestamp(value.completedAt) ||
+		!isTimestamp(value.createdAt) ||
+		typeof value.deliveryState !== "string" ||
+		!COMPLETION_DELIVERY_STATES.has(value.deliveryState) ||
+		!Number.isSafeInteger(value.claimGeneration) ||
+		(value.claimGeneration as number) < 0 ||
+		!isBoundedString(value.claimOwner, 512, true) ||
+		!isTimestamp(value.claimedAt, true) ||
+		!isTimestamp(value.acknowledgedAt, true)
+	) {
+		return false;
+	}
+	if (value.deliveryState === "pending") {
+		return value.claimOwner === undefined && value.claimedAt === undefined && value.acknowledgedAt === undefined;
+	}
+	if (value.deliveryState === "claimed") {
+		return value.claimOwner !== undefined && value.claimedAt !== undefined && value.acknowledgedAt === undefined;
+	}
+	return value.claimOwner !== undefined && value.claimedAt !== undefined && value.acknowledgedAt !== undefined;
+}
+
+function isCompletionArray(value: unknown): value is CompletionRecord[] {
+	if (!Array.isArray(value) || value.length > MAX_COMPLETIONS || !value.every(isCompletionRecord)) return false;
+	return (
+		new Set(value.map((completion) => completion.id)).size === value.length &&
+		new Set(value.map((completion) => completion.childInstanceId)).size === value.length
+	);
 }
 
 function parseValidated<T>(path: string, validate: (value: unknown) => value is T): T {
@@ -259,6 +371,14 @@ export function loadInstances(options: LoadInstancesOptions = {}): InstanceRecor
 
 export function saveInstances(instances: InstanceRecord[]): void {
 	saveValidated(getInstancesPath(), instances, isInstanceArray);
+}
+
+export function loadCompletions(): CompletionRecord[] {
+	return loadValidated(getCompletionsPath(), [], isCompletionArray);
+}
+
+export function saveCompletions(completions: CompletionRecord[]): void {
+	saveValidated(getCompletionsPath(), completions, isCompletionArray);
 }
 
 export function getInstance(instanceId: string): InstanceRecord | undefined {

@@ -145,38 +145,38 @@ The existing `packages/orchestrator` is the foundation. Do not add a second orch
 
 - [x] Keep one foreground Aizen runtime in the ordinary TUI.
 - [x] Keep named workers as lightweight in-process conversations; do not turn every worker into an OS process.
-- [ ] Establish latency baselines for startup, harness setup, provider first token, tool dispatch, persistence, and final rendering before changing architecture.
+- [x] Establish latency baselines for startup, harness setup, provider first token, tool dispatch, persistence, and final rendering before changing architecture.
 
 ### S1 — Harden the existing supervisor
 
-- [ ] Treat each full background Aizen session as one existing orchestrator RPC child process.
-- [ ] Extend `InstanceRecord` with explicit run state (`idle`, `running`, `waiting-input`, `completed`, `cancelled`, `error`) and parent/session lineage.
-- [ ] Replace whole-file synchronous instance rewrites with atomic temp-write/rename persistence and bounded corruption recovery; retain JSON until measured scale justifies SQLite.
-- [ ] Add per-instance `AbortController`/RPC cancellation and bounded global concurrency with fail-fast admission.
-- [ ] Persist only safe metadata: instance id, PID/process identity receipt, cwd/worktree, session id/file, status, timestamps, and bounded output tail. Never persist credentials.
-- [ ] Define ownership receipts so restart recovery never kills or adopts an unverifiable process.
+- [x] Treat each full background Aizen session as one existing orchestrator RPC child process.
+- [x] Extend `InstanceRecord` with explicit run state and parent/session lineage through the versioned lifecycle projection.
+- [x] Replace whole-file synchronous instance rewrites with atomic temp-write/rename persistence and bounded corruption recovery; retain JSON until measured scale justifies SQLite.
+- [x] Add per-instance/RPC cancellation, independent iteration budgets, and bounded global concurrency with fail-fast admission.
+- [x] Persist only safe metadata: instance id, PID/process identity receipt, cwd/worktree, session id/file, status, timestamps, bounded output and terminal/completion outbox data. Never persist credentials.
+- [x] Define ownership receipts so restart recovery never kills or adopts an unverifiable process.
 
 ### S2 — Attach/detach without duplicate runtimes
 
-- [ ] Add explicit `attach`, `detach`, `cancel`, and `send` protocol operations over the existing `rpc_stream` transport.
-- [ ] Keep child lifetime owned by the supervisor; closing a TUI detaches rather than stops the child.
-- [ ] Permit only one interactive UI/approval owner per instance while allowing read-only event subscribers.
-- [ ] Route permission prompts and required user input to the attached owner; mark detached blocked sessions `waiting-input`.
-- [ ] Add a compact session picker showing label, id, workspace, state, elapsed time, and pending input.
-- [ ] Keep ordinary `/resume` as an explicit foreground replacement; use the supervisor picker for concurrently live full sessions.
+- [x] Add explicit attach, detach, cancel, and send operations over the existing RPC stream transport.
+- [x] Keep child lifetime owned by the supervisor; closing a TUI detaches rather than stops the child.
+- [x] Permit only one interactive UI/approval owner per instance while allowing read-only event subscribers.
+- [x] Route permission prompts and required user input to the attached owner; mark detached blocked sessions `waiting-input`.
+- [x] Add a compact session board showing label, id, workspace, state, elapsed time, activity and pending input.
+- [x] Keep ordinary `/resume` as an explicit foreground replacement; use the Maestro board for concurrently live full sessions.
 
 ### S3 — Workspace safety
 
-- [ ] Default read-only/background analysis to the selected workspace without creating a worktree.
-- [ ] Require explicit isolated sibling worktrees for concurrent write-capable full sessions.
-- [ ] Reuse the existing Git common-directory guard; reject unrelated repositories, traversal, dirty destructive setup, and ambiguous ownership.
-- [ ] Never auto-merge, reset, stash, or delete a worktree. Cleanup requires verified ownership and no uncommitted work.
+- [x] Default read-only/background analysis to the selected workspace without creating a worktree.
+- [x] Require explicit isolated sibling worktrees for concurrent write-capable full sessions.
+- [x] Reuse the existing Git common-directory guard; reject unrelated repositories, traversal and ambiguous ownership.
+- [x] Never auto-merge, reset, stash, create, clean or delete a worktree.
 
 ### S4 — Completion delivery
 
-- [ ] Queue background completion events and inject them only as fresh, explicitly untrusted handoffs at a safe foreground reasoning boundary.
-- [ ] Never mutate prior Aizen turns or inject private worker transcripts.
-- [ ] Keep bounded result summaries plus links/ids to full persisted session transcripts.
+- [x] Queue background completion events and inject them only as fresh, explicitly untrusted handoffs at a safe foreground reasoning boundary.
+- [x] Never mutate prior Aizen turns or inject private worker transcripts.
+- [x] Keep bounded result summaries plus links/ids to full persisted session transcripts.
 
 ## Latency optimization order
 
@@ -244,7 +244,7 @@ The repository already has one intended release path: `scripts/local-release.mjs
 - [x] Confirm binary targets exist for Linux x64/arm64 and Windows x64/arm64.
 - [x] Confirm a deterministic Termux Node archive exists.
 - [x] Confirm GitHub release assets receive SHA-256 checksums and a source archive.
-- [ ] Prove every path builds from `repi/preserve-custom`, retains the exact feature-complete Recode runtime, and enables delegation by default.
+- [ ] Prove every path builds from the authoritative `agent-harness` release commit, remains descended from the exact custom baseline, and enables delegation by default.
 - [x] Make the full local-release test runner execute `test.sh` through Bash on Windows instead of handing it to `cmd.exe`.
 - [ ] Separate Windows-incompatible historical tests from true release blockers so `release:local` has an authoritative cross-platform gate instead of a host-specific failure mode.
 - [ ] Reconcile release documentation with workflow reality: the current binary workflow stages/publishes GitHub assets but does not contain the documented npm trusted-publishing job.
@@ -284,4 +284,4 @@ The repository already has one intended release path: `scripts/local-release.mjs
 
 ## Immediate next step
 
-Restart local Recode to activate `0.81.4-repi.2.dev.27.9e818840`, then confirm default delegation, shared read-only worker Kioku, strict memory handling, and modal worker isolation. Continue release hardening by separating Windows-incompatible historical tests from true blockers and restoring reviewed npm trusted publishing before any public release.
+O1–O6 production lifecycle closure and local control-plane security are complete on `agent-harness`. Continue with release identity, updater completion and Windows/Linux artifact/service certification. Keep Telegram, O9 and broad jcode benchmarking deferred.

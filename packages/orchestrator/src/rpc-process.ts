@@ -1,5 +1,5 @@
 import { type ChildProcess, type SpawnOptions, spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
@@ -9,7 +9,10 @@ import type {
 	RpcExtensionUIResponse,
 	RpcResponse,
 } from "@reitaard/repi-coding-agent";
+import { createMaestroChildEnvironment } from "./child-environment.ts";
 import { isBunBinary } from "./config.ts";
+import { inspectLocalProcessIdentity } from "./process-identity.ts";
+import type { ProcessIdentityRecord } from "./types.ts";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_GRACEFUL_SHUTDOWN_MS = 3_000;
@@ -30,6 +33,7 @@ interface PendingRequest {
 
 export interface RpcProcessOptions {
 	cwd: string;
+	workspaceAccess?: "read-only" | "write";
 	requestTimeoutMs?: number;
 	gracefulShutdownMs?: number;
 	forceKillWaitMs?: number;
@@ -46,6 +50,7 @@ export interface RpcCancellationResult {
 	requested: boolean;
 	accepted: boolean;
 	completed: boolean;
+	alreadyTerminal?: boolean;
 	unsupported: boolean;
 	unknown: boolean;
 }
@@ -92,6 +97,7 @@ function boundedPositive(value: number | undefined, fallback: number, name: stri
 
 export class RpcProcessInstance {
 	readonly process: ChildProcess;
+	private cachedProcessIdentity?: ProcessIdentityRecord;
 
 	private exited = false;
 	private disposing = false;
@@ -128,13 +134,22 @@ export class RpcProcessInstance {
 		if (!Number.isSafeInteger(this.maxPendingRequests) || this.maxPendingRequests < 1) {
 			throw new Error("maxPendingRequests must be a positive safe integer");
 		}
-		this.process = spawnProcess(rpcCommand.command, rpcCommand.args, {
+		const rpcArgs = options.workspaceAccess === "read-only" ? [...rpcCommand.args, "--no-tools"] : rpcCommand.args;
+		this.process = spawnProcess(rpcCommand.command, rpcArgs, {
 			cwd: options.cwd,
-			env: process.env,
+			env: createMaestroChildEnvironment(process.env, options.workspaceAccess ?? "write"),
 			stdio: ["pipe", "pipe", "pipe"],
 		});
 		if (!this.process.stdin || !this.process.stdout) throw new Error("Failed to create RPC process stdio");
 		this.attachListeners();
+	}
+
+	get processIdentity(): ProcessIdentityRecord | undefined {
+		if (this.cachedProcessIdentity) return { ...this.cachedProcessIdentity };
+		const pid = this.process.pid;
+		if (!pid) return undefined;
+		this.cachedProcessIdentity = inspectLocalProcessIdentity(pid);
+		return this.cachedProcessIdentity ? { ...this.cachedProcessIdentity } : undefined;
 	}
 
 	private getSpawnCommand(): { command: string; args: string[] } {
@@ -179,11 +194,18 @@ export class RpcProcessInstance {
 		});
 
 		this.process.once("error", (error) => {
-			this.markExited(new Error(`RPC process error: ${error.message}. Stderr: ${this.stderrBuffer}`));
+			this.markExited(new Error(`RPC process error: ${error.message}.${this.stderrDiagnostic()}`));
 		});
 		this.process.once("exit", (code, signal) => {
-			this.markExited(new Error(`RPC process exited (code=${code} signal=${signal}). Stderr: ${this.stderrBuffer}`));
+			this.markExited(new Error(`RPC process exited (code=${code} signal=${signal}).${this.stderrDiagnostic()}`));
 		});
+	}
+
+	private stderrDiagnostic(): string {
+		if (!this.stderrBuffer) return "";
+		const bytes = Buffer.byteLength(this.stderrBuffer);
+		const digest = createHash("sha256").update(this.stderrBuffer).digest("hex").slice(0, 16);
+		return ` Child stderr captured (${bytes} bytes, sha256=${digest})`;
 	}
 
 	private failProtocol(error: Error): void {
@@ -249,7 +271,7 @@ export class RpcProcessInstance {
 	}
 
 	send(command: RpcCommand, options: RpcSendOptions = {}): Promise<RpcResponse> {
-		if (this.exited || this.disposing) throw new Error(`RPC process is not running. Stderr: ${this.stderrBuffer}`);
+		if (this.exited || this.disposing) throw new Error(`RPC process is not running.${this.stderrDiagnostic()}`);
 		if (this.pendingRequests.size >= this.maxPendingRequests) throw new Error("RPC pending request limit reached");
 		if (
 			command.type === "prompt" &&

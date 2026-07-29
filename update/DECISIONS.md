@@ -112,6 +112,38 @@ Name the orchestrator-owned full-session service **Recode Maestro**. The canonic
 
 **Reason:** Maestro accurately describes one conductor managing multiple full Aizen sessions. Subcommands provide a scalable namespace for lifecycle operations, while stable worker aliases keep direct specialist chats inexpensive and convenient without misclassifying workers as root runtimes.
 
+## D-017 — Maestro never owns worktree lifecycle
+
+**Status:** Accepted
+
+Maestro persists canonical workspace ownership receipts but marks every selected workspace `managed: false`. Read-only full sessions may share a workspace only with tools disabled and mutating RPC paths rejected. Concurrent write-capable sessions require distinct worktrees; a write-capable child must use an explicitly selected sibling worktree with the same verified Git common directory as its parent. Maestro never creates, merges, resets, stashes, removes, or cleans a worktree, and restart reconnect fails closed when the persisted receipt is missing, ambiguous, or no longer matches the selected workspace.
+
+**Reason:** Full-session concurrency requires deterministic write ownership without giving a long-lived service destructive repository-management authority.
+
+## D-018 — Native Maestro supervision uses option A containment
+
+**Status:** Accepted
+
+Maestro has exactly one verified Windows/Linux service owner. Linux uses a systemd user unit with control-group termination; Windows uses Task Scheduler with a kill-on-close Job Object host. Planned stop or restart stops admitting mutations, drains within a deadline, persists its classification, and then terminates all remaining owned descendants. A process crash is classified independently from degraded optional adapters. No fallback watcher runs concurrently with native supervision.
+
+**Reason:** Terminating owned children on service loss avoids ambiguous dual ownership and unverifiable adoption while preserving deterministic restart behavior across both supported service platforms.
+
+## D-019 — Production lifecycle closure uses one authority and a durable completion outbox
+
+**Status:** Accepted
+
+`MaestroLifecycleService` and `MaestroFullSessionLifecycleAdapter` own full-session lifecycle operations over the existing `OrchestratorSupervisor` backend; they do not introduce another supervisor. Production terminal transitions persist terminal identity and an outbox marker before/with idempotent O6 enqueue. Every Aizen and named-worker run has an independent provider-call iteration budget.
+
+**Reason:** O1–O6 conformance must govern real execution rather than test-only components, and service crashes must not lose or duplicate child completion delivery.
+
+## D-020 — Maestro local control is authenticated but remains a same-user trust boundary
+
+**Status:** Accepted
+
+Every local IPC request and stream handshake requires a private current-user token, endpoints use restrictive platform access settings, child environments are allowlisted, and detached mutation requires the current interactive owner. Recode also denies narrowly defined catastrophic shell targets. These controls do not claim sandboxing: processes running as the same operating-system user remain in the trust boundary.
+
+**Reason:** A long-lived unattended service needs deterministic authorization and secret minimization without misrepresenting same-user host execution as isolation.
+
 ## Pending decisions
 
 - Whether a later `recode upstream prepare` command should create an isolated integration worktree

@@ -6,6 +6,7 @@ import type { ModelRegistry } from "../../model-registry.ts";
 
 const SHIORI_NON_THINKING_MAX_OUTPUT_TOKENS = 1024;
 const SHIORI_THINKING_MAX_OUTPUT_TOKENS = 4096;
+const SHIORI_MAX_ITERATIONS = 50;
 
 const RECODE_SHIORI_RESPONSE_FORMAT = {
 	type: "json_schema",
@@ -182,6 +183,7 @@ export async function runRecodeShioriHarness(options: {
 		models,
 		model: requestModel,
 		thinkingLevel: options.thinking ? "medium" : "off",
+		maxIterations: SHIORI_MAX_ITERATIONS,
 		systemPrompt: options.systemPrompt,
 		tools: [],
 	});

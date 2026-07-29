@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { ChildProcess } from "node:child_process";
+import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { EventEmitter, once } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -76,8 +76,16 @@ describe("Maestro inherited RPC behavior", () => {
 		rpc.onExit((error) => exits.push(error));
 		const pending = rpc.send({ type: "get_state" });
 
+		fake.child.stderr?.emit("data", "OPENAI_API_KEY=must-not-leak");
 		fake.child.emit("exit", 9, null);
-		await assert.rejects(pending, /code=9/);
+		await assert.rejects(
+			pending,
+			(error: unknown) =>
+				error instanceof Error &&
+				/code=9/.test(error.message) &&
+				/Child stderr captured/.test(error.message) &&
+				!error.message.includes("must-not-leak"),
+		);
 		assert.equal(exits.length, 1);
 		assert.throws(() => rpc.send({ type: "get_state" }), /not running/);
 	});
@@ -87,6 +95,24 @@ describe("Maestro inherited RPC behavior", () => {
 		const rpc = new RpcProcessInstance({ cwd: process.cwd() }, () => fake.child);
 		await rpc.dispose();
 		assert.deepEqual(fake.killSignals, ["SIGTERM"]);
+	});
+
+	it("starts read-only workspace processes without tools and marks their environment", async () => {
+		const fake = createFakeChild();
+		let args: string[] = [];
+		let spawnOptions: SpawnOptions | undefined;
+		const rpc = new RpcProcessInstance(
+			{ cwd: process.cwd(), workspaceAccess: "read-only" },
+			(_command, observedArgs, observedOptions) => {
+				args = observedArgs;
+				spawnOptions = observedOptions;
+				return fake.child;
+			},
+			{ command: "node", args: ["rpc-entry.js"] },
+		);
+		assert.deepEqual(args, ["rpc-entry.js", "--no-tools"]);
+		assert.equal(spawnOptions?.env?.REPI_WORKSPACE_ACCESS, "read-only");
+		await rpc.dispose();
 	});
 });
 

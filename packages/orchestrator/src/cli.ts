@@ -6,9 +6,12 @@ import { cwd } from "node:process";
 import { fileURLToPath } from "node:url";
 import type { RpcCommand, RpcExtensionUIResponse } from "@reitaard/repi-coding-agent";
 import { getSocketPath } from "./config.ts";
+import { runMaestroDashboard } from "./dashboard.ts";
 import { sendIpcRequest } from "./ipc/client.ts";
 import { encodeMessage } from "./ipc/protocol.ts";
+import { type NativeServiceAction, NativeServiceManager } from "./native-service.ts";
 import { serve } from "./serve.ts";
+import { serveMaestro } from "./service-runtime.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -18,7 +21,7 @@ const packageJson = JSON.parse(readFileSync(join(__dirname, "../package.json"), 
 
 function printHelp(): void {
 	console.log(
-		`orchestrator v${packageJson.version}\n\nUsage:\n  orchestrator serve\n  orchestrator list\n  orchestrator spawn [--cwd <path>] [--label <label>]\n  orchestrator status <instance-id>\n  orchestrator stop <instance-id>\n  orchestrator rpc <instance-id> <json-command>\n  orchestrator rpc-stream <instance-id>\n  orchestrator --help\n  orchestrator --version\n\nRPC stream stdin expects JSONL RpcCommand or extension_ui_response messages.`,
+		`Recode Maestro v${packageJson.version}\n\nUsage:\n  recode maestro tui\n  recode maestro service <install|uninstall|start|stop|restart|status>\n  recode maestro service run [--supervision <manual|systemd|windows-task>]\n  recode maestro health\n  recode maestro list\n  recode maestro spawn (--read-only | --write) [--cwd <path>] [--label <label>] [--parent <instance-id>]\n  recode maestro status <instance-id>\n  recode maestro cancel <instance-id>\n  recode maestro stop <instance-id>\n  recode maestro rpc <instance-id> <json-command>\n  recode maestro rpc-stream <instance-id>\n  recode maestro --help\n  recode maestro --version\n\nThe native service owns all full-session children. Closing the TUI detaches; stop is destructive.`,
 	);
 }
 
@@ -94,15 +97,72 @@ async function main(): Promise<void> {
 		return;
 	}
 
+	if (args[0] === "service") {
+		const action = args[1];
+		if (action === "run") {
+			const supervision = getFlagValue(args, "--supervision");
+			if (
+				supervision !== undefined &&
+				supervision !== "manual" &&
+				supervision !== "systemd" &&
+				supervision !== "windows-task"
+			) {
+				throw new Error(`Unsupported Maestro supervision mode: ${supervision}`);
+			}
+			await serveMaestro({ supervisionMode: supervision });
+			return;
+		}
+		const nativeActions: readonly NativeServiceAction[] = [
+			"install",
+			"uninstall",
+			"start",
+			"stop",
+			"restart",
+			"status",
+		];
+		if (!action || !nativeActions.includes(action as NativeServiceAction)) {
+			console.error("Usage: recode maestro service <install|uninstall|start|stop|restart|status>");
+			process.exit(1);
+		}
+		const result = await new NativeServiceManager().execute(action as NativeServiceAction);
+		if (result) console.log(result);
+		return;
+	}
+
+	if (args[0] === "tui") {
+		await runMaestroDashboard();
+		return;
+	}
+
+	if (args[0] === "health") {
+		printResponse(await sendIpcRequest({ type: "health" }));
+		return;
+	}
+
 	if (args[0] === "list") {
 		printResponse(await sendIpcRequest({ type: "list" }));
 		return;
 	}
 
 	if (args[0] === "spawn") {
+		const readOnly = args.includes("--read-only");
+		const write = args.includes("--write");
+		if (readOnly === write) {
+			console.error("Usage: orchestrator spawn (--read-only | --write) [--cwd <path>] [--label <label>]");
+			process.exit(1);
+		}
 		const spawnCwd = getFlagValue(args, "--cwd") ?? cwd();
 		const label = getFlagValue(args, "--label");
-		printResponse(await sendIpcRequest({ type: "spawn", cwd: spawnCwd, label }));
+		const parentInstanceId = getFlagValue(args, "--parent");
+		printResponse(
+			await sendIpcRequest({
+				type: "spawn",
+				cwd: spawnCwd,
+				workspaceAccess: readOnly ? "read-only" : "write",
+				label,
+				parentInstanceId,
+			}),
+		);
 		return;
 	}
 
@@ -113,6 +173,16 @@ async function main(): Promise<void> {
 			process.exit(1);
 		}
 		printResponse(await sendIpcRequest({ type: "status", instanceId }));
+		return;
+	}
+
+	if (args[0] === "cancel") {
+		const instanceId = args[1];
+		if (!instanceId) {
+			console.error("Usage: recode maestro cancel <instance-id>");
+			process.exit(1);
+		}
+		printResponse(await sendIpcRequest({ type: "cancel", instanceId }));
 		return;
 	}
 

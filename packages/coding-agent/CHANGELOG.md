@@ -16,6 +16,9 @@
 - Added Shiori as a first-class private-chat worker with read-only project tools and Teach Mode while retaining her isolated Cardinal-controlled memory reviewer.
 - Added independent slash-worker tasks that hand hidden, explicitly untrusted reports to Aizen, plus worker status and scoped cancellation commands.
 - Added shared read-only Kioku search for every named worker under the same stale-evidence policy as Aizen recall.
+- Added durable, idempotent Maestro completion handoffs that enter Aizen context only at an idle turn boundary and remain explicitly untrusted.
+- Added the `recode maestro` service/TUI command surface and a non-blocking Maestro health and live-session indicator in Aizen's footer.
+- Added an absolute-deny bash gate for recursive destruction of filesystem roots, home directories, credential stores, raw devices, and process-exhaustion fork bombs.
 
 ### Changed
 
@@ -23,6 +26,8 @@
 - Made `/<worker> <task>` launch an independent handoff to Aizen, `/<worker>` open private chat, and `/shiori review [path]` invoke isolated memory review explicitly.
 - Applied equal default limits of eight active conversations globally and per worker.
 - Enabled named-worker delegation by default while retaining `REPI_DELEGATION=0` as an explicit opt-out.
+- Kept `Alt+Up` for queued-message restoration and added configurable `Ctrl+Shift+J` as a VS Code terminal-safe default fallback.
+- Applied independent provider-call iteration budgets to every Aizen run and named-worker/reviewer run.
 
 ### Fixed
 

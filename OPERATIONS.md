@@ -5,8 +5,9 @@ This file is the entry point for future sessions maintaining the customized Reco
 ## Authority and identity
 
 - Authoritative checkout: `C:\Users\re_Lax\Desktop\chat7\re.pi`
-- Authoritative branch: `repi/preserve-custom`
-- Feature-complete custom baseline: `c5ab200bc43993d211e1e97baa0c9abd27c0ce79`
+- Authoritative development branch: `agent-harness`
+- Historical feature-complete custom baseline: `c5ab200bc43993d211e1e97baa0c9abd27c0ce79`
+- `repi/preserve-custom` is a retained release-line reference, not the active development authority.
 - Product package: `@reitaard/repi-coding-agent`
 - CLI: `recode`
 - Upstream `earendil-works/pi` is an integration source, not the installed product.

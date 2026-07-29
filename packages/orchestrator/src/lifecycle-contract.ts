@@ -4,6 +4,7 @@ export const MAESTRO_LIFECYCLE_STATES = [
 	"PENDING",
 	"STARTING",
 	"RUNNING",
+	"WAITING_INPUT",
 	"SUCCEEDED",
 	"FAILED",
 	"INTERRUPTED",
@@ -22,7 +23,7 @@ export interface MaestroLaunchRequest {
 	context?: string;
 	role: string;
 	cwd: string;
-	worktreeIdentity?: string;
+	workspaceAccess: "read-only" | "write";
 	parentInstanceId?: string;
 	parentSessionId?: string;
 	correlationId?: string;
@@ -97,6 +98,8 @@ export interface MaestroResult {
 	errorClassification?: string;
 	errorMessage?: string;
 	resultHash?: string;
+	handoffState?: "not-required" | "queued" | "failed";
+	handoffDiagnostic?: string;
 }
 
 export interface MaestroReconnectResult {
@@ -131,6 +134,7 @@ export class MaestroLifecycleError extends Error {
 		| "INVALID_HANDLE"
 		| "INVALID_REQUEST"
 		| "INVALID_TRANSITION"
+		| "OWNER_ATTACHED"
 		| "STALE_ATTACHMENT";
 
 	constructor(code: MaestroLifecycleError["code"], message: string) {
@@ -151,8 +155,9 @@ const LEGAL_TRANSITIONS: Readonly<
 	Record<Exclude<MaestroLifecycleState, "UNKNOWN">, ReadonlySet<MaestroLifecycleState>>
 > = {
 	PENDING: new Set(["STARTING", "CANCEL_REQUESTED", "FAILED"]),
-	STARTING: new Set(["RUNNING", "CANCEL_REQUESTED", "FAILED", "INTERRUPTED"]),
-	RUNNING: new Set(["CANCEL_REQUESTED", "SUCCEEDED", "FAILED", "INTERRUPTED"]),
+	STARTING: new Set(["RUNNING", "WAITING_INPUT", "CANCEL_REQUESTED", "FAILED", "INTERRUPTED"]),
+	RUNNING: new Set(["WAITING_INPUT", "CANCEL_REQUESTED", "SUCCEEDED", "FAILED", "INTERRUPTED"]),
+	WAITING_INPUT: new Set(["RUNNING", "CANCEL_REQUESTED", "SUCCEEDED", "FAILED", "INTERRUPTED"]),
 	CANCEL_REQUESTED: new Set(["SUCCEEDED", "CANCELLED", "FAILED", "INTERRUPTED"]),
 	SUCCEEDED: new Set(),
 	FAILED: new Set(),

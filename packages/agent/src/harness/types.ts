@@ -830,6 +830,8 @@ export interface AgentHarnessOptions<
 	streamOptions?: AgentHarnessStreamOptions;
 	model: Model<any>;
 	thinkingLevel?: ThinkingLevel;
+	/** Maximum provider calls allowed in each independent harness run. */
+	maxIterations?: number;
 	activeToolNames?: string[];
 	steeringMode?: QueueMode;
 	followUpMode?: QueueMode;

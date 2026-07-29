@@ -36,7 +36,7 @@ For Slack/chat automation and workflows see [earendil-works/pi-chat](https://git
 
 ## Permissions & Containerization
 
-re.pi does not include a built-in permission system for restricting filesystem, process, network, or credential access. By default, it runs with the permissions of the user and process that launched it.
+re.pi does not include a general permission system for restricting filesystem, process, network, or credential access. It includes project-trust checks, Maestro ownership/workspace controls, and a narrow absolute-deny gate for catastrophic shell targets, but these are not a sandbox. By default, Recode runs with the permissions of the user and process that launched it.
 
 If you need stronger boundaries, containerize or sandbox Pi. See [packages/coding-agent/docs/containerization.md](packages/coding-agent/docs/containerization.md) for three patterns:
 

@@ -7,12 +7,22 @@
 - Added Recode Maestro's versioned public lifecycle contract, bounded supervision service, and private worker/full-session adapters.
 - Added validated atomic instance/machine manifests with bounded backup recovery, corruption diagnostics, process-start identity verification, and terminal retention.
 - Added bounded RPC deadlines, command/instance cancellation results, prompt/request/session/subscriber limits, and verified graceful-to-forced shutdown outcomes.
+- Added fail-closed per-session turn leases with FIFO serialization, stale-generation-safe release, and compaction/session-rotation rebind.
+- Added exclusive interactive attachments, concurrent read-only streams, non-destructive detach, durable waiting-input replay, bounded event tails, and receipt-verified restart reconnect.
+- Added a bounded durable completion queue with generation-safe claims, idempotent acknowledgement, restart delivery, and explicitly untrusted Aizen handoffs at idle turn boundaries.
+- Added canonical unmanaged workspace receipts, read-only no-tool sessions, exclusive write-worktree admission, sibling-worktree verification, and receipt-verified reconnect.
+- Added verified single-owner Maestro service supervision, persisted readiness and restart diagnostics, systemd cgroup containment, Windows Job Object containment, bounded planned shutdown, and degraded-adapter health.
+- Added the modern minimal Maestro board with live service health, workspace-aware session activity, bounded output, interactive attach/detach, pending-input handling, cancel, and confirmed stop actions.
+- Integrated the versioned full-session lifecycle service and adapter as the production launch, cancellation, attachment, waiting-input, result, and stop authority.
+- Added authenticated IPC request/stream handshakes, private Unix socket/authentication modes, restricted Windows named-pipe access flags, and a filtered child-environment policy with explicit integration overrides.
 
 ### Fixed
 
 - Resolved the coding-agent RPC entry through its ESM export so Node-based child startup works.
 - Retained cancelled, failed, and recovered terminal instance records instead of deleting them during shutdown.
 - Prevented timed-out requests, stale command IDs, stale attachments, hung children, and throwing observers from corrupting or indefinitely blocking Maestro lifecycle control.
+- Wired real child terminal transitions to exactly one durable completion record before parent delivery and acknowledgement.
+- Rejected detached mutating RPC commands unless they carry the current interactive owner and attachment generation.
 
 ## [0.81.4] - 2026-07-22
 

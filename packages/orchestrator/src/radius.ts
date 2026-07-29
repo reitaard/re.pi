@@ -10,6 +10,7 @@ const NOT_FOUND_RETRY_THRESHOLD = 3;
 const HEARTBEAT_BACKOFF_BASE_MS = 1_000;
 const HEARTBEAT_BACKOFF_MAX_MS = 30_000;
 const RADIUS_PROVIDER = "radius";
+const RADIUS_REQUEST_TIMEOUT_MS = 5_000;
 
 interface RegisterMachineResponse extends RadiusRegistration {
 	id: string;
@@ -46,6 +47,7 @@ class RadiusHttpError extends Error {
 async function post<T>(path: string, body: unknown): Promise<T> {
 	const response = await fetch(new URL(path, getRadiusOrchestratorBaseUrl()), {
 		method: "POST",
+		signal: AbortSignal.timeout(RADIUS_REQUEST_TIMEOUT_MS),
 		headers: {
 			Authorization: `Bearer ${getRadiusAccessToken()}`,
 			"Content-Type": "application/json",
@@ -63,6 +65,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 async function maybePost(path: string, body: unknown): Promise<void> {
 	const response = await fetch(new URL(path, getRadiusOrchestratorBaseUrl()), {
 		method: "POST",
+		signal: AbortSignal.timeout(RADIUS_REQUEST_TIMEOUT_MS),
 		headers: {
 			Authorization: `Bearer ${getRadiusAccessToken()}`,
 			"Content-Type": "application/json",

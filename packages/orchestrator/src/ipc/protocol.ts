@@ -6,18 +6,36 @@ import type {
 	RpcResponse,
 } from "@reitaard/repi-coding-agent";
 import type { RpcCancellationResult } from "../rpc-process.ts";
-import type { InstanceStatus, TerminationOutcome } from "../types.ts";
+import type {
+	InstanceStatus,
+	MaestroServiceExitClassification,
+	MaestroServiceHealth,
+	TerminationOutcome,
+	WorkspaceAccessMode,
+} from "../types.ts";
 
 export interface SpawnRequest {
 	type: "spawn";
 	cwd: string;
+	workspaceAccess: WorkspaceAccessMode;
 	label?: string;
+	parentInstanceId?: string;
+	parentSessionId?: string;
 	provider?: string;
 	model?: string;
 }
 
 export interface ListRequest {
 	type: "list";
+}
+
+export interface HealthRequest {
+	type: "health";
+}
+
+export interface ShutdownRequest {
+	type: "shutdown";
+	reason: Extract<MaestroServiceExitClassification, "planned-stop" | "planned-restart">;
 }
 
 export interface StopRequest {
@@ -40,16 +58,22 @@ export interface RpcRequest {
 	type: "rpc";
 	instanceId: string;
 	command: RpcCommand;
+	ownerId?: string;
+	ownerGeneration?: number;
 }
 
 export interface RpcStreamRequest {
 	type: "rpc_stream";
 	instanceId: string;
+	mode?: "interactive" | "read-only";
+	ownerId?: string;
 }
 
 export interface RequestMap {
 	spawn: SpawnRequest;
 	list: ListRequest;
+	health: HealthRequest;
+	shutdown: ShutdownRequest;
 	stop: StopRequest;
 	cancel: CancelRequest;
 	status: StatusRequest;
@@ -58,18 +82,33 @@ export interface RequestMap {
 }
 
 export type OrchestratorRequest = RequestMap[keyof RequestMap];
+export type AuthenticatedOrchestratorRequest = OrchestratorRequest & { authToken?: string };
 
 export interface InstanceSummary {
 	id: string;
 	status: InstanceStatus;
 	cwd: string;
 	label?: string;
+	createdAt: string;
+	lastSeenAt?: string;
+	parentInstanceId?: string;
+	parentSessionId?: string;
+	workspace?: {
+		access: WorkspaceAccessMode;
+		worktreeRoot: string;
+		worktreeIdentity: string;
+		branch?: string;
+	};
 	sessionId?: string;
 	sessionFile?: string;
 	radiusPiId?: string;
 	completedAt?: string;
 	terminationOutcome?: TerminationOutcome;
 	terminalDiagnostic?: string;
+	currentActivity?: string;
+	activityUpdatedAt?: string;
+	latestOutput?: string;
+	pendingInput: boolean;
 }
 
 export interface ResponseBase {
@@ -85,6 +124,16 @@ export interface SpawnResponse extends ResponseBase {
 export interface ListResponse extends ResponseBase {
 	type: "list_result";
 	instances?: InstanceSummary[];
+}
+
+export interface HealthResponse extends ResponseBase {
+	type: "health_result";
+	health?: MaestroServiceHealth;
+}
+
+export interface ShutdownResponse extends ResponseBase {
+	type: "shutdown_result";
+	reason?: Extract<MaestroServiceExitClassification, "planned-stop" | "planned-restart">;
 }
 
 export interface StopResponse extends ResponseBase {
@@ -110,6 +159,15 @@ export interface RpcBridgeResponse extends ResponseBase {
 export interface RpcReadyResponse extends ResponseBase {
 	type: "rpc_ready";
 	instance?: InstanceSummary;
+	attachment?: {
+		mode: "interactive" | "read-only";
+		ownerId?: string;
+		ownerGeneration?: number;
+	};
+	replay?: {
+		events: AgentSessionEvent[];
+		pendingUiRequest?: RpcExtensionUIRequest;
+	};
 }
 
 export interface ErrorResponse extends ResponseBase {
@@ -121,6 +179,8 @@ export interface ErrorResponse extends ResponseBase {
 export interface ResponseMap {
 	spawn: SpawnResponse;
 	list: ListResponse;
+	health: HealthResponse;
+	shutdown: ShutdownResponse;
 	stop: StopResponse;
 	cancel: CancelResponse;
 	status: StatusResponse;
@@ -144,12 +204,12 @@ export type ResponseFor<T extends OrchestratorRequest> = T extends { type: infer
 		: ErrorResponse
 	: ErrorResponse;
 
-export function encodeMessage(message: ProtocolMessage): string {
+export function encodeMessage(message: ProtocolMessage | AuthenticatedOrchestratorRequest): string {
 	return `${JSON.stringify(message)}\n`;
 }
 
-export function parseRequestLine(line: string): OrchestratorRequest {
-	const value = JSON.parse(line) as OrchestratorRequest;
+export function parseRequestLine(line: string): AuthenticatedOrchestratorRequest {
+	const value = JSON.parse(line) as AuthenticatedOrchestratorRequest;
 	return value;
 }
 

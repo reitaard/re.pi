@@ -11,6 +11,7 @@ import {
 	type ToolResultMessage,
 	validateToolArguments,
 } from "@reitaard/repi-ai/compat";
+import { DEFAULT_AGENT_MAX_ITERATIONS, IterationBudget } from "./iteration-budget.ts";
 import type {
 	AgentContext,
 	AgentEvent,
@@ -162,6 +163,8 @@ async function runLoop(
 ): Promise<void> {
 	let currentContext = initialContext;
 	let config = initialConfig;
+	const iterationBudget =
+		initialConfig.iterationBudget ?? new IterationBudget(initialConfig.maxIterations ?? DEFAULT_AGENT_MAX_ITERATIONS);
 	let firstTurn = true;
 	// Check for steering messages at start (user may have typed while waiting)
 	let pendingMessages: AgentMessage[] = (await config.getSteeringMessages?.()) || [];
@@ -189,7 +192,34 @@ async function runLoop(
 				pendingMessages = [];
 			}
 
-			// Stream assistant response
+			// Every provider call consumes from this run's independent budget.
+			if (!iterationBudget.consume()) {
+				const message: AssistantMessage = {
+					role: "assistant",
+					content: [{ type: "text", text: "" }],
+					api: config.model.api,
+					provider: config.model.provider,
+					model: config.model.id,
+					usage: {
+						input: 0,
+						output: 0,
+						cacheRead: 0,
+						cacheWrite: 0,
+						totalTokens: 0,
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+					},
+					stopReason: "error",
+					errorMessage: `Agent iteration budget exhausted after ${iterationBudget.maxTotal} provider calls`,
+					timestamp: Date.now(),
+				};
+				currentContext.messages.push(message);
+				newMessages.push(message);
+				await emit({ type: "message_start", message });
+				await emit({ type: "message_end", message });
+				await emit({ type: "turn_end", message, toolResults: [] });
+				await emit({ type: "agent_end", messages: newMessages });
+				return;
+			}
 			const message = await streamAssistantResponse(currentContext, config, signal, emit, streamFn);
 			newMessages.push(message);
 

@@ -209,3 +209,45 @@
 - Completed O2 atomic validated manifests, last-known-good backup recovery, observable corruption diagnostics, process-start identity checks and non-lossy terminal retention. O2 tests passed 7/7; all orchestrator tests passed 21/21.
 - Completed O3 bounded RPC deadlines, cooperative command/instance cancellation, stale-ID/owner rejection, workload limits, SIGTERM-to-SIGKILL escalation and persisted verified termination outcomes. All orchestrator tests passed 29/29.
 - Rechecked O1–O3 against frozen local Hermes `5b22bd955682a8fc7b07769784c5129e23f53eaf`; retained mapped invariants and necessary Recode process adapters, deferred later-phase gateway concerns, and removed the obsolete lossy instance-deletion helper.
+- Completed O4 fail-closed durable-session turn leases with FIFO alias serialization, generation-safe release, compaction/session rotation rebind and supervisor integration through `agent_settled`. All orchestrator tests passed 37/37.
+- Completed O5 exclusive interactive ownership, concurrent read-only attachment, non-destructive detach, durable waiting-input replay, bounded event tails and receipt-verified restart reconnect. Frozen Hermes gateway restart behavior was rechecked and intentionally not ported because it does not map to Recode child-session attachment. All orchestrator tests passed 41/41.
+- Completed O6 with a bounded durable completion ledger, generation-safe claims, same-owner restart reclaim, idempotent acknowledgement, safe-boundary supervisor delivery and one persisted explicitly untrusted Aizen context handoff per delivery ID. Coding-agent handoff tests passed 3/3; all orchestrator tests passed 45/45; `npm run check` passed.
+- Kept Telegram outside the core critical path. O7 remained workspace safety; O8 owns Windows/Linux core service supervision and TUI integration under option A child-termination semantics.
+- Completed O7 canonical unmanaged workspace receipts, read-only no-tool process admission, mutating reader-RPC rejection, exclusive write-worktree ownership, verified sibling-worktree admission and workspace-verified restart reconnect. All orchestrator tests passed 50/50; `npm run check` and `git diff --check` passed.
+- Accepted D-017: Maestro records workspace ownership but never creates, mutates, cleans or removes worktrees; ambiguous ownership and reconnect fail closed.
+- Completed O8 with verified single-owner health/restart receipts, systemd cgroup and Windows Job Object containment, bounded option A shutdown, explicit degraded-adapter state, the `recode maestro` service surface, a live-session control board, non-blocking Aizen footer health, VS Code-safe configurable dequeue fallback, and Node/Bun distribution wiring. The Windows manual service path passed an end-to-end ready/health/planned-stop smoke test; all orchestrator tests passed 57/57 and focused coding-agent O6/O8 tests passed 12/12.
+
+## 2026-07-29 — Whole-product production review
+
+- Reviewed Recode as one product rather than treating Maestro as the complete scope, covering Aizen, workers, lifecycle, tools/integrations, memory, security, TUI/clients, providers, updates, release and deployment.
+- Cross-checked O0–O8 against frozen Hermes `5b22bd955682a8fc7b07769784c5129e23f53eaf` and found two production integration gaps behind passing component tests: the lifecycle service/adapters are not instantiated by production code, and normal supervisor terminal transitions do not call `enqueueCompletion()`.
+- Confirmed the deferred Hermes iteration-budget invariant remains absent from the production agent/supervisor integration.
+- Inspected the public READMEs for Codex, Claude Code, OpenCode, goose and Aider as product-positioning evidence only; no external implementation was adopted.
+- Added `Analyze/PRODUCTION-ROADMAP.md` with V1 single-machine production safety, V2 efficient multi-session/fleet operation and V3 multi-channel/ecosystem gates.
+- Reopened O1 production integration and O6 producer integration in `Analyze/PLAN.md`; O8 remains component-complete but requires Windows/Linux release certification.
+- Kept Telegram and broad jcode benchmarking outside the V1 critical path.
+
+## 2026-07-29 — V1 lifecycle closure
+
+- Updated repository authority: `agent-harness` is the active development branch; `repi/preserve-custom` remains a historical release-line reference.
+- Integrated `MaestroLifecycleService` and `MaestroFullSessionLifecycleAdapter` into the real full-session spawn, cancel, attachment, waiting-input, result and stop path over the existing supervisor backend.
+- Added real Windows/Linux RPC child process-start identity capture before lifecycle `RUNNING` admission.
+- Added independent provider-call iteration budgets with race-safe consume/refund behavior: 500 calls per Aizen run and 50 per named-worker/Shiori run.
+- Wired actual child terminal transitions into O6 and persisted terminal state, bounded summary, deterministic result hash and completion-outbox marker in the atomic instance manifest.
+- Added idempotent recovery for service crashes before completion enqueue and after queue persistence but before the instance outbox marker.
+- Added lifecycle/attachment synchronization for `WAITING_INPUT` and `RUNNING`.
+- Real isolated RPC child smoke passed lifecycle `RUNNING -> CANCELLED` with a verified process identity.
+- Validation passed: all orchestrator tests **59/59**, focused Agent loop/budget tests **23/23**, focused Aizen/worker tests **36/36**, and `npm run check`.
+- O1–O6 are production-integrated and complete under the accepted local lifecycle contract. Local IPC security and release certification remain separate next-phase decisions.
+
+## 2026-07-29 — Local control-plane security
+
+- Added a private 256-bit Maestro IPC token and authenticated every request and stream handshake before dispatch.
+- Added private Unix directory/file/socket checks and explicit no-all-user Windows named-pipe flags; documented same-user processes as remaining inside the trust boundary.
+- Replaced complete service-environment inheritance with a reviewed runtime/provider allowlist and explicit `REPI_MAESTRO_CHILD_ENV_ALLOW` exceptions.
+- Removed raw child stderr from control-plane errors and retained only byte-count plus truncated SHA-256 diagnostics.
+- Rejected detached mutating RPC commands unless they carry the current interactive owner generation.
+- Added deterministic denial for catastrophic recursive root/home/credential-store targets, path-traversal variants, raw devices, disk formatting and fork bombs; Recode remains explicitly non-sandboxed.
+- Real isolated RPC child lifecycle smoke continued to pass after environment filtering.
+- Validation passed: all orchestrator tests **63/63**, catastrophic-command tests **18/18**, relevant bash/Aizen tests, `npm run check`, and `git diff --check`.
+- Release identity, updater completion and Windows/Linux artifact/service certification are now the next bounded phase.

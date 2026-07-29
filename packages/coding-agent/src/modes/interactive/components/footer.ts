@@ -226,14 +226,14 @@ export class FooterComponent implements Component {
 		const pwdLine = truncateToWidth(theme.fg("footer", pwd), width, theme.fg("footer", "..."));
 		const lines = [pwdLine, dimStatsLeft + dimRemainder];
 
-		// Add extension statuses on a single line, sorted by key alphabetically
-		const extensionStatuses = this.footerData.getExtensionStatuses();
-		if (extensionStatuses.size > 0) {
-			const sortedStatuses = Array.from(extensionStatuses.entries())
+		// Add core statuses before extension-controlled statuses; extension cleanup cannot erase core state.
+		const coreStatuses = Array.from(this.footerData.getCoreStatuses?.().entries() ?? []);
+		const extensionStatuses = Array.from(this.footerData.getExtensionStatuses().entries());
+		if (coreStatuses.length > 0 || extensionStatuses.length > 0) {
+			const sortedStatuses = [...coreStatuses, ...extensionStatuses]
 				.sort(([a], [b]) => a.localeCompare(b))
 				.map(([, text]) => sanitizeStatusText(text));
-			const statusLine = sortedStatuses.join(" ");
-			// Truncate to terminal width with dim ellipsis for consistency with footer style
+			const statusLine = sortedStatuses.join("  ");
 			lines.push(truncateToWidth(statusLine, width, theme.fg("footer", "...")));
 		}
 

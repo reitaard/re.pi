@@ -1,4 +1,10 @@
-import { type AgentEvent, AgentHarness, type AgentMessage, Session } from "@reitaard/repi-agent-core";
+import {
+	type AgentEvent,
+	AgentHarness,
+	type AgentMessage,
+	DEFAULT_AGENT_MAX_ITERATIONS,
+	Session,
+} from "@reitaard/repi-agent-core";
 import { NodeExecutionEnv } from "@reitaard/repi-agent-core/node";
 import type { AssistantMessage, ImageContent, Models, TextContent, UserMessage } from "@reitaard/repi-ai";
 import { isContextOverflow, isRetryableAssistantError } from "@reitaard/repi-ai/compat";
@@ -89,6 +95,7 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 		session,
 		models,
 		...harnessProfile,
+		maxIterations: DEFAULT_AGENT_MAX_ITERATIONS,
 	});
 	harness.on("before_agent_start", hooks.beforeAgentStart);
 	harness.on("context", hooks.context);

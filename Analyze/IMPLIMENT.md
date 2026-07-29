@@ -328,6 +328,126 @@ Detailed evidence is in [`EXTENSIONAUDIT.md`](EXTENSIONAUDIT.md).
 - The checkpoint classification is recorded in [`MAESTRO-O3-CHECKPOINT.md`](MAESTRO-O3-CHECKPOINT.md).
 - Full `npm run check` and `git diff --check` passed. O4 owns durable-session turn leases and rotation-safe rebind.
 
+### O4 — Session turn lease
+
+**Status:** complete
+**Started:** 2026-07-28
+**Completed:** 2026-07-28
+
+- Ported Hermes's session-ID-keyed lease invariant from frozen local source while intentionally replacing timeout fail-open with an explicit `TurnLeaseTimeoutError`.
+- Added FIFO serialization by resolved durable session ID, so different instance/client aliases cannot interleave transcript turns.
+- Added identity- and generation-scoped idempotent release; stale tokens cannot free newer holders.
+- Added soft-bounded idle eviction that never evicts held or contended leases.
+- Added held-lease alias rebind when compaction rotates the durable session ID and fail-closed conflict behavior when the target domain is already live.
+- Integrated prompt lease acquisition into both unary and streaming supervisor RPC paths; read-only state/events remain concurrent.
+- Held prompt leases through the authoritative `agent_settled` boundary rather than releasing at prompt preflight response.
+- Synchronized and rebound session identity on `compaction_end`, then synchronized and released in order on `agent_settled`.
+- Released held leases on RPC failure, unsuccessful prompt preflight, process exit and destructive stop.
+- Added five translated registry tests and three Recode supervisor integration tests covering alias serialization, read-only concurrency, rotation rebind and fail-closed timeout.
+- All O0–O4 orchestrator tests: **37 passed**. Full `npm run check` and `git diff --check` passed.
+
+### O5 — Attach, detach, waiting input and reconnect
+
+**Status:** complete
+**Started:** 2026-07-28
+**Completed:** 2026-07-28
+
+- Enforced one interactive owner per live instance in both the public lifecycle service and RPC stream supervisor; duplicate owners fail explicitly rather than silently replacing the current owner.
+- Added concurrent read-only RPC streams with an explicit non-mutating command allowlist and isolated subscriber failures.
+- Made client close a non-destructive detach; only explicit stop disposes the child process.
+- Added generation-scoped interactive ownership so stale stream cleanup and responses cannot affect a newer attachment.
+- Persisted bounded blocking UI requests, transitioned detached sessions to `waiting-input`, and replayed pending input after reattachment or verified service restart.
+- Added bounded in-memory event/output tails by entry count, per-event bytes and aggregate bytes; oversized blocking UI requests are cancelled rather than retained unsafely.
+- Added current instance state, attachment identity and bounded replay to the RPC stream-ready response.
+- Added restart reconnection adapters that require matching independently observed process identity, transport identity, durable session ID and session file before adoption.
+- Required reconnect transports to support non-destructive detach; unverifiable records become retained `stopped` snapshots with diagnostics and unrelated processes are never killed or adopted.
+- Kept production fail-closed when no verifiable reconnect adapter exists; current stdio children cannot be safely reattached after supervisor restart.
+- Rechecked the frozen Hermes lifecycle sources: their detached gateway restart machinery does not map to Recode child-session attachment, so no gateway watcher or auto-respawn behavior was ported.
+- Added four focused O5 tests covering owner exclusion, read-only access, non-destructive detach, waiting-input replay, bounded tails, successful verified reconnect and session-mismatch refusal.
+- All O0–O5 orchestrator tests: **41 passed**. Full `npm run check` and `git diff --check` passed.
+
+### O6 — Completion queue and Aizen handoff
+
+**Status:** complete
+**Started:** 2026-07-28
+**Completed:** 2026-07-28
+
+- Added a separately persisted, schema-validated completion ledger keyed by authoritative parent instance or durable parent session identity.
+- Bounded summaries to 4,000 characters, the active ledger to 256 entries by default, individual claims to 64 records and retained acknowledged records to one hour.
+- Refused queue overflow rather than evicting an unacknowledged completion; acknowledged entries may be compacted safely when capacity is needed.
+- Added generation-scoped claims, foreign-owner lease exclusion, same-owner restart reclaim, stale-claim rejection, explicit release and idempotent acknowledgement.
+- Made lifecycle completion enqueue synchronous before reporting `handoffState: queued`; unavailable or failed persistence is surfaced explicitly in the terminal result.
+- Added supervisor delivery on enqueue, parent `agent_settled`, initial spawn and verified reconnect, serialized per parent so concurrent drain attempts cannot duplicate delivery.
+- Added a dedicated coding-agent RPC handoff that refuses active Aizen turns, appends one hidden durable context message, detects persisted delivery IDs and treats child text as explicitly untrusted supporting material.
+- Preserved only the bounded summary and child instance/session link; no private child transcript is copied into the parent.
+- Added three coding-agent handoff tests and four orchestrator queue/lifecycle/delivery tests. All coding-agent handoff tests passed **3/3**; all O0–O6 orchestrator tests passed **45/45**.
+- Full `npm run check` passed.
+
+### O7 — Workspace safety
+
+**Status:** complete
+**Started:** 2026-07-28
+**Completed:** 2026-07-28
+
+- Added canonical workspace ownership receipts containing only the selected path, worktree root, Git common directory, stable worktree identity, branch, access mode and owning instance.
+- Marked every receipt `managed: false`; Maestro never creates, merges, resets, stashes, removes or cleans a worktree.
+- Defaulted direct supervisor admission to read-only and required explicit `--write` at the CLI boundary for write-capable sessions.
+- Started read-only RPC children with `--no-tools`, marked their environment, blocked direct bash/export writes and rejected slash-extension invocation through the read-only prompt path.
+- Allowed read-only sessions to share a selected workspace while rejecting a second writer on the same canonical worktree.
+- Required a write-capable child of an active writer to use a distinct sibling worktree with the same canonical Git common directory.
+- Rejected new writers when any active ownership record is missing or ambiguous rather than guessing cleanup or workspace identity.
+- Persisted lineage and workspace receipts in the bounded atomic instance manifest and exposed only minimal active-worktree context through IPC summaries.
+- Required workspace receipt verification before restart reconnect; legacy or drifted ownership records are retained as stopped diagnostics and are never adopted blindly.
+- Added four focused O7 workspace tests and one process-launch regression. All O0–O7 orchestrator tests passed **50/50**.
+- Full `npm run check` and `git diff --check` passed.
+
+## O8 — Core service supervision and TUI integration
+
+**Completed:** 2026-07-29
+
+- Added one process-start-verified Maestro owner receipt, atomic persisted health, bounded crash history, and rapid-crash degradation diagnostics.
+- Added explicit `starting`, `ready`, `degraded`, `draining`, `stopped`, and `crashed` service states with independent Radius adapter health.
+- Added Linux systemd user-service generation with restart-on-failure and `KillMode=control-group` containment.
+- Added a reviewed Windows Task Scheduler path whose PowerShell host assigns Maestro to a kill-on-close Job Object before service initialization can spawn full-session children.
+- Implemented option A stop/restart semantics: reject new mutating admission, close IPC attachments, drain full sessions within a deadline, persist the exit classification, then let the native ownership container terminate any remaining descendants.
+- Kept native supervision single-owner and refused concurrent fallback-watcher configuration.
+- Added bounded IPC client deadlines and response buffers, verified attachment ownership, live/persisted session merging, and bounded sanitized activity/output summaries.
+- Added `recode maestro` routing, native service management, health/list/spawn/control commands, and a full-screen modern-minimal board with workspace, branch, elapsed state, current activity, pending input, latest output, attach/detach, prompt, cancel, and double-confirmed stop.
+- Added a non-blocking Aizen footer monitor that disappears when Maestro is unavailable and cannot be erased by extension status cleanup.
+- Preserved `Alt+Up` and added configurable `Ctrl+Shift+J` as a VS Code terminal-safe queued-message fallback.
+- Added Maestro to npm/local/custom packaging and added a separate `recode-maestro` executable to Bun release archives so the service remains independently supervised without loading Maestro during ordinary Aizen startup.
+- Verified the Windows manual service path end to end: ready health over the named pipe, planned shutdown acknowledgement, zero exit, owner release, and persisted `planned-stop` health.
+- Added focused service-containment, ownership, health/shutdown, socket-shutdown, dashboard, footer, and keybinding regressions; all orchestrator tests passed **57/57** and focused coding-agent O6/O8 tests passed **12/12**.
+
+## V1 lifecycle closure — O1/O3/O6 production integration
+
+**Completed:** 2026-07-29
+
+- Made `MaestroLifecycleService` plus `MaestroFullSessionLifecycleAdapter` the production full-session authority over the existing `OrchestratorSupervisor` backend; no second supervisor was added.
+- Kept the lifecycle handle instance id identical to the durable supervisor record and exposed production lifecycle status/result for diagnostics and conformance.
+- Synchronized production attachment generations and `WAITING_INPUT`/`RUNNING` transitions with the versioned lifecycle state machine.
+- Added independently observed Windows/Linux process-start identity to real RPC children before the lifecycle reports `RUNNING`.
+- Added independent per-run provider-call iteration budgets: 500 for Aizen and 50 for named workers/Shiori, with race-safe consume/refund behavior and explicit exhaustion errors.
+- Persisted terminal state, bounded summary, deterministic result hash and completion-outbox marker in the instance manifest.
+- Enqueued one O6 completion from real child terminal transitions and recovered both crash-before-enqueue and enqueue-before-marker windows through the queue's child-id/result-hash idempotency.
+- Added production integration, waiting-input, forced-exit, real-terminal producer and outbox recovery regressions.
+- Real isolated RPC child smoke passed `RUNNING -> CANCELLED` with a verified process identity.
+- Validation passed: all orchestrator tests **59/59**, focused Agent loop/budget tests **23/23**, focused Aizen/worker tests **36/36**, and `npm run check`.
+
+## V1 local control-plane security
+
+**Completed:** 2026-07-29
+
+- Added a private 256-bit current-user IPC token and authenticated every request and RPC-stream handshake before dispatch.
+- Persisted the token outside command arguments/responses, verified regular-file identity, repaired/rechecked Unix directory mode `0700`, required auth/socket mode `0600`, and disabled all-user named-pipe read/write flags.
+- Replaced full service-environment inheritance with a reviewed runtime/provider allowlist; exceptional MCP/integration variables require explicit `REPI_MAESTRO_CHILD_ENV_ALLOW` names.
+- Removed raw child stderr from control-plane errors; diagnostics now expose only bounded byte count and a truncated SHA-256 identity.
+- Rejected detached mutating RPC calls unless they carry the current interactive owner and attachment generation.
+- Added a narrow absolute-deny bash gate for recursive destruction of filesystem roots, home/credential stores (including traversal forms), raw-device writes, formatting and fork bombs.
+- Kept same-user processes explicitly inside the trust boundary; these controls do not claim sandboxing.
+- Real isolated RPC lifecycle smoke still passed after environment filtering.
+- Validation passed: all orchestrator tests **63/63**, catastrophic-command tests **18/18**, relevant bash/Aizen tests, `npm run check`, and `git diff --check`.
+
 ## Comparison traceability
 
 The implementation is governed by [`analyze/COMPARE.md`](../analyze/COMPARE.md), not only its startup section. `Analyze/PLAN.md` maps the complete comparison into startup/package work, lifecycle/service work, matched three-way validation and P0–P4 distribution, preservation, safety, memory and integrated-product work. S3 is current because accurate independent readiness boundaries are required before lifecycle/service work can improve perceived and complete startup honestly.
@@ -347,4 +467,4 @@ After S2–S3 and the O0–O8 Hermes lifecycle/service checkpoint:
 
 ## Later phases
 
-S3–S4, O0–O9 and C0–C4 remain `not started`. No runtime optimization or orchestrator behavior has been changed yet.
+S3 and O0–O8, including the V1 O1/O3/O6 production closure, are complete. The next bounded phase will be selected by the Creator between local control-plane security and release/update/certification work. O9, Telegram and the exact jcode checkpoint remain outside this completed lifecycle phase.

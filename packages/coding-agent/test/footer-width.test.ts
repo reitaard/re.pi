@@ -135,6 +135,19 @@ describe("FooterComponent width handling", () => {
 		}
 	});
 
+	it("renders core Maestro status independently from extension status", () => {
+		const footerData = createFooterData(1);
+		const footer = new FooterComponent(createSession({ sessionName: "" }), {
+			...footerData,
+			getCoreStatuses: () => new Map([["maestro", "MAESTRO ◆ 2 live / 1 input"]]),
+			getExtensionStatuses: () => new Map([["extension", "extension-ready"]]),
+		});
+
+		const statusLine = stripAnsi(footer.render(120)[2]);
+		expect(statusLine).toContain("MAESTRO ◆ 2 live / 1 input");
+		expect(statusLine).toContain("extension-ready");
+	});
+
 	it("shows the latest cache hit rate when cache usage is present", () => {
 		const session = createSession({
 			sessionName: "",

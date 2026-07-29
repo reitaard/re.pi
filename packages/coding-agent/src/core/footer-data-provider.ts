@@ -101,6 +101,7 @@ export class FooterDataProvider {
 	private static readonly WATCH_DEBOUNCE_MS = 500;
 
 	private extensionStatuses = new Map<string, string>();
+	private coreStatuses = new Map<string, string>();
 	private cachedBranch: string | null | undefined = undefined;
 	private gitPaths: GitPaths | null | undefined = undefined;
 	private headWatcher: FSWatcher | null = null;
@@ -134,6 +135,16 @@ export class FooterDataProvider {
 	/** Extension status texts set via ctx.ui.setStatus() */
 	getExtensionStatuses(): ReadonlyMap<string, string> {
 		return this.extensionStatuses;
+	}
+
+	/** Core runtime statuses, kept separate from extension-controlled status keys. */
+	getCoreStatuses(): ReadonlyMap<string, string> {
+		return this.coreStatuses;
+	}
+
+	setCoreStatus(key: string, text: string | undefined): void {
+		if (text === undefined) this.coreStatuses.delete(key);
+		else this.coreStatuses.set(key, text);
 	}
 
 	/** Subscribe to git branch changes. Returns unsubscribe function. */
@@ -385,4 +396,5 @@ export class FooterDataProvider {
 export type ReadonlyFooterDataProvider = Pick<
 	FooterDataProvider,
 	"getGitBranch" | "getExtensionStatuses" | "getAvailableProviderCount" | "onBranchChange"
->;
+> &
+	Partial<Pick<FooterDataProvider, "getCoreStatuses">>;

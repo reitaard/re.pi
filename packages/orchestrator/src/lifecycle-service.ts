@@ -20,6 +20,7 @@ import {
 	type MaestroTerminalState,
 	type MaestroTerminalStatus,
 } from "./lifecycle-contract.ts";
+import type { CompletionRecord } from "./types.ts";
 
 const MAX_GOAL_CHARS = 16_000;
 const MAX_CONTEXT_CHARS = 32_000;
@@ -33,12 +34,15 @@ export interface MaestroLifecycleCompletion {
 	summary?: string;
 	errorClassification?: string;
 	errorMessage?: string;
+	resultHash?: string;
+	handoffState?: "not-required" | "queued" | "failed";
+	handoffDiagnostic?: string;
 }
 
 export interface MaestroLifecycleControl {
 	readonly handle: Readonly<MaestroHandle>;
 	transition(
-		state: "RUNNING",
+		state: "RUNNING" | "WAITING_INPUT",
 		updates?: { runtime?: MaestroRuntimeIdentity; progress?: MaestroProgressSnapshot },
 	): void;
 	update(updates: { runtime?: MaestroRuntimeIdentity; progress?: MaestroProgressSnapshot }): void;
@@ -73,10 +77,24 @@ interface LifecycleRecord {
 	subscribers: Set<(event: Readonly<MaestroLifecycleEvent>) => void>;
 }
 
+export interface MaestroCompletionSink {
+	enqueue(input: {
+		parentInstanceId?: string;
+		parentSessionId?: string;
+		childInstanceId: string;
+		childSessionId?: string;
+		terminalState: MaestroTerminalState;
+		summary?: string;
+		resultHash: string;
+		completedAt: string;
+	}): CompletionRecord;
+}
+
 export interface MaestroLifecycleServiceOptions {
 	adapters: readonly MaestroLifecycleAdapter[];
 	terminalRetentionMs?: number;
 	now?: () => Date;
+	completionQueue?: MaestroCompletionSink;
 }
 
 function bounded(value: string | undefined, max: number): string | undefined {
@@ -186,12 +204,13 @@ function validateLaunchRequest(request: MaestroLaunchRequest): void {
 	if (typeof request.cwd !== "string" || !request.cwd || request.cwd.length > 4096) {
 		throw new MaestroLifecycleError("INVALID_REQUEST", "cwd must contain 1 to 4096 characters");
 	}
-	for (const value of [
-		request.worktreeIdentity,
-		request.parentInstanceId,
-		request.parentSessionId,
-		request.correlationId,
-	]) {
+	if (request.workspaceAccess !== "read-only" && request.workspaceAccess !== "write") {
+		throw new MaestroLifecycleError("INVALID_REQUEST", "workspaceAccess must be read-only or write");
+	}
+	if (request.kind === "worker" && request.workspaceAccess !== "read-only") {
+		throw new MaestroLifecycleError("INVALID_REQUEST", "Named-worker lifecycle requests must remain read-only");
+	}
+	for (const value of [request.parentInstanceId, request.parentSessionId, request.correlationId]) {
 		if (value !== undefined && (typeof value !== "string" || !value || value.length > 512)) {
 			throw new MaestroLifecycleError(
 				"INVALID_REQUEST",
@@ -216,6 +235,7 @@ export class MaestroLifecycleService {
 	private readonly correlations = new Map<string, string>();
 	private readonly terminalRetentionMs: number;
 	private readonly now: () => Date;
+	private readonly completionQueue?: MaestroCompletionSink;
 
 	constructor(options: MaestroLifecycleServiceOptions) {
 		const adapters = new Map<MaestroLifecycleKind, MaestroLifecycleAdapter>();
@@ -231,10 +251,17 @@ export class MaestroLifecycleService {
 			throw new MaestroLifecycleError("INVALID_REQUEST", "terminalRetentionMs must be a non-negative finite number");
 		}
 		this.now = options.now ?? (() => new Date());
+		this.completionQueue = options.completionQueue;
 	}
 
-	launch(request: MaestroLaunchRequest): Readonly<MaestroHandle> {
+	launch(request: MaestroLaunchRequest, options: { instanceId?: string } = {}): Readonly<MaestroHandle> {
 		validateLaunchRequest(request);
+		if (
+			options.instanceId !== undefined &&
+			(typeof options.instanceId !== "string" || !options.instanceId || options.instanceId.length > 512)
+		) {
+			throw new MaestroLifecycleError("INVALID_REQUEST", "instanceId must contain 1 to 512 characters");
+		}
 		this.cleanupExpired();
 		const adapter = this.adapters.get(request.kind);
 		if (!adapter) {
@@ -245,9 +272,13 @@ export class MaestroLifecycleService {
 			throw new MaestroLifecycleError("DUPLICATE_CORRELATION", "Duplicate correlationId for this parent");
 		}
 		const createdAt = this.timestamp();
+		const instanceId = options.instanceId ?? randomUUID();
+		if (this.records.has(instanceId)) {
+			throw new MaestroLifecycleError("INVALID_REQUEST", `Lifecycle instance already exists: ${instanceId}`);
+		}
 		const handle: MaestroHandle = {
 			contractVersion: MAESTRO_LIFECYCLE_CONTRACT_VERSION,
-			instanceId: randomUUID(),
+			instanceId,
 			kind: request.kind,
 			parentInstanceId: request.parentInstanceId,
 			parentSessionId: request.parentSessionId,
@@ -268,7 +299,6 @@ export class MaestroLifecycleService {
 			ownerGeneration: 0,
 			runtime: {
 				cwd: request.cwd,
-				worktreeIdentity: request.worktreeIdentity,
 			},
 			completion,
 			resolveCompletion,
@@ -293,6 +323,20 @@ export class MaestroLifecycleService {
 				diagnostic: "UNKNOWN_HANDLE",
 			};
 		}
+		return this.snapshot(record);
+	}
+
+	setWaitingInput(handle: MaestroHandle, waiting: boolean): MaestroStatus {
+		const record = this.requireRecord(handle);
+		if (
+			isMaestroTerminalState(record.state) ||
+			record.state === "CANCEL_REQUESTED" ||
+			record.state === "PENDING" ||
+			record.state === "STARTING"
+		)
+			return this.snapshot(record);
+		const target = waiting ? "WAITING_INPUT" : "RUNNING";
+		if (record.state !== target) this.transition(record, target);
 		return this.snapshot(record);
 	}
 
@@ -332,8 +376,8 @@ export class MaestroLifecycleService {
 			};
 		}
 		const cancelledBeforeLaunch = record.state === "PENDING";
-		if (record.state !== "CANCEL_REQUESTED") this.transition(record, "CANCEL_REQUESTED");
 		if (cancelledBeforeLaunch) {
+			this.transition(record, "CANCEL_REQUESTED");
 			return {
 				accepted: true,
 				alreadyTerminal: false,
@@ -354,9 +398,12 @@ export class MaestroLifecycleService {
 			};
 		}
 		const accepted = await record.adapter.cancel(cloneHandle(record.handle), bounded(reason, 500) ?? "", commandId);
+		if (accepted && !isMaestroTerminalState(record.state) && record.state !== "CANCEL_REQUESTED") {
+			this.transition(record, "CANCEL_REQUESTED");
+		}
 		return {
 			accepted,
-			alreadyTerminal: false,
+			alreadyTerminal: isMaestroTerminalState(record.state),
 			unknownHandle: false,
 			unsupported: !accepted,
 			staleOwner: false,
@@ -424,6 +471,12 @@ export class MaestroLifecycleService {
 		const record = this.requireRecord(handle);
 		if (!ownerId || ownerId.length > 512) {
 			throw new MaestroLifecycleError("INVALID_REQUEST", "ownerId must contain 1 to 512 characters");
+		}
+		if (record.owner) {
+			throw new MaestroLifecycleError(
+				"OWNER_ATTACHED",
+				`Interactive owner already attached: ${record.owner.ownerId}`,
+			);
 		}
 		record.ownerGeneration += 1;
 		record.owner = {
@@ -501,7 +554,6 @@ export class MaestroLifecycleService {
 	}
 
 	private complete(record: LifecycleRecord, completion: MaestroLifecycleCompletion): void {
-		this.transition(record, completion.state);
 		record.completedAt = this.timestamp();
 		const unhashed: MaestroResult = {
 			handle: cloneHandle(record.handle),
@@ -513,10 +565,40 @@ export class MaestroLifecycleService {
 			errorClassification: bounded(completion.errorClassification, 256),
 			errorMessage: bounded(completion.errorMessage, MAX_RESULT_CHARS),
 		};
+		const resultHash = completion.resultHash ?? createHash("sha256").update(JSON.stringify(unhashed)).digest("hex");
 		record.result = {
 			...unhashed,
-			resultHash: createHash("sha256").update(JSON.stringify(unhashed)).digest("hex"),
+			resultHash,
+			handoffState: completion.handoffState ?? "not-required",
+			handoffDiagnostic: bounded(completion.handoffDiagnostic, MAX_RESULT_CHARS),
 		};
+		this.transition(record, completion.state);
+		if ((record.handle.parentInstanceId || record.handle.parentSessionId) && !completion.handoffState) {
+			if (!this.completionQueue) {
+				record.result.handoffState = "failed";
+				record.result.handoffDiagnostic = "COMPLETION_QUEUE_UNAVAILABLE";
+			} else {
+				try {
+					this.completionQueue.enqueue({
+						parentInstanceId: record.handle.parentInstanceId,
+						parentSessionId: record.handle.parentSessionId,
+						childInstanceId: record.handle.instanceId,
+						childSessionId: record.runtime.sessionId,
+						terminalState: completion.state,
+						summary: completion.summary ?? completion.errorMessage,
+						resultHash,
+						completedAt: record.completedAt,
+					});
+					record.result.handoffState = "queued";
+				} catch (error) {
+					record.result.handoffState = "failed";
+					record.result.handoffDiagnostic = bounded(
+						`COMPLETION_ENQUEUE_FAILED: ${error instanceof Error ? error.message : String(error)}`,
+						MAX_RESULT_CHARS,
+					);
+				}
+			}
+		}
 		record.resolveCompletion();
 	}
 

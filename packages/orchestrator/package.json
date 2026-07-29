@@ -1,15 +1,19 @@
 {
 	"name": "@reitaard/repi-orchestrator",
 	"version": "0.81.4",
-	"description": "experimental orchestrator package for pi",
+	"description": "Recode Maestro service supervision and live-session TUI",
 	"type": "module",
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
+	"bin": {
+		"recode-maestro": "dist/cli.js"
+	},
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
-		}
+		},
+		"./cli": "./dist/cli.js"
 	},
 	"files": [
 		"dist",
@@ -37,6 +41,10 @@
 		"node": ">=22.19.0"
 	},
 	"dependencies": {
+		"@reitaard/repi-tui": "^0.81.4",
+		"chalk": "5.6.2"
+	},
+	"peerDependencies": {
 		"@reitaard/repi-coding-agent": "^0.81.4"
 	},
 	"devDependencies": {

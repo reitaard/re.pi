@@ -66,6 +66,7 @@ export class MaestroWorkerLifecycleAdapter implements MaestroLifecycleAdapter {
 
 export interface MaestroFullSessionResource {
 	identity: MaestroRuntimeIdentity;
+	waitingInput?: boolean;
 	completion: Promise<MaestroLifecycleCompletion>;
 	cancel?(reason: string, commandId?: string): Promise<boolean>;
 	stop(): Promise<void>;
@@ -75,6 +76,7 @@ export interface MaestroFullSessionResource {
 export type MaestroFullSessionLauncher = (
 	request: Readonly<MaestroLaunchRequest>,
 	update: (progress: MaestroProgressSnapshot) => void,
+	handle: Readonly<MaestroHandle>,
 ) => Promise<MaestroFullSessionResource>;
 
 interface FullSessionOperation {
@@ -101,7 +103,7 @@ export class MaestroFullSessionLifecycleAdapter implements MaestroLifecycleAdapt
 		this.operations.set(control.handle.instanceId, operation);
 		let handedOff = false;
 		try {
-			const resource = await this.launcher(request, (progress) => control.update({ progress }));
+			const resource = await this.launcher(request, (progress) => control.update({ progress }), control.handle);
 			operation.resource = resource;
 			if (operation.stopRequested) {
 				await resource.stop();
@@ -115,7 +117,7 @@ export class MaestroFullSessionLifecycleAdapter implements MaestroLifecycleAdapt
 					return { state: "CANCELLED", summary: "Session cancelled during launch" };
 				}
 			} else {
-				control.transition("RUNNING", { runtime: resource.identity });
+				control.transition(resource.waitingInput ? "WAITING_INPUT" : "RUNNING", { runtime: resource.identity });
 				handedOff = true;
 			}
 			return await resource.completion;

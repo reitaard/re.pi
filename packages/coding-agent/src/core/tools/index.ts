@@ -16,6 +16,7 @@ export {
 	createBashToolDefinition,
 	createLocalBashOperations,
 } from "./bash.ts";
+export { getCatastrophicCommandReason } from "./command-safety.ts";
 export {
 	createEditTool,
 	createEditToolDefinition,

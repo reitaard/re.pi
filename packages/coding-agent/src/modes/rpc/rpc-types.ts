@@ -11,6 +11,10 @@ import type { SessionStats } from "../../core/agent-session.ts";
 import type { BashResult } from "../../core/bash-executor.ts";
 import type { CompactionResult } from "../../core/compaction/index.ts";
 import type { LifecycleReadinessSnapshot } from "../../core/lifecycle-readiness.ts";
+import type {
+	MaestroCompletionHandoffPayload,
+	MaestroCompletionHandoffResult,
+} from "../../core/maestro-completion-handoff.ts";
 import type { SessionEntry, SessionTreeNode } from "../../core/session-manager.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
 
@@ -27,6 +31,7 @@ export type RpcCommand =
 	| { id?: string; type: "new_session"; parentSession?: string }
 
 	// External systems
+	| ({ id?: string; type: "maestro_completion_handoff" } & MaestroCompletionHandoffPayload)
 	| {
 			id?: string;
 			type: "external_event";
@@ -136,6 +141,13 @@ export type RpcResponse =
 	| { id?: string; type: "response"; command: "follow_up"; success: true }
 	| { id?: string; type: "response"; command: "abort"; success: true }
 	| { id?: string; type: "response"; command: "new_session"; success: true; data: { cancelled: boolean } }
+	| {
+			id?: string;
+			type: "response";
+			command: "maestro_completion_handoff";
+			success: true;
+			data: MaestroCompletionHandoffResult;
+	  }
 	| {
 			id?: string;
 			type: "response";

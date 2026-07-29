@@ -8,6 +8,7 @@ const packages = [
 	{ directory: "packages/ai", name: "@reitaard/repi-ai" },
 	{ directory: "packages/agent", name: "@reitaard/repi-agent-core" },
 	{ directory: "packages/tui", name: "@reitaard/repi-tui" },
+	{ directory: "packages/orchestrator", name: "@reitaard/repi-orchestrator" },
 	{ directory: "packages/coding-agent", name: "@reitaard/repi-coding-agent" },
 ];
 
