@@ -130,6 +130,19 @@ describe("LSP client", () => {
 		).toEqual(Array.from({ length: 50 }, (_, sequence) => sequence));
 	});
 
+	test("handles child stdin errors without an uncaught exception", async () => {
+		const root = mkdtempSync(join(tmpdir(), "repi-lsp-stdin-error-"));
+		const client = await getOrCreateClient(
+			{ command: process.execPath, args: [createFakeServer(root)], fileTypes: [".ts"], useLspmux: false },
+			root,
+		);
+		const pipeError = Object.assign(new Error("write EPIPE"), { code: "EPIPE" });
+
+		expect(() => client.process.stdin.emit("error", pipeError)).not.toThrow();
+		expect(client.state).toBe("error");
+		await expect(sendNotification(client, "test/afterPipeError", {})).rejects.toThrow("not accepting messages");
+	});
+
 	test("waits for announced project indexing progress to finish", async () => {
 		const root = mkdtempSync(join(tmpdir(), "repi-lsp-progress-"));
 		const client = await getOrCreateClient(

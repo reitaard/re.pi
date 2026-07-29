@@ -1,6 +1,7 @@
 import {
 	type AgentEvent,
 	AgentHarness,
+	AgentHarnessError,
 	type AgentMessage,
 	DEFAULT_AGENT_MAX_ITERATIONS,
 	Session,
@@ -114,7 +115,7 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 	let activeCompaction: { reason: "manual" | "threshold" | "overflow"; willRetry: boolean } | undefined;
 	let pendingMessageCount = 0;
 	let retryAbortController: AbortController | undefined;
-	let running = false;
+	let activeRun: Promise<AssistantMessage> | undefined;
 	const sessionControl = new RecodeSessionControlHost(
 		getAgentDir(),
 		options.agentSession.sessionId,
@@ -171,10 +172,9 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 		thinkingLevel: profile.compactionThinkingLevel,
 	};
 
-	const runWithRecovery = async (start: () => Promise<AssistantMessage>): Promise<AssistantMessage> => {
+	const executeWithRecovery = async (start: () => Promise<AssistantMessage>): Promise<AssistantMessage> => {
 		let retryAttempt = 0;
 		await sessionControl.start();
-		running = true;
 		try {
 			let response = await start();
 			let overflowRecoveryAttempted = false;
@@ -269,12 +269,24 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 
 			return response;
 		} finally {
-			running = false;
 			flushAgentEnd(false);
 			await hooks.settled?.();
 			emit({ type: "agent_settled" });
 			await sessionControl.stop().catch(() => undefined);
 		}
+	};
+	const runWithRecovery = (start: () => Promise<AssistantMessage>): Promise<AssistantMessage> => {
+		if (activeRun) throw new AgentHarnessError("busy", "Aizen runtime is busy");
+		const run = executeWithRecovery(start);
+		activeRun = run;
+		const clearActiveRun = (): void => {
+			if (activeRun === run) activeRun = undefined;
+		};
+		void run.then(clearActiveRun, clearActiveRun);
+		return run;
+	};
+	const waitForRun = async (run: Promise<AssistantMessage>): Promise<void> => {
+		await run.catch(() => undefined);
 	};
 	const prompt = async (text: string, promptOptions?: { images?: ImageContent[] }): Promise<AssistantMessage> => {
 		emitStartupMilestone("prompt-accepted");
@@ -295,9 +307,16 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 		};
 		if (messageOptions?.deliverAs === "nextTurn") {
 			await harness.nextTurnMessage(appMessage);
-		} else if (running) {
-			if (messageOptions?.deliverAs === "followUp") await harness.followUpMessage(appMessage);
-			else await harness.steerMessage(appMessage);
+		} else if (activeRun) {
+			const currentRun = activeRun;
+			try {
+				if (messageOptions?.deliverAs === "followUp") await harness.followUpMessage(appMessage);
+				else await harness.steerMessage(appMessage);
+			} catch (error) {
+				if (!(error instanceof AgentHarnessError) || error.code !== "invalid_state") throw error;
+				await waitForRun(currentRun);
+				await sendCustomMessage(message, messageOptions);
+			}
 		} else if (messageOptions?.triggerTurn) {
 			await runWithRecovery(async () => await harness.sendMessage(appMessage));
 		} else {
@@ -312,11 +331,18 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 	): Promise<void> => {
 		const parts = typeof content === "string" ? [{ type: "text" as const, text: content }] : content;
 		const userMessage: UserMessage = { role: "user", content: parts, timestamp: Date.now() };
-		if (running) {
+		if (!activeRun) {
+			await runWithRecovery(async () => await harness.sendMessage(userMessage));
+			return;
+		}
+		const currentRun = activeRun;
+		try {
 			if (messageOptions?.deliverAs === "followUp") await harness.followUpMessage(userMessage);
 			else await harness.steerMessage(userMessage);
-		} else {
-			await runWithRecovery(async () => await harness.sendMessage(userMessage));
+		} catch (error) {
+			if (!(error instanceof AgentHarnessError) || error.code !== "invalid_state") throw error;
+			await waitForRun(currentRun);
+			await sendUserMessage(content, messageOptions);
 		}
 	};
 	const appendEntry = async (
@@ -366,7 +392,7 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 		waitForIdle: () => harness.waitForIdle(),
 		clearQueuedMessages: () => harness.clearQueuedMessages(),
 		isCompacting: () => activeCompaction !== undefined,
-		isRunning: () => running,
+		isRunning: () => activeRun !== undefined,
 		pendingMessageCount: () => pendingMessageCount,
 		subscribe: (listener) => {
 			listeners.add(listener);

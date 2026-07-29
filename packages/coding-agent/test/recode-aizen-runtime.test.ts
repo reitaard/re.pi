@@ -73,6 +73,72 @@ describe("Aizen runtime", () => {
 		expect(eventTypes.at(-1)).toBe("agent_settled");
 	});
 
+	test("starts a new turn when steering arrives after the harness becomes idle", async () => {
+		const root = mkdtempSync(join(tmpdir(), "recode-aizen-runtime-idle-steer-"));
+		tempDirs.push(root);
+		const manager = SessionManager.inMemory(root);
+		const models = createModels();
+		const faux = fauxProvider({ provider: "aizen-idle-steer-faux" });
+		faux.setResponses([fauxAssistantMessage("First response"), fauxAssistantMessage("Second response")]);
+		models.setProvider(faux.provider);
+		let releaseSettled = (): void => {};
+		let signalSettled = (): void => {};
+		const settledStarted = new Promise<void>((resolve) => {
+			signalSettled = resolve;
+		});
+		const settledBlocked = new Promise<void>((resolve) => {
+			releaseSettled = resolve;
+		});
+		let settledCalls = 0;
+		const profile: AizenRuntimeProfile = {
+			model: faux.getModel(),
+			compactionModel: faux.getModel(),
+			compactionThinkingLevel: "off",
+			thinkingLevel: "off",
+			tools: [],
+			systemPrompt: "You are Aizen.",
+			activeToolNames: [],
+			steeringMode: "one-at-a-time",
+			followUpMode: "one-at-a-time",
+			resources: {},
+			hooks: {
+				...noOpHooks,
+				settled: async () => {
+					settledCalls++;
+					if (settledCalls !== 1) return;
+					signalSettled();
+					await settledBlocked;
+				},
+			},
+		};
+		const agentSession = {
+			sessionManager: manager,
+			sessionId: manager.getSessionId(),
+			sessionFile: manager.getSessionFile(),
+			modelRegistry: {},
+			createAizenRuntimeProfile: () => profile,
+		} as AgentSession;
+		const runtime = createAizenRuntime({ agentSession, cwd: root, models });
+
+		const firstPrompt = runtime.prompt("First prompt");
+		await settledStarted;
+		const idleBoundarySteer = runtime.sendUserMessage("Second prompt", { deliverAs: "steer" });
+		releaseSettled();
+
+		await expect(firstPrompt).resolves.toMatchObject({ content: [{ type: "text", text: "First response" }] });
+		await expect(idleBoundarySteer).resolves.toBeUndefined();
+		const messages = manager
+			.getBranch()
+			.filter((entry) => entry.type === "message")
+			.map((entry) => entry.message);
+		expect(messages).toEqual([
+			expect.objectContaining({ role: "user", content: [{ type: "text", text: "First prompt" }] }),
+			expect.objectContaining({ role: "assistant", content: [{ type: "text", text: "First response" }] }),
+			expect.objectContaining({ role: "user", content: [{ type: "text", text: "Second prompt" }] }),
+			expect.objectContaining({ role: "assistant", content: [{ type: "text", text: "Second response" }] }),
+		]);
+	});
+
 	test("preserves retry lifecycle events across one recovered Aizen prompt", async () => {
 		const root = mkdtempSync(join(tmpdir(), "recode-aizen-runtime-retry-"));
 		tempDirs.push(root);

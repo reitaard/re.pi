@@ -127,7 +127,12 @@ function queueWriteMessage(
 		if (signal?.aborted) {
 			throw signal.reason instanceof Error ? signal.reason : new Error("Operation aborted");
 		}
-		if (!client.process.stdin.writable || client.process.stdin.destroyed) {
+		if (
+			client.state === "error" ||
+			client.state === "stopped" ||
+			!client.process.stdin.writable ||
+			client.process.stdin.destroyed
+		) {
 			throw new Error(`LSP server ${client.name} is not accepting messages`);
 		}
 		const content = JSON.stringify(message);
@@ -285,6 +290,9 @@ function startMessageReader(client: LspClient): void {
 		reportClientFailure(client, new Error(`LSP server exited (${signal ?? code ?? "unknown"})${detail}`));
 	});
 	client.process.on("error", (error) => {
+		reportClientFailure(client, error);
+	});
+	client.process.stdin.on("error", (error) => {
 		reportClientFailure(client, error);
 	});
 }
