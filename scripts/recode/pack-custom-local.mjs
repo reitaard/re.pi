@@ -103,7 +103,10 @@ delete installManifest.scripts.prepublishOnly;
 delete installManifest.scripts.prepare;
 writeJson(join(stage, "package.json"), installManifest);
 
-runNpm(["install", "--ignore-scripts", "--package-lock=false", "--fund=false", "--audit=false"], stage);
+runNpm(
+	["install", "--ignore-scripts", "--package-lock=false", "--fund=false", "--audit=false", "--legacy-peer-deps"],
+	stage,
+);
 
 const bundledDependencies = [...Object.keys(originalManifest.dependencies), ...Object.keys(originalManifest.optionalDependencies ?? {})];
 const finalManifest = {
