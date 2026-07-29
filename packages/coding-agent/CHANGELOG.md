@@ -54,6 +54,7 @@
 - Kept `noTools` respected after named-worker delegation became default-on.
 - Reused the active session-control host across Agent continuations so retry and queued follow-up turns keep running inside one prompt lifecycle.
 - Resolved bundled Maestro dependencies against the stable workspace version before applying a development suffix to local canary artifacts.
+- Loaded Recode's first-party OpenAI OAuth, custom provider, and memory extensions in RPC children so Maestro accepts the same configured models as the foreground CLI.
 
 ## [0.81.4] - 2026-07-22
 
