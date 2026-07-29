@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Added an offline release build that compiles the committed model catalogs without refreshing live provider metadata.
+
 ## [0.81.4] - 2026-07-22
 
 ### Breaking Changes

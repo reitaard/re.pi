@@ -261,6 +261,7 @@
 - Corrected the release script to push the validated authoritative branch instead of unrelated `main`, reject pre-existing target tags and reverify the created tag before any push.
 - Added deterministic embedded `recode-release.json` provenance for npm, binary, Termux and source artifacts plus detached `recode-artifacts.json` size/SHA-256 indexing and `SHA256SUMS` coverage.
 - Closed a review-discovered stale-output provenance gap: tagged binaries cannot skip builds, direct custom/npm packaging performs a clean build, and source identity is rechecked after builds before manifests or publication.
+- A clean-clone canary attempt correctly stopped when the ordinary AI build refreshed live model catalogs. Added an offline release build that compiles the committed catalogs without source drift; all packaging paths now use it.
 - Required the artifact verifier to match the exact filename set declared by the release manifest, reject duplicates and validate manifest binding, sizes and hashes.
 - Normalized binary archive ordering, timestamps, ownership metadata and ZIP metadata where practical.
 - Disabled self-update discovery in the shipped CLI until a Recode-owned endpoint and manifest-verification path are built in. Extension updates remain independent; controlled tests retain endpoint injection and foreign package identities remain rejected before mutation.

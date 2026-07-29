@@ -55,7 +55,7 @@ function copyIfPresent(source, destination) {
 
 const releaseIdentity = assertReleaseIdentity({ mode: "branch", root });
 runNpm(["run", "clean"]);
-runNpm(["run", "build"]);
+runNpm(["run", "build:release"]);
 const rebuiltIdentity = assertReleaseIdentity({ mode: "branch", root });
 if (rebuiltIdentity.commit !== releaseIdentity.commit) throw new Error("Release source changed during the clean build");
 const sourceCommit = releaseIdentity.commit;

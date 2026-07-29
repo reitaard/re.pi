@@ -86,7 +86,7 @@ function isPublished(name, version) {
 }
 
 run("npm", ["run", "clean"]);
-run("npm", ["run", "build"]);
+run("npm", ["run", "build:release"]);
 run("npm", ["run", "check"]);
 const rebuiltIdentity = releaseTag
 	? assertReleaseIdentity({ expectedTag: releaseTag, mode: "tag" })

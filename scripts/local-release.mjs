@@ -217,10 +217,8 @@ if (!options.skipCheck) {
 	run("npm", ["run", "check"], { cwd: repoRoot });
 }
 
-for (const pkg of packages) {
-	run("npm", ["run", "clean"], { cwd: pkg.directory });
-	run("npm", ["run", "build"], { cwd: pkg.directory });
-}
+run("npm", ["run", "clean"], { cwd: repoRoot });
+run("npm", ["run", "build:release"], { cwd: repoRoot });
 
 if (!options.skipTest) {
 	run("bash", ["./test.sh"], { cwd: repoRoot });

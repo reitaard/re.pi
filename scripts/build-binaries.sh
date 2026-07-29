@@ -135,7 +135,7 @@ fi
 if [[ "$SKIP_BUILD" == "false" ]]; then
     echo "==> Building all packages..."
     npm run clean
-    npm run build
+    npm run build:release
 else
     echo "==> Skipping package build (--skip-build)"
 fi

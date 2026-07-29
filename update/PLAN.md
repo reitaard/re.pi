@@ -255,7 +255,7 @@ The repository already has one intended release path: `scripts/local-release.mjs
 - [x] Generate one immutable embedded identity manifest containing product/package identity, version, source commit, custom baseline, runtime requirements, and supported artifact/platform matrix.
 - [x] Embed or bundle the same identity manifest in npm, binary, Termux, and source artifacts; generate a detached manifest-bound index for final artifact names, sizes and SHA-256 hashes.
 - [x] Fail packaging if the checkout is dirty, detached, not descended from the custom baseline, or package identity differs.
-- [ ] Make artifact generation reproducible where practical: normalized archive ordering/timestamps and no live model-catalog drift during release builds.
+- [x] Make artifact generation reproducible where practical: normalized archive ordering/timestamps and no live model-catalog drift during release builds.
 
 ### R2 — Certification matrix
 
