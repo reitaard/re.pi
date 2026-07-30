@@ -103,11 +103,12 @@ describe("LSP renderer", () => {
 			theme,
 		).render(80);
 		const output = rendered.map(stripAnsi).join("\n");
-		expect(output).toContain("! LSP diagnostics");
+		expect(output).toContain("! LSP");
+		expect(output).not.toContain("LSP diagnostics");
 		expect(output).toContain("Response");
 		expect(rendered.join("\n")).toContain(theme.fg("borderMuted", theme.bold("LSP")));
 		expect(rendered.join("\n")).toContain(theme.fg("accent", "Response"));
-		expect(rendered.join("\n")).toContain(theme.fg("toolOutput", "LSP: 2 warnings"));
+		expect(rendered.join("\n")).toContain(`${theme.fg("accent", "LSP:")}${theme.fg("warning", " 2 warnings")}`);
 	});
 
 	test("renders post-mutation errors in the error color", () => {
@@ -120,7 +121,36 @@ describe("LSP renderer", () => {
 			},
 			theme,
 		).render(80);
-		expect(rendered.join("\n")).toContain(theme.fg("error", "LSP: 1 error"));
+		expect(rendered.join("\n")).toContain(`${theme.fg("accent", "LSP:")}${theme.fg("error", " 1 error")}`);
+	});
+
+	test("renders a successful post-mutation status with a pink prefix and default text", () => {
+		const rendered = renderMutationLspDiagnostics(
+			{
+				summary: "LSP: no issues",
+				messages: [],
+				errored: false,
+				servers: ["biome"],
+			},
+			theme,
+		).render(80);
+		expect(rendered.join("\n")).toContain(`${theme.fg("accent", "LSP:")}${theme.fg("toolOutput", " no issues")}`);
+	});
+
+	test("renders a pending post-mutation status in yellow", () => {
+		const rendered = renderMutationLspDiagnostics(
+			{
+				summary: "LSP: checking in background",
+				messages: [],
+				errored: false,
+				servers: ["typescript-language-server"],
+				checking: true,
+			},
+			theme,
+		).render(80);
+		expect(rendered.join("\n")).toContain(
+			`${theme.fg("accent", "LSP:")}${theme.fg("warning", " checking in background")}`,
+		);
 	});
 
 	test("caches identical card layouts and invalidates explicitly", () => {

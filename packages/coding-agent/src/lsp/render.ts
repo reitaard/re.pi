@@ -109,13 +109,17 @@ export function renderMutationLspDiagnostics(diagnostics: LspFileDiagnosticsResu
 			: warning
 				? theme.fg("warning", "!")
 				: theme.fg("toolSuccessStatus", "✓");
-	const bodyColor = diagnostics.errored ? "error" : diagnostics.checking ? "warning" : "toolOutput";
-	const body = [diagnostics.summary, ...diagnostics.messages].map((line) => theme.fg(bodyColor, line));
+	const summaryColor = diagnostics.errored ? "error" : diagnostics.checking || warning ? "warning" : "toolOutput";
+	const summary = diagnostics.summary.startsWith("LSP:")
+		? `${theme.fg("accent", "LSP:")}${theme.fg(summaryColor, diagnostics.summary.slice(4))}`
+		: theme.fg(summaryColor, diagnostics.summary);
+	const messageColor = diagnostics.errored ? "error" : "toolOutput";
+	const body = [summary, ...diagnostics.messages.map((line) => theme.fg(messageColor, line))];
 	return {
 		render(width: number): string[] {
 			return block.render(
 				{
-					header: `${stateIcon} ${theme.fg("borderMuted", theme.bold("LSP"))} ${theme.fg("accent", "diagnostics")}`,
+					header: `${stateIcon} ${theme.fg("borderMuted", theme.bold("LSP"))}`,
 					sections: [{ label: theme.fg("accent", "Response"), lines: body }],
 					width,
 					borderColor: diagnostics.errored ? "toolErrorStatus" : "borderMuted",
