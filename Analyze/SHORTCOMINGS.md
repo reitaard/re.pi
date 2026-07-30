@@ -39,7 +39,9 @@ The service can appear to start quickly while not remaining available. A user ca
 - Service installation stops the previous runtime before launching the replacement, preventing stale health from falsely certifying an older process.
 - Service status projects persisted health plus verified process identity as running, stopped or unexpectedly exited.
 - Unexpected signals under native supervision are classified as crashes; manual foreground signals remain planned stops.
-- A clean isolated source smoke reached ready in 2,073.6 ms and completed a planned shutdown with exit code 0. This is implementation evidence, not the required reboot/logon certification.
+- A clean isolated source smoke reached ready in 2,073.6 ms and completed a planned shutdown with exit code 0.
+- Stable `0.81.5` artifact `4cb7ded1…` from source `5d37b556c` is installed. Its hidden Windows task reached authenticated ready health and remained `Running`; a read-only child reached lifecycle `RUNNING` in 9,210 ms.
+- Automatic hidden logon startup still requires one reboot certification before this shortcoming is closed.
 
 **Required outcome**
 
