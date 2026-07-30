@@ -21,7 +21,7 @@ jcode `v0.54.4` has the stronger **integrated end-user product experience**: one
 
 Upstream Pi remains the mature base for Recode's agent/session/provider/extension behavior, but does not contain Recode's Aizen, workers, Kioku, LSP, Maestro lifecycle/security, Telegram gateway, release identity or guarded browser distribution.
 
-The remaining gap is no longer “Recode lacks an orchestrator.” It is that Recode's good internal contracts are still exposed through a less polished, slower and more fragmented user journey.
+The remaining gap is no longer “Recode lacks an orchestrator.” It is that Recode's good internal contracts are still exposed through a less polished, slower and more fragmented user journey. The implementation backlog is maintained in [`SHORTCOMINGS.md`](./SHORTCOMINGS.md).
 
 ## Direct observations from this checkpoint
 

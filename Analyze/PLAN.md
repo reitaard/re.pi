@@ -1,5 +1,7 @@
 # Recode performance and orchestration plan
 
+The current prioritized user-facing gap backlog and acceptance gates are maintained in [`SHORTCOMINGS.md`](./SHORTCOMINGS.md).
+
 ## Scope
 
 This plan defines four ordered programs selected from the overall Recode/jcode comparison:
