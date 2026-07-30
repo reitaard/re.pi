@@ -161,13 +161,15 @@ function formatElapsedRuntime(elapsedMs: number): string {
 	return `· ${seconds}s`;
 }
 
+const transientStatusColor = (text: string): string => theme.fg("accent", text);
+
 export class RetryStatusIndicator extends StatusIndicator {
 	private countdown: CountdownTimer | undefined;
 
 	constructor(ui: TUI, attempt: number, maxAttempts: number, delayMs: number) {
 		const retryMessage = (seconds: number) =>
 			`Retrying (${attempt}/${maxAttempts}) in ${seconds}s... (${keyText("app.interrupt")} to cancel)`;
-		super("retry", ui, recodeSpinner, (text) => theme.fg("muted", text), retryMessage(Math.ceil(delayMs / 1000)));
+		super("retry", ui, transientStatusColor, transientStatusColor, retryMessage(Math.ceil(delayMs / 1000)));
 		this.countdown = new CountdownTimer(
 			delayMs,
 			ui,
@@ -196,7 +198,7 @@ export class CompactionStatusIndicator extends StatusIndicator {
 			reason === "manual"
 				? `Compacting context... ${cancelHint}`
 				: `${reason === "overflow" ? "Context overflow detected, " : ""}Auto-compacting... ${cancelHint}`;
-		super("compaction", ui, recodeSpinner, (text) => theme.fg("muted", text), label);
+		super("compaction", ui, transientStatusColor, transientStatusColor, label);
 	}
 }
 
@@ -205,8 +207,8 @@ export class BranchSummaryStatusIndicator extends StatusIndicator {
 		super(
 			"branchSummary",
 			ui,
-			recodeSpinner,
-			(text) => theme.fg("muted", text),
+			transientStatusColor,
+			transientStatusColor,
 			`Summarizing branch... (${keyText("app.interrupt")} to cancel)`,
 		);
 	}

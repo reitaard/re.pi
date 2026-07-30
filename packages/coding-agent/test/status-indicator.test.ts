@@ -1,11 +1,14 @@
 import type { TUI } from "@reitaard/repi-tui";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { recodeSpinner } from "../src/modes/interactive/components/recode-magic-indicator.ts";
 import {
+	BranchSummaryStatusIndicator,
+	CompactionStatusIndicator,
 	IdleStatus,
 	RetryStatusIndicator,
 	WorkingStatusIndicator,
 } from "../src/modes/interactive/components/status-indicator.ts";
-import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { initTheme, theme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 
 describe("status indicators", () => {
@@ -33,6 +36,33 @@ describe("status indicators", () => {
 		vi.advanceTimersByTime(2000);
 
 		expect(requestRender).toHaveBeenCalledTimes(callsBeforeDispose);
+	});
+
+	it("uses Tokyo Night pink only for cancellable transient states", () => {
+		initTheme("dark");
+		vi.useFakeTimers();
+		const tui = { requestRender: vi.fn() } as unknown as TUI;
+		const indicators = [
+			new RetryStatusIndicator(tui, 1, 3, 1000),
+			new CompactionStatusIndicator(tui, "manual"),
+			new BranchSummaryStatusIndicator(tui),
+		];
+		const accentAnsi = theme.getFgAnsi("accent");
+		const limeFrame = recodeSpinner("frame");
+		const limeAnsi = limeFrame.slice(0, limeFrame.indexOf("frame"));
+
+		for (const indicator of indicators) {
+			const rendered = indicator.render(100).join("\n");
+			expect(rendered.split(accentAnsi).length - 1).toBeGreaterThanOrEqual(2);
+			expect(rendered).not.toContain(limeAnsi);
+			indicator.dispose();
+		}
+
+		const working = new WorkingStatusIndicator(tui, "Working...");
+		const workingRendered = working.render(100).join("\n");
+		expect(workingRendered).toContain(limeAnsi);
+		expect(workingRendered).not.toContain(accentAnsi);
+		working.dispose();
 	});
 
 	it("starts and keeps the encrypted animation running", () => {

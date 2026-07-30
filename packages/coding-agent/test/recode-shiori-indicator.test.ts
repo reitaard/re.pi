@@ -22,6 +22,7 @@ describe("Shiori indicator", () => {
 			);
 			expect(frame).toContain("\x1b[3m");
 			expect(frame).toContain("\x1b[23m");
+			expect(frame).not.toContain(theme.getFgAnsi("accent"));
 		}
 	});
 });

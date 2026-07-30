@@ -456,12 +456,6 @@ export class InteractiveMode {
 	// Track pending bash components (shown in pending area, moved to chat on submit)
 	private pendingBashComponents: BashExecutionComponent[] = [];
 
-	// Auto-compaction state
-	private autoCompactionEscapeHandler?: () => void;
-
-	// Auto-retry state
-	private retryEscapeHandler?: () => void;
-
 	// Messages queued while compaction is running
 	private compactionQueuedMessages: CompactionQueuedMessage[] = [];
 
@@ -589,6 +583,14 @@ export class InteractiveMode {
 		await this.session.abort();
 	}
 
+	private abortRetryRuntime(): void {
+		if (this.aizenRuntime) {
+			this.aizenRuntime.abortRetry();
+			return;
+		}
+		this.session.abortRetry();
+	}
+
 	private async compactRuntime(customInstructions?: string): Promise<Awaited<ReturnType<AgentSession["compact"]>>> {
 		return (
 			this.aizenRuntime
@@ -603,6 +605,35 @@ export class InteractiveMode {
 			return;
 		}
 		this.session.abortCompaction();
+	}
+
+	private handleInterrupt(): void {
+		if (this.activeStatusIndicator?.kind === "compaction" || this.isRuntimeCompacting) {
+			this.abortCompactionRuntime();
+		} else if (this.activeStatusIndicator?.kind === "retry") {
+			this.abortRetryRuntime();
+		} else if (this.activeStatusIndicator?.kind === "branchSummary") {
+			this.session.abortBranchSummary();
+		} else if (this.isAgentRunning) {
+			this.restoreQueuedMessagesToEditor({ abort: true });
+		} else if (this.session.isBashRunning) {
+			this.session.abortBash();
+		} else if (this.isBashMode) {
+			this.editor.setText("");
+			this.isBashMode = false;
+			this.updateEditorBorderColor();
+		} else if (!this.editor.getText().trim()) {
+			const action = this.settingsManager.getDoubleEscapeAction();
+			if (action === "none") return;
+			const now = Date.now();
+			if (now - this.lastEscapeTime < 500) {
+				if (action === "tree") this.showTreeSelector();
+				else this.showUserMessageSelector();
+				this.lastEscapeTime = 0;
+			} else {
+				this.lastEscapeTime = now;
+			}
+		}
 	}
 
 	private rebuildAizenRuntime(): void {
@@ -2979,33 +3010,7 @@ export class InteractiveMode {
 	private setupKeyHandlers(): void {
 		// Set up handlers on defaultEditor - they use this.editor for text access
 		// so they work correctly regardless of which editor is active
-		this.defaultEditor.onEscape = () => {
-			if (this.isAgentRunning) {
-				this.restoreQueuedMessagesToEditor({ abort: true });
-			} else if (this.session.isBashRunning) {
-				this.session.abortBash();
-			} else if (this.isBashMode) {
-				this.editor.setText("");
-				this.isBashMode = false;
-				this.updateEditorBorderColor();
-			} else if (!this.editor.getText().trim()) {
-				// Double-escape with empty editor triggers /tree, /fork, or nothing based on setting
-				const action = this.settingsManager.getDoubleEscapeAction();
-				if (action !== "none") {
-					const now = Date.now();
-					if (now - this.lastEscapeTime < 500) {
-						if (action === "tree") {
-							this.showTreeSelector();
-						} else {
-							this.showUserMessageSelector();
-						}
-						this.lastEscapeTime = 0;
-					} else {
-						this.lastEscapeTime = now;
-					}
-				}
-			}
-		};
+		this.defaultEditor.onEscape = () => this.handleInterrupt();
 
 		// Register app action handlers
 		this.defaultEditor.onAction("app.clear", () => this.handleCtrlC());
@@ -3293,12 +3298,6 @@ export class InteractiveMode {
 				if (this.settingsManager.getShowTerminalProgress()) {
 					this.ui.terminal.setProgress(true);
 				}
-				// Restore main escape handler if retry handler is still active
-				// (retry success event fires later, but we need main handler now)
-				if (this.retryEscapeHandler) {
-					this.defaultEditor.onEscape = this.retryEscapeHandler;
-					this.retryEscapeHandler = undefined;
-				}
 				if (this.workingVisible) {
 					this.showStatusIndicator(
 						new WorkingStatusIndicator(
@@ -3522,10 +3521,6 @@ export class InteractiveMode {
 					this.ui.terminal.setProgress(true);
 				}
 				// Keep editor active; submissions are queued during compaction.
-				this.autoCompactionEscapeHandler = this.defaultEditor.onEscape;
-				this.defaultEditor.onEscape = () => {
-					this.abortCompactionRuntime();
-				};
 				this.showStatusIndicator(new CompactionStatusIndicator(this.ui, event.reason));
 				this.ui.requestRender();
 				break;
@@ -3534,10 +3529,6 @@ export class InteractiveMode {
 			case "compaction_end": {
 				if (this.settingsManager.getShowTerminalProgress()) {
 					this.ui.terminal.setProgress(false);
-				}
-				if (this.autoCompactionEscapeHandler) {
-					this.defaultEditor.onEscape = this.autoCompactionEscapeHandler;
-					this.autoCompactionEscapeHandler = undefined;
 				}
 				this.clearStatusIndicator("compaction");
 				if (event.aborted) {
@@ -3571,11 +3562,6 @@ export class InteractiveMode {
 			}
 
 			case "auto_retry_start": {
-				// Set up escape to abort retry
-				this.retryEscapeHandler = this.defaultEditor.onEscape;
-				this.defaultEditor.onEscape = () => {
-					this.session.abortRetry();
-				};
 				this.showStatusIndicator(
 					new RetryStatusIndicator(this.ui, event.attempt, event.maxAttempts, event.delayMs),
 				);
@@ -3584,11 +3570,6 @@ export class InteractiveMode {
 			}
 
 			case "auto_retry_end": {
-				// Restore escape handler
-				if (this.retryEscapeHandler) {
-					this.defaultEditor.onEscape = this.retryEscapeHandler;
-					this.retryEscapeHandler = undefined;
-				}
 				this.clearStatusIndicator("retry");
 				// Show error only on final failure (success shows normal response)
 				if (!event.success) {
@@ -5193,14 +5174,10 @@ export class InteractiveMode {
 						}
 					}
 
-					// Set up escape handler and status indicator if summarizing
+					// Show a cancellable status indicator while summarizing.
 					let showingSummaryIndicator = false;
-					const originalOnEscape = this.defaultEditor.onEscape;
 
 					if (wantsSummary) {
-						this.defaultEditor.onEscape = () => {
-							this.session.abortBranchSummary();
-						};
 						this.chatContainer.addChild(new Spacer(1));
 						this.showStatusIndicator(new BranchSummaryStatusIndicator(this.ui));
 						showingSummaryIndicator = true;
@@ -5238,7 +5215,6 @@ export class InteractiveMode {
 						if (showingSummaryIndicator) {
 							this.clearStatusIndicator("branchSummary");
 						}
-						this.defaultEditor.onEscape = originalOnEscape;
 					}
 				},
 				() => {

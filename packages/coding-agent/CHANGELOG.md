@@ -35,6 +35,7 @@
 
 ### Fixed
 
+- Routed Escape cancellation consistently across retry, compaction, and branch-summary states, and gave only those transient loaders the Tokyo Night pink accent without recoloring encrypted or worker animations.
 - Prevented idle-boundary Aizen steering submissions from terminating Recode after the AgentHarness turn settles.
 - Handled closed language-server stdin pipes without allowing `EPIPE` errors to terminate Recode.
 - Accepted MSYS-style Windows paths, including Git-reported common directories, when routing delegated workers to sibling worktrees.
