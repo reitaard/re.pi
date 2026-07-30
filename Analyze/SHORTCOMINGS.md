@@ -33,6 +33,14 @@ Recode's strongest foundations must remain intact:
 
 The service can appear to start quickly while not remaining available. A user cannot distinguish successful readiness from an immediately completed task.
 
+**Current source progress**
+
+- Native install, start and restart now wait for authenticated `health.ready` instead of reporting Task Scheduler/systemd launch as service success.
+- Service installation stops the previous runtime before launching the replacement, preventing stale health from falsely certifying an older process.
+- Service status projects persisted health plus verified process identity as running, stopped or unexpectedly exited.
+- Unexpected signals under native supervision are classified as crashes; manual foreground signals remain planned stops.
+- A clean isolated source smoke reached ready in 2,073.6 ms and completed a planned shutdown with exit code 0. This is implementation evidence, not the required reboot/logon certification.
+
 **Required outcome**
 
 - Install the post-`bde499491` hidden task definition.

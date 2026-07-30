@@ -10,9 +10,15 @@ import { getServiceOwnerPath, getServiceRestartHistoryPath, getSocketPath } from
 import { sendIpcRequest } from "../src/ipc/client.ts";
 import type { OrchestratorRequest, OrchestratorResponse } from "../src/ipc/protocol.ts";
 import { closeIpcServer, type IpcRequestHandler, startIpcServer } from "../src/ipc/server.ts";
-import { createSystemdUnit, createWindowsJobHost, createWindowsTaskXml } from "../src/native-service.ts";
+import {
+	createSystemdUnit,
+	createWindowsJobHost,
+	createWindowsTaskXml,
+	NativeServiceManager,
+	summarizeServiceRuntime,
+} from "../src/native-service.ts";
 import { acquireServiceOwnership } from "../src/service-ownership.ts";
-import type { MaestroServiceOwnerReceipt, ProcessIdentityRecord } from "../src/types.ts";
+import type { MaestroServiceHealth, MaestroServiceOwnerReceipt, ProcessIdentityRecord } from "../src/types.ts";
 
 const temporaryDirectories: string[] = [];
 const originalOrchestratorDir = process.env.PI_ORCHESTRATOR_DIR;
@@ -79,6 +85,88 @@ describe("Maestro native service supervision", () => {
 		assert.match(xml, /<MultipleInstancesPolicy>IgnoreNew<\/MultipleInstancesPolicy>/);
 		assert.match(xml, /<AllowHardTerminate>true<\/AllowHardTerminate>/);
 		assert.match(xml, /-WindowStyle Hidden/);
+	});
+
+	test("distinguishes a running, stopped, and unexpectedly exited runtime", () => {
+		const health: MaestroServiceHealth = {
+			schemaVersion: 1,
+			serviceId: "service",
+			state: "ready",
+			ready: true,
+			acceptingRequests: true,
+			supervisionMode: "windows-task",
+			processIdentity: { pid: 123, startReceipt: "a".repeat(64) },
+			startedAt: "2026-07-30T00:00:00.000Z",
+			updatedAt: "2026-07-30T00:00:01.000Z",
+			endpoint: "maestro-test",
+			liveInstances: 0,
+			waitingInput: 0,
+			adapters: { radius: "disabled" },
+			restartLoopDetected: false,
+			restartDiagnostics: [],
+		};
+		assert.equal(summarizeServiceRuntime(health, true), "Maestro runtime: running (PID 123)");
+		assert.equal(
+			summarizeServiceRuntime(
+				{ ...health, state: "stopped", ready: false, lastExitClassification: "planned-stop" },
+				false,
+			),
+			"Maestro runtime: stopped (planned-stop)",
+		);
+		assert.equal(
+			summarizeServiceRuntime({ ...health, state: "ready", ready: true }, false),
+			"Maestro runtime: exited unexpectedly (last persisted state: ready)",
+		);
+	});
+
+	test("does not report native service start success before Maestro is ready", async () => {
+		useTemporaryServiceDir();
+		const commands: string[] = [];
+		let readyChecks = 0;
+		const manager = new NativeServiceManager({
+			platform: "win32",
+			runCommand: (command, args) => {
+				commands.push(`${command} ${args.join(" ")}`);
+				return "task launched";
+			},
+			waitUntilReady: async () => {
+				readyChecks++;
+			},
+		});
+		assert.equal(await manager.execute("start"), "task launched");
+		assert.equal(readyChecks, 1);
+		assert.deepEqual(commands, ["schtasks.exe /Run /TN Recode Maestro"]);
+
+		commands.length = 0;
+		const installManager = new NativeServiceManager({
+			platform: "win32",
+			execPath: "C:\\node.exe",
+			cliPath: "C:\\recode\\cli.js",
+			runCommand: (command, args) => {
+				commands.push(`${command} ${args.join(" ")}`);
+				return command === "whoami.exe" ? "host\\creator" : "task changed";
+			},
+			waitUntilReady: async () => {
+				readyChecks++;
+			},
+		});
+		assert.equal(await installManager.execute("install"), "task changed");
+		assert.deepEqual(commands, [
+			"schtasks.exe /End /TN Recode Maestro",
+			"whoami.exe ",
+			`schtasks.exe /Create /TN Recode Maestro /XML ${join(process.env.PI_ORCHESTRATOR_DIR ?? "", "recode-maestro-task.xml")} /F`,
+			"schtasks.exe /Run /TN Recode Maestro",
+		]);
+		assert.equal(readyChecks, 2);
+
+		const failingManager = new NativeServiceManager({
+			platform: "linux",
+			runCommand: () => "unit launched",
+			waitUntilReady: async () => {
+				throw new Error("readiness deadline expired");
+			},
+		});
+		await assert.rejects(failingManager.execute("start"), /readiness deadline expired/);
 	});
 
 	test("serves ready health and completes a classified planned shutdown", { timeout: 20_000 }, async () => {

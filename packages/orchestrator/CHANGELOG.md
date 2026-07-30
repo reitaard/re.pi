@@ -28,6 +28,7 @@
 - Replaced unavailable-service stack traces with a concise command to start Maestro.
 - Hid the Windows scheduled-task host and child process instead of opening a visible Maestro console window.
 - Gave cold session spawn and mutating IPC requests operation-specific deadlines instead of the five-second control-plane deadline.
+- Made native install, start, and restart wait for verified Maestro readiness, projected stale health as stopped or unexpectedly exited, and classified unexpected signals as crashes under native supervision.
 
 ## [0.81.4] - 2026-07-22
 

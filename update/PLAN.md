@@ -284,6 +284,10 @@ The repository already has one intended release path: `scripts/local-release.mjs
 
 ## Immediate next step
 
-The shared release-identity gate and immutable manifest/index now bind the authoritative branch/custom baseline or exact release tag to HEAD, clean source, product identity, lockstep package versions and artifact hashes. The stable compatibility target is `0.81.5`; self-update discovery remains disabled until Recode-owned metadata exists. Update planning classifies installation type, requires explicit approval and writes a rollback receipt before mutation.
+V1 and the exact `0.81.5` Windows/VPS Node checkpoint are complete. V2 is active; self-update discovery remains disabled until Recode-owned metadata exists.
 
-Continue with R2 certification of the exact `0.81.5` artifact, first on Windows Node and then on Linux Node/Bun. Keep Telegram, O9 and broad jcode benchmarking deferred until the V1 release gate passes.
+1. Commit and package the reviewed successor to `bde499491`, including hidden Windows supervision, readiness-gated native start/install/restart, corrected IPC deadlines and the latest accepted LSP fixes.
+2. Install the exact local artifact and certify invisible logon startup, authenticated readiness and at least 60 seconds of stable availability after reboot.
+3. Rerun matched one-session and ten-session startup/resource probes only after that gate passes.
+4. Implement the product-wide doctor and direct Maestro attach/session-picker UX.
+5. Execute O9 sharing only in the measured order recorded above; keep V3 Telegram/remote authorization deferred.

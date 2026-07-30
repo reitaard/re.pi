@@ -207,8 +207,12 @@ export async function serveMaestro(options: { supervisionMode?: MaestroSupervisi
 		throw error;
 	}
 
-	const onSignal = (): void => {
-		void shutdown("planned-stop", 0);
+	const onSignal = (signal: NodeJS.Signals): void => {
+		if (supervisionMode === "manual") {
+			void shutdown("planned-stop", 0);
+			return;
+		}
+		void shutdown("process-crash", 1, `Unexpected ${signal} terminated the natively supervised service`);
 	};
 	const onFatal = (error: unknown): void => {
 		console.error(error);

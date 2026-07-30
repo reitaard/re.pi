@@ -5,15 +5,21 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getOrchestratorDir, getServiceOwnerPath, isBunBinary } from "./config.ts";
 import { sendIpcRequest } from "./ipc/client.ts";
+import { inspectLocalProcessIdentity, verifyProcessIdentity } from "./process-identity.ts";
+import { readPersistedServiceHealth } from "./service-ownership.ts";
+import type { MaestroServiceHealth } from "./types.ts";
 
 const WINDOWS_TASK_NAME = "Recode Maestro";
 const LINUX_UNIT_NAME = "recode-maestro.service";
 const COMMAND_TIMEOUT_MS = 15_000;
+const SERVICE_READY_TIMEOUT_MS = 15_000;
+const SERVICE_READY_POLL_MS = 100;
 
 export type NativeServicePlatform = "linux" | "win32";
 export type NativeServiceAction = "install" | "uninstall" | "start" | "stop" | "restart" | "status";
 
 export type NativeCommandRunner = (command: string, args: string[]) => string;
+export type NativeServiceReadyWaiter = () => Promise<void>;
 
 function defaultCommandRunner(command: string, args: string[]): string {
 	return execFileSync(command, args, {
@@ -181,8 +187,47 @@ async function requestPlannedShutdown(reason: "planned-stop" | "planned-restart"
 async function waitForServiceRelease(timeoutMs = 10_000): Promise<void> {
 	const deadline = Date.now() + timeoutMs;
 	while (existsSync(getServiceOwnerPath()) && Date.now() < deadline) {
-		await new Promise((resolve) => setTimeout(resolve, 100));
+		await new Promise((resolve) => setTimeout(resolve, SERVICE_READY_POLL_MS));
 	}
+}
+
+export function summarizeServiceRuntime(
+	health: MaestroServiceHealth | undefined,
+	processIdentityMatches: boolean,
+): string {
+	if (!health) return "Maestro runtime: unknown (no persisted health record)";
+	if (processIdentityMatches) {
+		const state = health.ready ? (health.state === "degraded" ? "degraded" : "running") : health.state;
+		return `Maestro runtime: ${state} (PID ${health.processIdentity.pid})`;
+	}
+	if (health.lastExitClassification === "planned-stop" || health.lastExitClassification === "planned-restart") {
+		return `Maestro runtime: stopped (${health.lastExitClassification})`;
+	}
+	return `Maestro runtime: exited unexpectedly (last persisted state: ${health.state})`;
+}
+
+function readServiceRuntimeSummary(): string {
+	const health = readPersistedServiceHealth();
+	const processIdentityMatches = Boolean(
+		health && verifyProcessIdentity(health.processIdentity, inspectLocalProcessIdentity(health.processIdentity.pid)),
+	);
+	return summarizeServiceRuntime(health, processIdentityMatches);
+}
+
+export async function waitForServiceReady(timeoutMs = SERVICE_READY_TIMEOUT_MS): Promise<void> {
+	const deadline = Date.now() + timeoutMs;
+	let lastState = "unavailable";
+	while (Date.now() < deadline) {
+		try {
+			const response = await sendIpcRequest({ type: "health" }, { timeoutMs: 1_000 });
+			if (response.ok && response.type === "health_result" && response.health?.ready) return;
+			lastState = response.type === "health_result" ? (response.health?.state ?? "unknown") : response.type;
+		} catch (error) {
+			lastState = error instanceof Error ? error.message : String(error);
+		}
+		await new Promise((resolve) => setTimeout(resolve, SERVICE_READY_POLL_MS));
+	}
+	throw new Error(`Recode Maestro did not become ready within ${timeoutMs}ms (last state: ${lastState})`);
 }
 
 export class NativeServiceManager {
@@ -190,6 +235,7 @@ export class NativeServiceManager {
 	private readonly runCommand: NativeCommandRunner;
 	private readonly execPath: string;
 	private readonly cliPath: string | undefined;
+	private readonly waitUntilReady: NativeServiceReadyWaiter;
 
 	constructor(
 		options: {
@@ -197,6 +243,7 @@ export class NativeServiceManager {
 			runCommand?: NativeCommandRunner;
 			execPath?: string;
 			cliPath?: string;
+			waitUntilReady?: NativeServiceReadyWaiter;
 		} = {},
 	) {
 		const platform = options.platform ?? process.platform;
@@ -208,6 +255,7 @@ export class NativeServiceManager {
 		this.execPath = options.execPath ?? process.execPath;
 		const runningCompiledBun = Boolean(process.versions.bun && isBunBinary);
 		this.cliPath = options.cliPath ?? (runningCompiledBun ? undefined : resolveCliPath());
+		this.waitUntilReady = options.waitUntilReady ?? waitForServiceReady;
 	}
 
 	async execute(action: NativeServiceAction): Promise<string> {
@@ -219,26 +267,44 @@ export class NativeServiceManager {
 		const unitDir = join(homedir(), ".config", "systemd", "user");
 		const unitPath = join(unitDir, LINUX_UNIT_NAME);
 		switch (action) {
-			case "install":
+			case "install": {
+				if (await requestPlannedShutdown("planned-restart")) await waitForServiceRelease();
 				mkdirSync(unitDir, { recursive: true, mode: 0o700 });
 				writeFileSync(unitPath, createSystemdUnit(this.execPath, this.cliPath), { encoding: "utf8", mode: 0o600 });
 				this.runCommand("systemctl", ["--user", "daemon-reload"]);
-				return this.runCommand("systemctl", ["--user", "enable", "--now", LINUX_UNIT_NAME]);
+				this.runCommand("systemctl", ["--user", "enable", LINUX_UNIT_NAME]);
+				const result = this.runCommand("systemctl", ["--user", "restart", LINUX_UNIT_NAME]);
+				await this.waitUntilReady();
+				return result;
+			}
 			case "uninstall":
 				this.runCommand("systemctl", ["--user", "disable", "--now", LINUX_UNIT_NAME]);
 				if (existsSync(unitPath)) rmSync(unitPath);
 				return this.runCommand("systemctl", ["--user", "daemon-reload"]);
-			case "start":
-				return this.runCommand("systemctl", ["--user", "start", LINUX_UNIT_NAME]);
+			case "start": {
+				const result = this.runCommand("systemctl", ["--user", "start", LINUX_UNIT_NAME]);
+				await this.waitUntilReady();
+				return result;
+			}
 			case "stop":
 				if (await requestPlannedShutdown("planned-stop")) await waitForServiceRelease();
 				return this.runCommand("systemctl", ["--user", "stop", LINUX_UNIT_NAME]);
-			case "restart":
+			case "restart": {
 				if (await requestPlannedShutdown("planned-restart")) await waitForServiceRelease();
 				this.runCommand("systemctl", ["--user", "stop", LINUX_UNIT_NAME]);
-				return this.runCommand("systemctl", ["--user", "start", LINUX_UNIT_NAME]);
-			case "status":
-				return this.runCommand("systemctl", ["--user", "show", LINUX_UNIT_NAME, "--property=ActiveState,SubState"]);
+				const result = this.runCommand("systemctl", ["--user", "start", LINUX_UNIT_NAME]);
+				await this.waitUntilReady();
+				return result;
+			}
+			case "status": {
+				const nativeStatus = this.runCommand("systemctl", [
+					"--user",
+					"show",
+					LINUX_UNIT_NAME,
+					"--property=ActiveState,SubState",
+				]);
+				return `${readServiceRuntimeSummary()}\n${nativeStatus}`;
+			}
 		}
 	}
 
@@ -248,6 +314,12 @@ export class NativeServiceManager {
 		const taskPath = join(serviceDir, "recode-maestro-task.xml");
 		switch (action) {
 			case "install": {
+				if (await requestPlannedShutdown("planned-restart")) await waitForServiceRelease();
+				try {
+					this.runCommand("schtasks.exe", ["/End", "/TN", WINDOWS_TASK_NAME]);
+				} catch {
+					// The task may not exist yet or may already be stopped.
+				}
 				mkdirSync(serviceDir, { recursive: true, mode: 0o700 });
 				const userId = this.runCommand("whoami.exe", []);
 				writeFileSync(hostPath, createWindowsJobHost(this.execPath, this.cliPath), {
@@ -260,7 +332,9 @@ export class NativeServiceManager {
 				});
 				chmodSync(hostPath, 0o600);
 				this.runCommand("schtasks.exe", ["/Create", "/TN", WINDOWS_TASK_NAME, "/XML", taskPath, "/F"]);
-				return this.runCommand("schtasks.exe", ["/Run", "/TN", WINDOWS_TASK_NAME]);
+				const result = this.runCommand("schtasks.exe", ["/Run", "/TN", WINDOWS_TASK_NAME]);
+				await this.waitUntilReady();
+				return result;
 			}
 			case "uninstall":
 				this.runCommand("schtasks.exe", ["/End", "/TN", WINDOWS_TASK_NAME]);
@@ -268,17 +342,32 @@ export class NativeServiceManager {
 				if (existsSync(hostPath)) rmSync(hostPath);
 				if (existsSync(taskPath)) rmSync(taskPath);
 				return "Recode Maestro task removed";
-			case "start":
-				return this.runCommand("schtasks.exe", ["/Run", "/TN", WINDOWS_TASK_NAME]);
+			case "start": {
+				const result = this.runCommand("schtasks.exe", ["/Run", "/TN", WINDOWS_TASK_NAME]);
+				await this.waitUntilReady();
+				return result;
+			}
 			case "stop":
 				if (await requestPlannedShutdown("planned-stop")) await waitForServiceRelease();
 				return this.runCommand("schtasks.exe", ["/End", "/TN", WINDOWS_TASK_NAME]);
-			case "restart":
+			case "restart": {
 				if (await requestPlannedShutdown("planned-restart")) await waitForServiceRelease();
 				this.runCommand("schtasks.exe", ["/End", "/TN", WINDOWS_TASK_NAME]);
-				return this.runCommand("schtasks.exe", ["/Run", "/TN", WINDOWS_TASK_NAME]);
-			case "status":
-				return this.runCommand("schtasks.exe", ["/Query", "/TN", WINDOWS_TASK_NAME, "/FO", "LIST", "/V"]);
+				const result = this.runCommand("schtasks.exe", ["/Run", "/TN", WINDOWS_TASK_NAME]);
+				await this.waitUntilReady();
+				return result;
+			}
+			case "status": {
+				const nativeStatus = this.runCommand("schtasks.exe", [
+					"/Query",
+					"/TN",
+					WINDOWS_TASK_NAME,
+					"/FO",
+					"LIST",
+					"/V",
+				]);
+				return `${readServiceRuntimeSummary()}\n${nativeStatus}`;
+			}
 		}
 	}
 }
