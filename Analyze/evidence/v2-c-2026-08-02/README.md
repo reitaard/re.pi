@@ -17,6 +17,19 @@ Configured RPC extension loading had a 1,988 ms median. Largest measured contrib
 
 Startup artifacts use commit `79b9855c6e9f6203af512c0d41c554b0f28d61d7`, version `0.81.5`, and report a clean working tree.
 
+## Installed Recode 0.81.6 startup checkpoint
+
+Artifact: `recode-0.81.6-installed/summary.json`, exact installed Windows x64 binary from commit `6ef78822166cd15c3400bff30cb96c469ce663d3`. One warmup plus five measured runs per endpoint; cache state remains uncontrolled and no provider/model request was made.
+
+| Endpoint | State | Median | Min–max |
+|---|---|---:|---:|
+| TUI input echo | configured | 4,035.8 ms | 3,897.5–4,264.0 ms |
+| RPC `get_state` | configured | 3,889.8 ms | 3,849.4–4,196.4 ms |
+| TUI input echo | isolated | 778.3 ms | 753.6–1,032.0 ms |
+| RPC `get_state` | isolated | 891.0 ms | 762.0–1,099.4 ms |
+
+These compiled-binary results are not directly ratio-compared with the earlier Node-source results because runtime and artifact topology differ. During compiled Maestro certification, its child launcher was found to reference obsolete `pi.exe`; source commit `5ea2bfdf6` corrects it to the Recode companion executable. Compiled Maestro session/resource measurements require the corrected artifact to be installed before they are accepted.
+
 ## Maestro service and session endpoints
 
 Artifact: `maestro-service.json`, commit `b6050d6652c417ca1a829c273537f9e30a18db0b`, clean working tree.
