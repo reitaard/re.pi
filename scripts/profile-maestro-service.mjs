@@ -135,6 +135,17 @@ try {
 		controlSamples.push(performance.now() - started);
 	}
 
+	const cliControlSamples = [];
+	for (let index = 0; index < 5; index++) {
+		const started = performance.now();
+		execFileSync(process.execPath, [join(repoRoot, "packages/orchestrator/src/cli.ts"), "list"], {
+			cwd: repoRoot,
+			env: { ...process.env, PI_ORCHESTRATOR_DIR: runtimeDir },
+			stdio: "ignore",
+		});
+		cliControlSamples.push(performance.now() - started);
+	}
+
 	const spawnStarted = performance.now();
 	const spawned = await sendIpcRequest({
 		type: "spawn",
@@ -187,6 +198,8 @@ try {
 			serviceColdStartMs,
 			warmControlMedianMs: percentile(controlSamples, 0.5),
 			warmControlP90Ms: percentile(controlSamples, 0.9),
+			warmCliControlMedianMs: percentile(cliControlSamples, 0.5),
+			warmCliControlP90Ms: percentile(cliControlSamples, 0.9),
 			oneSessionSpawnMs,
 			warmAttachMs,
 		},
