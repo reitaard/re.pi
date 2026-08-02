@@ -481,6 +481,7 @@ Detailed evidence is in [`EXTENSIONAUDIT.md`](EXTENSIONAUDIT.md).
 - 2026-08-02: Retained the bounded results under `Analyze/evidence/v2-d-2026-08-02/`. Results use uncontrolled OS cache and are not cold-start or Linux PSS claims.
 - 2026-08-02: Focused coding-agent startup/resource/session tests passed 12/12. Root `npm run check` passed. The private Browser package passed syntax, 65-module load, built-artifact load and 90/91 browser tests; the sole failure was the previously observed real-Chrome download-event timeout after five seconds, outside the blocker path. The focused lazy-blocker regression passed independently.
 - 2026-08-02: Committed and pushed the Browser candidate as `c000d5d4016b9589759e2e0f630cfb6e0f6845b0` on `origin/v2-d-lazy-blocker`; global Recode settings now pin that exact commit.
+- 2026-08-02: Committed the coding-agent attribution checkpoint as `86165ed92a2c977911da059b8595e9b53573b7e0`, built exact `0.81.6` tarball SHA-256 `3d85fb67a1a1e1bb1cd711dba9b6b7a2c0d610fecef0d8caf9cbd13f8a8b7b74`, passed isolated version/help/model/release-identity/offline-RPC checks and installed it into the active Node global prefix with lifecycle scripts disabled. The prior `0.81.5` global package is retained as rollback tarball SHA-256 `bc231c5434ce5f76845bcc89d6549c18085a79cd9efdd74dfbfffb317d9389da`.
 
 ### Current candidate files
 

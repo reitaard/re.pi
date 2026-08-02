@@ -18,6 +18,7 @@
 - The first candidate defers blocker retrieval/allocation until a block-enabled page needs it. Average `extensions-ready` RSS fell by 23.0 MB; held-RPC private working set fell by 75.8 MB on average and 30.9 MB at the median. Matched RPC startup changed by +4.0%, inside the 10% guard and not claimed as an improvement.
 - Root checks and 12 focused coding-agent tests passed. The private Browser package passed the focused regression, syntax/load/built checks and 90/91 full tests; the sole failure was the previously observed real-Chrome download-event timeout after five seconds.
 - The Browser candidate is committed and pushed as `c000d5d4016b9589759e2e0f630cfb6e0f6845b0` on `origin/v2-d-lazy-blocker`; global Recode settings pin the exact commit.
+- Committed the coding-agent V2-D checkpoint as `86165ed92a2c977911da059b8595e9b53573b7e0`, built exact `0.81.6` artifact SHA-256 `3d85fb67a1a1e1bb1cd711dba9b6b7a2c0d610fecef0d8caf9cbd13f8a8b7b74`, passed isolated and global version/help/model/release-identity/offline-RPC checks, and installed it under the Node global prefix with lifecycle scripts disabled. The previous global `0.81.5` package is retained as rollback artifact SHA-256 `bc231c5434ce5f76845bcc89d6549c18085a79cd9efdd74dfbfffb317d9389da`.
 - Evidence is retained under `Analyze/evidence/v2-d-2026-08-02/`. No destructive cache operation, provider generation request, Kioku behavior change or configured-feature removal occurred.
 
 ## 2026-08-02 — Recode 0.81.6 VPS rollout
