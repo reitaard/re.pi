@@ -1,6 +1,5 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { type MaestroServiceHealth, sendIpcRequest } from "@reitaard/repi-orchestrator";
 import {
 	classifyCurrentInstallation,
 	getAgentDir,
@@ -10,6 +9,7 @@ import {
 } from "./config.ts";
 import { type AuthStatus, AuthStorage } from "./core/auth-storage.ts";
 import { inspectExtensionPackageRuntime } from "./core/extensions/package-runtime-contract.ts";
+import { type MaestroHealthSnapshot, queryMaestroHealth } from "./core/maestro-status.ts";
 import { DefaultPackageManager } from "./core/package-manager.ts";
 import { type LspSettings, type PackageSource, SettingsManager } from "./core/settings-manager.ts";
 import { probeRecodeOpenProvider, type RecodeOpenProviderProbe } from "./recode-open-provider.ts";
@@ -83,7 +83,7 @@ export interface DoctorSnapshot {
 	settings: SettingsSnapshot;
 	auth: AuthStatus;
 	providerProbe?: RecodeOpenProviderProbe;
-	maestro?: MaestroServiceHealth;
+	maestro?: MaestroHealthSnapshot;
 	maestroError?: boolean;
 	integrations: IntegrationSnapshot;
 	memory: MemorySnapshot;
@@ -226,12 +226,11 @@ export async function collectDoctorSnapshot(cwd = process.cwd()): Promise<Doctor
 	const auth = defaultProvider
 		? AuthStorage.create(join(agentDir, "auth.json")).getAuthStatus(defaultProvider)
 		: { configured: false };
-	let maestro: MaestroServiceHealth | undefined;
+	let maestro: MaestroHealthSnapshot | undefined;
 	let maestroError = false;
 	try {
-		const response = await sendIpcRequest({ type: "health" }, { timeoutMs: 1_500 });
-		if (response.ok && response.type === "health_result") maestro = response.health;
-		else maestroError = true;
+		maestro = await queryMaestroHealth(1_500);
+		if (!maestro) maestroError = true;
 	} catch {
 		maestroError = true;
 	}
