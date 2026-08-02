@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { emitStartupMilestone, STARTUP_MILESTONE_PREFIX, waitForStartupMilestone } from "../src/core/startup-probe.ts";
+import {
+	emitStartupMemoryMilestone,
+	emitStartupMilestone,
+	STARTUP_MILESTONE_PREFIX,
+	waitForStartupMilestone,
+} from "../src/core/startup-probe.ts";
 
 describe("startup probe", () => {
 	const originalProbeValue = process.env.PI_STARTUP_PROBE;
@@ -19,6 +24,34 @@ describe("startup probe", () => {
 		const pending = waitForStartupMilestone("provider-request", 1_000);
 		setImmediate(() => emitStartupMilestone("provider-request"));
 		await expect(pending).resolves.toBeUndefined();
+	});
+
+	it("emits bounded process-memory attribution", () => {
+		process.env.PI_STARTUP_PROBE = "1";
+		const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+		vi.spyOn(process, "memoryUsage").mockReturnValue({
+			rss: 100,
+			heapTotal: 80,
+			heapUsed: 60,
+			external: 40,
+			arrayBuffers: 20,
+		});
+
+		emitStartupMemoryMilestone("package-runtime-ready", { extensionResources: 3 });
+
+		const output = String(write.mock.calls[0]?.[0]);
+		expect(JSON.parse(output.slice(STARTUP_MILESTONE_PREFIX.length))).toMatchObject({
+			schemaVersion: 1,
+			name: "package-runtime-ready",
+			details: {
+				extensionResources: 3,
+				rssBytes: 100,
+				heapTotalBytes: 80,
+				heapUsedBytes: 60,
+				externalBytes: 40,
+				arrayBuffersBytes: 20,
+			},
+		});
 	});
 
 	it("emits one structured milestone without session content", () => {

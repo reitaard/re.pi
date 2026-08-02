@@ -10,6 +10,16 @@
 - The real configured Open Provider catalogue probe passed with three models; no prompt or model-generation request was made.
 - Doctor tests pass 4/4, full `npm run check` passes, and `git diff --check` passes.
 
+## 2026-08-02 — V2-D configured-runtime attribution
+
+- Added opt-in startup-probe memory checkpoints at settings, package runtime, extension activation, resource discovery and provider registration boundaries. Payloads contain only process counters and bounded counts.
+- Three configured versus three isolated warm RPC runs attributed only 4.3 MB RSS to package resolution but 142.4 MB RSS and 85.5 MB used heap after extension activation. Sharing mutable extension runtimes and model registries remains rejected.
+- Found the controlled Browser package eagerly called `PlaywrightBlocker.fromPrebuiltAdsAndTracking(fetch)` during module import even when Browser was stopped and blocking was disabled.
+- The first candidate defers blocker retrieval/allocation until a block-enabled page needs it. Average `extensions-ready` RSS fell by 23.0 MB; held-RPC private working set fell by 75.8 MB on average and 30.9 MB at the median. Matched RPC startup changed by +4.0%, inside the 10% guard and not claimed as an improvement.
+- Root checks and 12 focused coding-agent tests passed. The private Browser package passed the focused regression, syntax/load/built checks and 90/91 full tests; the sole failure was the previously observed real-Chrome download-event timeout after five seconds.
+- The Browser candidate is committed and pushed as `c000d5d4016b9589759e2e0f630cfb6e0f6845b0` on `origin/v2-d-lazy-blocker`; global Recode settings pin the exact commit.
+- Evidence is retained under `Analyze/evidence/v2-d-2026-08-02/`. No destructive cache operation, provider generation request, Kioku behavior change or configured-feature removal occurred.
+
 ## 2026-08-02 — Recode 0.81.6 VPS rollout
 
 - Creator explicitly authorized upgrading `root@157.173.127.84` to the latest committed checkpoint.

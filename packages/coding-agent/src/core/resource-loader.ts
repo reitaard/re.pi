@@ -30,6 +30,7 @@ import { SettingsManager } from "./settings-manager.ts";
 import type { Skill } from "./skills.ts";
 import { loadSkills } from "./skills.ts";
 import { createSourceInfo, type SourceInfo } from "./source-info.ts";
+import { emitStartupMemoryMilestone } from "./startup-probe.ts";
 import { resetTimings } from "./timings.ts";
 
 export interface ResourceExtensionPaths {
@@ -461,10 +462,16 @@ export class DefaultResourceLoader implements ResourceLoader {
 
 		// reload() preserves SettingsManager.projectTrusted and reloads settings for that trust state.
 		await this.settingsManager.reload();
+		emitStartupMemoryMilestone("settings-ready");
 		const resolvedPaths = await this.packageManager.resolve();
 		const packageRuntimeResolution = resolvePackageRuntimeExtensions(resolvedPaths.extensions);
 		const cliExtensionPaths = await this.packageManager.resolveExtensionSources(this.additionalExtensionPaths, {
 			temporary: true,
+		});
+		emitStartupMemoryMilestone("package-runtime-ready", {
+			extensionResources: packageRuntimeResolution.resources.length,
+			packageRuntimeDiagnostics: packageRuntimeResolution.diagnostics.length,
+			packageRuntimeErrors: packageRuntimeResolution.errors.length,
 		});
 		const metadataByPath = new Map<string, PathMetadata>();
 
@@ -532,6 +539,10 @@ export class DefaultResourceLoader implements ResourceLoader {
 			}
 		}
 		finalizePackageRuntimeDiagnostics(extensionsResult);
+		emitStartupMemoryMilestone("extensions-ready", {
+			extensions: extensionsResult.extensions.length,
+			extensionErrors: extensionsResult.errors.length,
+		});
 		this.extensionsResult = this.extensionsOverride ? this.extensionsOverride(extensionsResult) : extensionsResult;
 		this.applyExtensionSourceInfo(this.extensionsResult.extensions, metadataByPath);
 
@@ -608,6 +619,12 @@ export class DefaultResourceLoader implements ResourceLoader {
 		this.appendSystemPrompt = this.appendSystemPromptOverride
 			? this.appendSystemPromptOverride(baseAppend)
 			: baseAppend;
+		emitStartupMemoryMilestone("resources-ready", {
+			skills: this.skills.length,
+			promptTemplates: this.prompts.length,
+			themes: this.themes.length,
+			contextFiles: this.agentsFiles.length,
+		});
 		this.loaded = true;
 	}
 

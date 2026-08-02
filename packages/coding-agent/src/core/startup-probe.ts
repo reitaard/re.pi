@@ -5,6 +5,11 @@ export const STARTUP_MILESTONE_PREFIX = "RECODE_STARTUP_MILESTONE ";
 export type StartupMilestoneName =
 	| "session-selected"
 	| "session-ready"
+	| "settings-ready"
+	| "package-runtime-ready"
+	| "extensions-ready"
+	| "resources-ready"
+	| "provider-registry-ready"
 	| "interactive-mode-created"
 	| "tui-frame-ready"
 	| "tui-input-ready"
@@ -45,6 +50,24 @@ export function emitStartupMilestone(
 			resolve();
 		}
 	}
+}
+
+export function emitStartupMemoryMilestone(
+	name: StartupMilestoneName,
+	details?: Readonly<Record<string, string | number | boolean>>,
+): void {
+	if (!isStartupProbeEnabled() || emittedMilestones.has(name)) {
+		return;
+	}
+	const memory = process.memoryUsage();
+	emitStartupMilestone(name, {
+		...details,
+		rssBytes: memory.rss,
+		heapTotalBytes: memory.heapTotal,
+		heapUsedBytes: memory.heapUsed,
+		externalBytes: memory.external,
+		arrayBuffersBytes: memory.arrayBuffers,
+	});
 }
 
 export async function waitForStartupMilestone(name: StartupMilestoneName, timeoutMs: number): Promise<void> {

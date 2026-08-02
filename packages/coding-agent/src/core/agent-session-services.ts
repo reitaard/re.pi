@@ -22,6 +22,7 @@ import {
 import { type CreateAgentSessionOptions, type CreateAgentSessionResult, createAgentSession } from "./sdk.ts";
 import type { SessionManager } from "./session-manager.ts";
 import { SettingsManager } from "./settings-manager.ts";
+import { emitStartupMemoryMilestone } from "./startup-probe.ts";
 import { createPackageManageToolDefinition } from "./tools/package-manage.ts";
 import { createToolDefinitionFromAgentTool, wrapToolDefinition } from "./tools/tool-definition-wrapper.ts";
 import { REPI_NAMED_WORKERS } from "./workers/registry.ts";
@@ -260,6 +261,9 @@ export async function createAgentSessionServices(
 	}
 	extensionsResult.runtime.pendingProviderRegistrations = [];
 	diagnostics.push(...applyExtensionFlagValues(resourceLoader, options.extensionFlagValues));
+	emitStartupMemoryMilestone("provider-registry-ready", {
+		providerRegistrationErrors: diagnostics.filter((diagnostic) => diagnostic.type === "error").length,
+	});
 
 	return {
 		cwd,

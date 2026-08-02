@@ -448,6 +448,49 @@ Detailed evidence is in [`EXTENSIONAUDIT.md`](EXTENSIONAUDIT.md).
 - Real isolated RPC lifecycle smoke still passed after environment filtering.
 - Validation passed: all orchestrator tests **63/63**, catastrophic-command tests **18/18**, relevant bash/Aizen tests, `npm run check`, and `git diff --check`.
 
+## V2-D — Configured-runtime attribution and immutable ownership
+
+**Status:** in progress
+**Started:** 2026-08-02
+
+### Scope
+
+- [x] Add bounded, opt-in memory checkpoints around settings, package runtime resolution, extension activation, resource discovery and provider registration.
+- [x] Retain configured and isolated measurements without destructive cache manipulation or provider generation requests.
+- [x] Attribute the configured-minus-isolated private-memory delta before selecting an optimization.
+- [ ] Optimize only immutable metadata or an explicit service-owned boundary with content/version invalidation.
+- [ ] Re-run startup, private-memory and feature-preservation checks after each accepted change.
+
+### Safety boundary
+
+- Kioku retrieval, embeddings, reranking, indexes and durable memory are out of scope.
+- Credentials, transcripts, workspace/session state, approvals, extension runtime objects and mutable provider state remain process/session isolated.
+- No configured feature may be disabled merely to improve a benchmark.
+- Uncontrolled-cache results are labeled as such and are not cold-start claims.
+
+### Work log
+
+- 2026-08-02: Creator approved V2-D as the next implementation phase.
+- 2026-08-02: Reconfirmed the V2-C baseline: configured RPC averaged 485.7 MB private working set versus 129.1 MB isolated, leaving an unattributed configured-state delta of approximately 356.6 MB per process.
+- 2026-08-02: Audited production initialization. The first required seam is package/extension loading in `DefaultResourceLoader.reload()`, followed by provider registration in `createAgentSessionServices()`; sharing instantiated extension runtimes or model registries was rejected as unsafe.
+- 2026-08-02: Added startup-probe memory checkpoints containing only process memory counters and bounded resource counts. No paths, credentials, model content, transcripts or workspace content are emitted.
+- 2026-08-02: Three configured versus three isolated warm RPC runs attributed only 4.3 MB RSS to settings/package resolution, but 142.4 MB RSS and 85.5 MB used heap after extension activation. Resource discovery and provider registration added less than 0.5 MB RSS after that boundary.
+- 2026-08-02: Selected the Browser package's eager Ghostery blocker initialization as the first bounded defect. It fetched and allocated prebuilt filter data during module import even when Browser was stopped and ad blocking was disabled.
+- 2026-08-02: Changed the controlled private Browser candidate to create the blocker promise only when a block-enabled page needs it. A focused import regression and built-artifact load passed.
+- 2026-08-02: Matched three-run configured RPC startup stayed inside the 10% guard (+4.0%, no speed claim). Average `extensions-ready` RSS fell by 23.0 MB; held-RPC private working set fell by 75.8 MB on average and 30.9 MB at the median. Eager samples were highly variable because asynchronous filter retrieval/allocation continued after startup.
+- 2026-08-02: Retained the bounded results under `Analyze/evidence/v2-d-2026-08-02/`. Results use uncontrolled OS cache and are not cold-start or Linux PSS claims.
+- 2026-08-02: Focused coding-agent startup/resource/session tests passed 12/12. Root `npm run check` passed. The private Browser package passed syntax, 65-module load, built-artifact load and 90/91 browser tests; the sole failure was the previously observed real-Chrome download-event timeout after five seconds, outside the blocker path. The focused lazy-blocker regression passed independently.
+- 2026-08-02: Committed and pushed the Browser candidate as `c000d5d4016b9589759e2e0f630cfb6e0f6845b0` on `origin/v2-d-lazy-blocker`; global Recode settings now pin that exact commit.
+
+### Current candidate files
+
+- `packages/coding-agent/src/core/startup-probe.ts` — bounded opt-in process-memory checkpoints.
+- `packages/coding-agent/src/core/resource-loader.ts` — settings, package, extension and resource phase checkpoints.
+- `packages/coding-agent/src/core/agent-session-services.ts` — provider-registration checkpoint.
+- `packages/coding-agent/test/startup-probe.test.ts` — bounded memory payload regression.
+- Private `repi-browser` package — lazy blocker initialization, import regression and regenerated verified extension artifact.
+- `Analyze/evidence/v2-d-2026-08-02/` — matched attribution and first-candidate evidence.
+
 ## Comparison traceability
 
 The implementation is governed by [`analyze/COMPARE.md`](../analyze/COMPARE.md), not only its startup section. `Analyze/PLAN.md` maps the complete comparison into startup/package work, lifecycle/service work, matched three-way validation and P0–P4 distribution, preservation, safety, memory and integrated-product work. S3 is current because accurate independent readiness boundaries are required before lifecycle/service work can improve perceived and complete startup honestly.
