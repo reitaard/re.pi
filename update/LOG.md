@@ -10,6 +10,16 @@
 - The real configured Open Provider catalogue probe passed with three models; no prompt or model-generation request was made.
 - Doctor tests pass 4/4, full `npm run check` passes, and `git diff --check` passes.
 
+## 2026-08-02 — Recode 0.81.6 VPS rollout
+
+- Creator explicitly authorized upgrading `root@157.173.127.84` to the latest committed checkpoint.
+- Pre-update inventory confirmed Ubuntu Linux x64, private Node `26.5.0`, Recode `0.81.5`, active Maestro with no live instances, 22 bounded agent configuration files and 14 session files. Existing user data was not modified.
+- Built `@reitaard/repi-coding-agent@0.81.6` from clean source `f287dff3ac8a9c84522f94bb711566badbc2e609`; local isolated version/help/model/release-identity smoke passed. Artifact SHA-256 is `851368c1e6c8e0ea0dba2806363a584f4ad02a5d515d17f56a8b4207971eddc0`.
+- Transferred the exact artifact, verified its hash remotely, installed under `/opt/recode/0.81.6`, and preserved `/opt/recode/0.81.5` plus wrapper, service and user-data inventory under `/opt/recode/rollback/20260802T105348Z-before-0.81.6-f287dff3a`.
+- Atomically switched `/usr/local/bin/recode`, reinstalled Maestro's systemd user unit from the new package and reached authenticated active health. Version/help/model listing, embedded source identity, offline RPC `get_state`, offline Doctor, one read-only Maestro spawn/stop, rollback to `0.81.5` and rollforward to `0.81.6` passed.
+- No provider/model generation request was made. A pre-existing foreground `0.81.5` Recode process was not interrupted; new invocations and Maestro use `0.81.6`.
+- Machine-readable evidence is retained at `Analyze/evidence/vps-0.81.6-f287dff3a-linux-x64.json` and `/opt/recode/certification/0.81.6-vps-linux-x64.json`.
+
 ## 2026-07-26 — Initial investigation
 
 ### Completed

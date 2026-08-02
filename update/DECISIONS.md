@@ -178,6 +178,14 @@ Use lockstep version `0.81.6` for the post-Doctor, ten-session Maestro and V2-C 
 
 **Reason:** Reusing `0.81.5` would make materially different binaries ambiguous during installation and performance comparison.
 
+## D-025 — VPS follows the exact Recode 0.81.6 certification checkpoint
+
+**Status:** Accepted
+
+With explicit Creator authorization, deploy the exact committed `0.81.6` Node artifact from source `f287dff3ac8a9c84522f94bb711566badbc2e609` to the VPS. Preserve `/opt/recode/0.81.5`, the prior wrapper, configuration/session inventory and Maestro state as rollback evidence. Switch only after isolated and remote preflight checks, then verify release identity, offline RPC/Doctor, Maestro health, one read-only session and rollback/rollforward.
+
+**Reason:** The VPS was behind the locally certified Doctor, Maestro, capacity and startup fixes. Exact artifact transfer preserves fleet identity without cloning or rebuilding remotely.
+
 ## Pending decisions
 
 - Final package identity and initial version for the future standalone `recode` repository

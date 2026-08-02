@@ -105,7 +105,7 @@ Extend this package and lifecycle authority; do not add another supervisor.
 - Existing foundations are `scripts/local-release.mjs`, `scripts/build-binaries.sh`, `scripts/build-termux-release.sh`, and `.github/workflows/build-binaries.yml`.
 - Current binary targets are Windows x64/arm64 and Linux x64/arm64; Termux uses a deterministic Node archive containing workspace tarballs and an installer.
 - The GitHub workflow creates checksummed binary/source assets and an approval-gated GitHub release. Contrary to the current `AGENTS.md` release description, this branch's workflow presently has no npm trusted-publishing job; that gap must be resolved before release.
-- VPS `root@157.173.127.84` is upgraded to `0.81.4-repi.2.dev.27.9e818840` from the certified local tarball. `/usr/local/bin/recode` is a regular wrapper file, not a symlink, and uses private Node `/opt/node-v26.5.0-linux-x64`. The previous `/opt/repi/v0.81.4/recode` install remains present as rollback.
+- VPS `root@157.173.127.84` is upgraded to Recode `0.81.6` from exact source `f287dff3ac8a9c84522f94bb711566badbc2e609` and artifact SHA-256 `851368c1e6c8e0ea0dba2806363a584f4ad02a5d515d17f56a8b4207971eddc0`. `/usr/local/bin/recode` is a regular wrapper using private Node `/opt/node-v26.5.0-linux-x64`; Maestro's systemd user unit also resolves `/opt/recode/0.81.6`. The previous `/opt/recode/0.81.5` install remains as rollback, with inventory and wrapper evidence under `/opt/recode/rollback/20260802T105348Z-before-0.81.6-f287dff3a`.
 
 ## Historical session context
 
@@ -114,7 +114,7 @@ Extend this package and lifecycle authority; do not add another supervisor.
 
 ## Release strategy
 
-The next stable compatibility release target is `@reitaard/repi-coding-agent@0.81.5`. Stable SemVer does not include development distance or source commit; provenance belongs in the release manifest. Publication remains deferred while release identity, manifests and certification are completed. A future standalone `recode` repository is planned, but its package identity and initial independent version remain a separate migration decision.
+The current local/fleet certification checkpoint is `@reitaard/repi-coding-agent@0.81.6`. Stable SemVer does not include development distance or source commit; provenance belongs in the release manifest. Publication remains deferred while npm trusted publishing is absent. A future standalone `recode` repository is planned, but its package identity and initial independent version remain a separate migration decision.
 
 The custom-first line starts from the exact currently installed source `c5ab200b`, which contains the AgentHarness, durable teach/session, memory, UI, and OpenAI OAuth work. Upstream Pi is analyzed from exact common baseline `1f9e846c`; raw upstream changes are reported but never automatically merged.
 

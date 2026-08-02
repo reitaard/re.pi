@@ -278,19 +278,19 @@ The repository already has one intended release path: `scripts/local-release.mjs
 - [ ] Primary Windows machine canary.
 - [ ] Work PC canary from the exact same artifact.
 - [x] VPS inventory and backup under a separately authorized SSH task; previous `/usr/local/bin/recode -> /opt/repi/v0.81.4/recode` symlink target recorded under `/opt/recode/rollback`.
-- [x] VPS upgraded from the exact `0.81.5` artifact at source `98bcccfe6`; Linux x64 Node, real prompt, Maestro service/read-only session, Telegram restart, rollback/rollforward, artifact hash and update-guard evidence are retained under `/opt/recode/certification`.
+- [x] VPS upgraded to exact Recode `0.81.6` artifact SHA-256 `851368c1e6c8e0ea0dba2806363a584f4ad02a5d515d17f56a8b4207971eddc0` at source `f287dff3a`; Linux x64 Node version/help/model listing, offline RPC/Doctor, Maestro service/read-only session, rollback/rollforward and release identity passed. Evidence is retained locally and at `/opt/recode/certification/0.81.6-vps-linux-x64.json`.
 - [ ] Termux rollout only from the certified Termux archive.
 - [ ] Never clone/build independently on deployment machines unless performing an explicitly approved source-development task.
 
 ## Immediate next step
 
-V1 and the exact stable `0.81.5` Windows/VPS Node checkpoint are complete. Hidden Windows Maestro startup, authenticated readiness and reboot stability are certified. V2 is active; self-update discovery remains disabled until Recode-owned metadata exists.
+V1 and the exact Recode `0.81.6` Windows/VPS checkpoint are complete. Hidden Windows Maestro startup, authenticated readiness and VPS rollback/rollforward are certified. V2-C and the Creator-bounded three-cycle optimization are complete; self-update discovery remains disabled until Recode-owned metadata exists.
 
 The first `recode doctor` foundation is implemented and validated. Freeze deeper Doctor expansion for this checkpoint; package and certify the current read-only implementation, then proceed through four bounded V2 phases before any further memory-retrieval work:
 
 1. **V2-A — Doctor checkpoint:** review, package/install and certify human plus JSON output from the exact artifact. Do not add broad new probes in this phase.
 2. **V2-B — Maestro entry:** finish direct attach by unambiguous id/label and searchable session/workspace filtering without creating a duplicate runtime. Source implementation and focused dashboard coverage are now present; installed-artifact/TUI certification remains.
-3. **V2-C — Matched performance evidence (active):** clean-source uncontrolled-cache configured/isolated RPC and TUI baselines plus isolated service-ready, one-session spawn, warm-attach and Windows process-tree working-set evidence are retained under `Analyze/evidence/v2-c-2026-08-02/`. Complete repeated/per-process attribution and exact matched jcode/upstream endpoints. The requested ten-session run currently fails closed at the production eight-live-session bound; do not weaken that bound without resource evidence. Destructive cold-cache and paid active-generation probes remain unmeasured without explicit permission.
-4. **V2-D — Measured non-memory O9:** optimize verified package manifests, immutable provider/model metadata and explicit MCP/Browser service ownership only where V2-C shows material duplication. Keep credentials, transcripts and mutable session state isolated.
+3. **V2-C — Matched performance evidence (complete):** configured/isolated compiled startup, Maestro lifecycle, ten-session capacity and Windows private-memory attribution are retained under `Analyze/evidence/v2-c-2026-08-02/`. Exact jcode short-process evidence is retained; daemon/session ratios remain withheld because credentials were unavailable. Destructive cold-cache and paid generation probes remain unmeasured.
+4. **V2-D — Measured non-memory O9 (next):** configured processes averaged 485.7 MB private working set versus 129.1 MB isolated. Evaluate immutable package/module metadata and explicit MCP/Browser service ownership while keeping credentials, transcripts and mutable session state isolated.
 
 Stop for Creator review before **V2-E memory retrieval/index sharing**. Do not change automatic retrieval, add embeddings/reranking, share Kioku indexes or remove/supersede durable memory before that discussion. V3 Telegram and remote authorization remain deferred.
