@@ -36,7 +36,7 @@ Windows process-tree working-set samples:
 | Service plus one read-only session | 3 | 539,320,320 bytes (514.3 MiB) |
 | Service plus maximum admitted eight sessions | 10 | 3,546,009,600 bytes (3,381.7 MiB) |
 
-These are aggregate Windows working-set samples, not Linux PSS and not topology-neutral cross-product comparisons. They show material per-session duplication and justify measuring package/backend ownership before selecting O9 changes.
+These are aggregate Windows working-set samples, not Linux PSS and not topology-neutral cross-product comparisons. An attributed clean-source repeat in `maestro-service-attributed.json` measured 533,008,384 bytes for one session and 3,505,524,736 bytes for eight. Each depth-1 session `node.exe` used approximately 300–458 MiB, while the depth-0 Maestro service used approximately 136 MiB in the eight-session sample. This confirms that most aggregate growth is in repeated session processes rather than the service owner, but does not yet identify which package/backend allocations are safely shareable.
 
 ## Capacity result
 
