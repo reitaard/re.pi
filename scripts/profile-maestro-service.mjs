@@ -31,7 +31,7 @@ function measureProcessTree(rootPid) {
 	let processes;
 	if (process.platform === "win32") {
 		const script =
-			"Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,WorkingSetSize | ConvertTo-Json -Compress";
+			"Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,WorkingSetSize,Name | ConvertTo-Json -Compress";
 		const value = JSON.parse(
 			execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8" }),
 		);
@@ -39,14 +39,20 @@ function measureProcessTree(rootPid) {
 			pid: Number(entry.ProcessId),
 			parentPid: Number(entry.ParentProcessId),
 			rssBytes: Number(entry.WorkingSetSize),
+			name: typeof entry.Name === "string" ? entry.Name : "unknown",
 		}));
 	} else {
-		processes = execFileSync("ps", ["-e", "-o", "pid=,ppid=,rss="], { encoding: "utf8" })
+		processes = execFileSync("ps", ["-e", "-o", "pid=,ppid=,rss=,comm="], { encoding: "utf8" })
 			.trim()
 			.split(/\r?\n/)
 			.map((line) => {
-				const [pid, parentPid, rssKiB] = line.trim().split(/\s+/).map(Number);
-				return { pid, parentPid, rssBytes: rssKiB * 1_024 };
+				const [pidText, parentPidText, rssKiBText, name = "unknown"] = line.trim().split(/\s+/);
+				return {
+					pid: Number(pidText),
+					parentPid: Number(parentPidText),
+					rssBytes: Number(rssKiBText) * 1_024,
+					name,
+				};
 			});
 	}
 	const owned = new Set([rootPid]);
@@ -61,9 +67,21 @@ function measureProcessTree(rootPid) {
 		}
 	}
 	const ownedProcesses = processes.filter((processEntry) => owned.has(processEntry.pid));
+	const depthOf = (processEntry) => {
+		let depth = 0;
+		let parentPid = processEntry.parentPid;
+		while (owned.has(parentPid)) {
+			depth++;
+			parentPid = processes.find((candidate) => candidate.pid === parentPid)?.parentPid;
+		}
+		return depth;
+	};
 	return {
 		processes: ownedProcesses.length,
 		rssBytes: ownedProcesses.reduce((sum, processEntry) => sum + processEntry.rssBytes, 0),
+		breakdown: ownedProcesses
+			.map((processEntry) => ({ name: processEntry.name, depth: depthOf(processEntry), rssBytes: processEntry.rssBytes }))
+			.sort((left, right) => right.rssBytes - left.rssBytes),
 	};
 }
 
