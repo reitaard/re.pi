@@ -81,6 +81,16 @@ The Creator-bounded optimization loop stopped after three cycles. Machine-readab
 
 jcode's equivalent `--version` median was 32.1 ms, so its short-lived native CLI remains materially faster. No ratio is extended to daemon readiness, session spawn or ten-session resources because jcode could not run those endpoints without credentials on this machine.
 
+## Windows private-memory attribution
+
+Artifacts: `recode-0.81.6-installed/resource-attribution.json` and `rpc-memory-attribution.json`, installed commit `5bf0880c509dca4db934a73873a521d465b828e8`.
+
+The ten-session configured sample reported 5,037,240,320 bytes aggregate working set, of which 4,480,823,296 bytes (89.0%) was `Working Set - Private` and 556,417,024 bytes (11.0%) was non-private working set. The service itself used 98,533,376 private working-set bytes; the ten session processes accounted for about 4.38 GiB private working set. This shows that repeated mapped executable pages are not the main explanation for the aggregate result.
+
+Three standalone configured RPC samples averaged 485,715,968 private working-set bytes, while three fresh isolated-agent-dir RPC samples averaged 129,148,245 bytes. The observed configured-minus-isolated delta was approximately 356.6 MB per process. This delta includes all configured runtime state—especially the three configured packages/extensions, but also settings, provider catalogues and related state—so it is not attributed to one package without heap-level evidence.
+
+No extension-launched descendant appeared in the repeat, confirming that the earlier `urban-vpn-app.exe` descendant was transient rather than a stable part of the ten-session topology. Windows private working set is still not Linux PSS, but this evidence is strong enough to reject executable-page double counting as the primary cause. Sharing mutable extension, credential, transcript or workspace state remains unsafe; the next justified optimization target is immutable package/module metadata or an explicit shared service boundary, not collapsing session processes.
+
 ## Remaining matched work
 
 - Repeat resource samples and add per-process attribution before changing ownership boundaries.

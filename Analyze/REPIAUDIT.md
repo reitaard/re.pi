@@ -57,7 +57,8 @@ Standalone minification reduced isolated RPC readiness to **729.0 ms**, while co
 ### Multi-session lifecycle
 
 - `@reitaard/repi-orchestrator` now provides the Recode Maestro service, authenticated control plane, searchable dashboard, direct attach, bounded RPC children, durable lifecycle/completion state, workspace safety and native supervision (`packages/orchestrator/`).
-- The corrected compiled `0.81.6` artifact reached authenticated service readiness in **930.8 ms**, warm direct control in **1.0 ms**, one configured read-only session in **4,335.6 ms**, and admitted ten sessions. Aggregate Windows working set reached **5,075,718,144 bytes**, which includes shared pages and is not a Linux-PSS or private-memory claim.
+- The corrected compiled `0.81.6` artifact reached authenticated service readiness in **930.8 ms**, warm direct control in **1.0 ms**, one configured read-only session in **4,335.6 ms**, and admitted ten sessions.
+- A same-sample Windows attribution repeat measured **5,037,240,320 bytes** aggregate working set, including **4,480,823,296 bytes (89.0%) private working set**. Configured standalone RPC processes averaged **485.7 MB** private working set versus **129.1 MB** for isolated-agent-dir processes. Shared executable mappings are not the dominant cost; most growth is process-private configured runtime state.
 
 ## Priority gaps
 
