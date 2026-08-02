@@ -170,6 +170,14 @@ Every npm package, Bun binary archive, Termux archive and source archive carries
 
 **Reason:** Presence-only checks do not answer why Recode cannot work now. Reusing production boundaries minimizes duplicate logic while proven external diagnostic patterns provide actionable failure classification.
 
+## D-024 — The next local certification checkpoint is Recode 0.81.6
+
+**Status:** Accepted
+
+Use lockstep version `0.81.6` for the post-Doctor, ten-session Maestro and V2-C benchmark binary so it is distinguishable from the previously installed/certified `0.81.5` artifacts. This authorizes a local Windows x64 build for Creator installation and testing; it does not authorize npm publication, tagging, remote rollout or self-update enablement.
+
+**Reason:** Reusing `0.81.5` would make materially different binaries ambiguous during installation and performance comparison.
+
 ## Pending decisions
 
 - Final package identity and initial version for the future standalone `recode` repository

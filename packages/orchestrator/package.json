@@ -1,6 +1,6 @@
 {
 	"name": "@reitaard/repi-orchestrator",
-	"version": "0.81.5",
+	"version": "0.81.6",
 	"description": "Recode Maestro service supervision and live-session TUI",
 	"type": "module",
 	"main": "./dist/index.js",
@@ -41,7 +41,7 @@
 		"node": ">=22.19.0"
 	},
 	"dependencies": {
-		"@reitaard/repi-tui": "^0.81.5",
+		"@reitaard/repi-tui": "^0.81.6",
 		"chalk": "5.6.2"
 	},
 	"peerDependencies": {
