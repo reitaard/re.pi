@@ -26,6 +26,7 @@
 ### Fixed
 
 - Resolved the coding-agent RPC entry through its ESM export so Node-based child startup works.
+- Spawned compiled Maestro sessions through the Recode companion executable instead of the obsolete upstream Pi filename.
 - Retained cancelled, failed, and recovered terminal instance records instead of deleting them during shutdown.
 - Prevented timed-out requests, stale command IDs, stale attachments, hung children, and throwing observers from corrupting or indefinitely blocking Maestro lifecycle control.
 - Wired real child terminal transitions to exactly one durable completion record before parent delivery and acknowledgement.

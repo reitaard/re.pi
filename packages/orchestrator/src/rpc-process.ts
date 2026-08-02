@@ -155,7 +155,7 @@ export class RpcProcessInstance {
 	private getSpawnCommand(): { command: string; args: string[] } {
 		if (isBunBinary) {
 			return {
-				command: join(dirname(process.execPath), process.platform === "win32" ? "pi.exe" : "pi"),
+				command: join(dirname(process.execPath), process.platform === "win32" ? "recode.exe" : "recode"),
 				args: ["--mode", "rpc"],
 			};
 		}
