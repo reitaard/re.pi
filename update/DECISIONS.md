@@ -186,6 +186,14 @@ With explicit Creator authorization, deploy the exact committed `0.81.6` Node ar
 
 **Reason:** The VPS was behind the locally certified Doctor, Maestro, capacity and startup fixes. Exact artifact transfer preserves fleet identity without cloning or rebuilding remotely.
 
+## D-026 — Retire the previous live VPS runtime after verified rollforward
+
+**Status:** Accepted
+
+After explicit Creator approval, terminate the verified foreground `0.81.5` process and remove `/opt/recode/0.81.5` once the `0.81.6` wrapper, Maestro service, release identity, rollback and rollforward checks pass. Retain the exact `0.81.5` tarball and rollback inventory rather than a second live installation tree.
+
+**Reason:** Only one live install path should remain addressable after certification; archived bytes and inventory provide rollback without mixed runtime resolution.
+
 ## Pending decisions
 
 - Final package identity and initial version for the future standalone `recode` repository
