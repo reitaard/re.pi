@@ -663,7 +663,7 @@ export async function recodeMemory(
 
 	pi.registerCommand("shiori", {
 		description: `Open ${RECODE_SHIORI_DISPLAY_NAME} private chat; use /shiori review for current-session memory review`,
-		argumentHint: "[new|review [path]|<task>]",
+		argumentHint: "[new|review|review all|review <path>|<task>]",
 		getArgumentCompletions: (prefix) => {
 			const options = [
 				{
@@ -677,6 +677,11 @@ export async function recodeMemory(
 					description: "Review new session history for durable memory",
 				},
 				{
+					value: "review all",
+					label: "review all",
+					description: "Review all current-session entries with live progress",
+				},
+				{
 					value: "review ",
 					label: "review <path>",
 					description: "Place a selected file on Shiori's Desk for review",
@@ -686,7 +691,9 @@ export async function recodeMemory(
 		},
 		handler: async (args, ctx) => {
 			const trimmedArgs = args.trim();
-			if (trimmedArgs !== "review" && !trimmedArgs.startsWith("review ")) {
+			const isReviewAll = trimmedArgs === "review all";
+			const isSessionReview = trimmedArgs === "review" || isReviewAll;
+			if (!isSessionReview && !trimmedArgs.startsWith("review ")) {
 				try {
 					await new Promise<void>((resolve, reject) => {
 						const request: RecodeShioriCommandRequest = {
@@ -730,7 +737,7 @@ export async function recodeMemory(
 					}
 				}
 				if (!shioriModel) throw new Error("Shiori needs an active model");
-				if (trimmedArgs.startsWith("review ")) {
+				if (!isSessionReview && trimmedArgs.startsWith("review ")) {
 					if (!ctx.hasUI) throw new Error("Shiori's Desk requires the interactive TUI");
 					const requestedPath = trimmedArgs
 						.slice("review ".length)
@@ -825,48 +832,47 @@ export async function recodeMemory(
 						.finally(() => ctx.ui.setWidget(RECODE_SHIORI_WIDGET, undefined));
 					return;
 				}
-				void runtime
-					.runShiori({
-						cwd: ctx.cwd,
-						sessionManager,
-						modelRegistry: ctx.modelRegistry,
-						projectTrusted: ctx.isProjectTrusted(),
-						model: shioriModel,
-						chooseScope: async (_candidate: RecodeShioriMemoryCandidate, globalAccess) => {
-							if (!adapterActive || !ctx.hasUI) return "project";
-							const selected = await ctx.ui.select(`${RECODE_SHIORI_DISPLAY_NAME}: save memory`, [
-								"Project",
-								...(globalAccess ? ["Global"] : []),
-								"Skip",
-							]);
-							if (selected === "Global") return "global";
-							if (selected === "Project") return "project";
-							return undefined;
-						},
-						onProgress: (event) => {
-							if (!adapterActive) return;
-							if (event.type === "start") {
-								greeting = event.message;
-								ctx.ui.setWidget(RECODE_SHIORI_WIDGET, (tui, activeTheme) => {
-									const loader = new Loader(
-										tui,
-										(text) => text,
-										(text) => text,
-										"",
-										createRecodeShioriIndicator(event.message, activeTheme),
-									);
-									return {
-										render: (width) => loader.render(width).slice(1),
-										invalidate: () => loader.invalidate(),
-										dispose: () => loader.stop(),
-									};
-								});
-								return;
-							}
+				void (isReviewAll ? runtime.runShioriAll.bind(runtime) : runtime.runShiori.bind(runtime))({
+					cwd: ctx.cwd,
+					sessionManager,
+					modelRegistry: ctx.modelRegistry,
+					projectTrusted: ctx.isProjectTrusted(),
+					model: shioriModel,
+					chooseScope: async (_candidate: RecodeShioriMemoryCandidate, globalAccess) => {
+						if (!adapterActive || !ctx.hasUI) return "project";
+						const selected = await ctx.ui.select(`${RECODE_SHIORI_DISPLAY_NAME}: save memory`, [
+							"Project",
+							...(globalAccess ? ["Global"] : []),
+							"Skip",
+						]);
+						if (selected === "Global") return "global";
+						if (selected === "Project") return "project";
+						return undefined;
+					},
+					onProgress: (event) => {
+						if (!adapterActive) return;
+						if (event.type === "complete") {
 							ctx.ui.setWidget(RECODE_SHIORI_WIDGET, undefined);
-						},
-						appendMessage: appendShioriMessage,
-					})
+							return;
+						}
+						if (event.type === "start") greeting = event.message;
+						ctx.ui.setWidget(RECODE_SHIORI_WIDGET, (tui, activeTheme) => {
+							const loader = new Loader(
+								tui,
+								(text) => text,
+								(text) => text,
+								"",
+								createRecodeShioriIndicator(event.message, activeTheme),
+							);
+							return {
+								render: (width) => loader.render(width).slice(1),
+								invalidate: () => loader.invalidate(),
+								dispose: () => loader.stop(),
+							};
+						});
+					},
+					appendMessage: appendShioriMessage,
+				})
 					.then((result) => {
 						if (!result && adapterActive) {
 							appendShioriMessage("No new session entries to review.");
@@ -874,7 +880,8 @@ export async function recodeMemory(
 					})
 					.catch((error: unknown) => {
 						if (adapterActive) {
-							appendShioriMessage(error instanceof Error ? error.message : String(error));
+							const message = error instanceof Error ? error.message : String(error);
+							appendShioriMessage(`I could not complete the review. ${message}`);
 						}
 					})
 					.finally(() => {

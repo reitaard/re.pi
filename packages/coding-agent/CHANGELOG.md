@@ -8,6 +8,7 @@
 
 ### Added
 
+- Added `/shiori review all` for checkpointed review of a complete session backlog with live reviewed-entry progress and three automatic retries per failed batch.
 - Added `recode doctor`, a secret-safe product diagnostic for release identity, installation, settings, provider auth, dynamically discovered package/runtime capabilities and MCP definitions, Maestro, memory, and LSP readiness, including a bounded non-generation Open Provider catalogue probe that classifies common connectivity and model-selection failures.
 - Added isolated named-worker session, Kioku, state, and evaluation storage roots plus a direct-chat surface with worker health information.
 - Added owner-scoped Teach Mode for Aizen and direct worker chats with persistent staged proposals, Cardinal approval, parent settings, and Tab/Space command hints.

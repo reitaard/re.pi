@@ -4,10 +4,15 @@ import { getAgentDir } from "../../config.ts";
 import type { ModelRegistry } from "../model-registry.ts";
 import type { SessionManager } from "../session-manager.ts";
 import {
+	buildRecodeShioriReviewChunks,
 	executeRecodeShiori,
 	executeRecodeShioriFileReview,
+	getRecodeShioriGreeting,
 	type RecodeShioriMemoryCandidate,
 	type RecodeShioriProgressEvent,
+	type RecodeShioriRunResult,
+	SHIORI_MAX_CHUNKS_PER_RUN,
+	SHIORI_MAX_REVIEW_RETRIES,
 } from "../workers/shiori/reviewer.ts";
 import { RecodeMemoryManager } from "./recode-memory-manager.ts";
 import type { RecodeMemoryConfig, RecodeMemoryScope } from "./recode-memory-types.ts";
@@ -123,6 +128,107 @@ export class RecodeMemoryRuntime {
 			this.activeShioriSessions.delete(sessionId);
 			this.emitShioriState();
 			return result;
+		} catch (error) {
+			this.activeShioriSessions.delete(sessionId);
+			this.emitShioriState(true);
+			throw error;
+		}
+	}
+
+	async runShioriAll(options: {
+		cwd: string;
+		sessionManager: SessionManager;
+		modelRegistry: ModelRegistry;
+		projectTrusted: boolean;
+		model: Model<any>;
+		chooseScope?: (
+			candidate: RecodeShioriMemoryCandidate,
+			globalAccess: boolean,
+		) => Promise<RecodeMemoryScope | undefined>;
+		onProgress?: (event: RecodeShioriProgressEvent) => void;
+		appendMessage?: (message: string) => void;
+	}): Promise<RecodeShioriRunResult | undefined> {
+		const sessionId = options.sessionManager.getSessionId();
+		if (this.isShioriReviewing()) return undefined;
+		const initial = buildRecodeShioriReviewChunks(options.sessionManager.getBranch());
+		if (!initial.lastPendingEntryId) return undefined;
+		this.activeShioriSessions.add(sessionId);
+		this.emitShioriState();
+		let reviewedEntries = 0;
+		let saved = 0;
+		let savedGlobal = 0;
+		let savedProject = 0;
+		let skippedDuplicates = 0;
+		let lastReviewedEntryId = "";
+		const greetingText = getRecodeShioriGreeting();
+		let firstBatch = true;
+		try {
+			while (true) {
+				let batch: RecodeShioriRunResult | undefined;
+				let failure: unknown;
+				for (let retry = 0; retry <= SHIORI_MAX_REVIEW_RETRIES; retry++) {
+					try {
+						batch = await executeRecodeShiori({
+							...options,
+							config: this.getConfig(),
+							manager: await this.getManager(options.cwd, options.projectTrusted),
+							maxChunks: SHIORI_MAX_CHUNKS_PER_RUN,
+							throughEntryId: initial.lastPendingEntryId,
+							reviewedEntriesBefore: reviewedEntries,
+							totalEntries: initial.pendingEntries,
+							greetingText,
+							reportStart: firstBatch,
+							appendMessages: false,
+						});
+						break;
+					} catch (error) {
+						failure = error;
+					}
+				}
+				if (!batch) {
+					const message = failure instanceof Error ? failure.message : String(failure);
+					throw new Error(
+						`Shiori review stopped after ${SHIORI_MAX_REVIEW_RETRIES} retries at ${reviewedEntries}/${initial.pendingEntries} entries: ${message}`,
+					);
+				}
+				firstBatch = false;
+				reviewedEntries += batch.reviewedEntries;
+				saved += batch.saved;
+				savedGlobal += batch.savedGlobal;
+				savedProject += batch.savedProject;
+				skippedDuplicates += batch.skippedDuplicates;
+				lastReviewedEntryId = batch.lastReviewedEntryId;
+				if (!batch.hasMore) break;
+			}
+			const completion = [
+				`Reviewed ${reviewedEntries}/${initial.pendingEntries} entries`,
+				saved === 0 ? "No new memories" : `Saved ${saved} ${saved === 1 ? "memory" : "memories"}`,
+				savedProject > 0 ? `${savedProject} project` : undefined,
+				savedGlobal > 0 ? `${savedGlobal} global` : undefined,
+				skippedDuplicates > 0
+					? `${skippedDuplicates} ${skippedDuplicates === 1 ? "duplicate" : "duplicates"} skipped`
+					: undefined,
+			]
+				.filter((part): part is string => part !== undefined)
+				.join(" · ");
+			options.appendMessage?.(completion);
+			options.onProgress?.({
+				type: "complete",
+				message: completion,
+				reviewedEntries,
+				totalEntries: initial.pendingEntries,
+			});
+			this.activeShioriSessions.delete(sessionId);
+			this.emitShioriState();
+			return {
+				reviewedEntries,
+				saved,
+				savedGlobal,
+				savedProject,
+				skippedDuplicates,
+				hasMore: false,
+				lastReviewedEntryId,
+			};
 		} catch (error) {
 			this.activeShioriSessions.delete(sessionId);
 			this.emitShioriState(true);

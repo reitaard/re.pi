@@ -25,8 +25,10 @@ export function appendRecodeShioriMessage(sessionManager: SessionManager, messag
 }
 
 export interface RecodeShioriProgressEvent {
-	type: "start" | "complete";
+	type: "start" | "progress" | "complete";
 	message: string;
+	reviewedEntries?: number;
+	totalEntries?: number;
 }
 
 const SHIORI_MEMORY_GREETINGS = [
@@ -41,7 +43,8 @@ const SHIORI_MEMORY_GREETINGS = [
 ] as const;
 
 const SHIORI_CHUNK_CHARACTERS = 24_000;
-const SHIORI_MAX_CHUNKS_PER_RUN = 4;
+export const SHIORI_MAX_CHUNKS_PER_RUN = 4;
+export const SHIORI_MAX_REVIEW_RETRIES = 3;
 const SHIORI_MAX_MEMORIES_PER_CHUNK = 10;
 
 export function getRecodeShioriGreeting(now = new Date(), random = Math.random): string {
@@ -179,14 +182,22 @@ export function getRecodeShioriCheckpoint(branch: SessionEntry[]): RecodeShioriC
 	return undefined;
 }
 
-export function buildRecodeShioriReviewChunks(branch: SessionEntry[]): {
+export function buildRecodeShioriReviewChunks(
+	branch: SessionEntry[],
+	options: { maxChunks?: number; throughEntryId?: string } = {},
+): {
 	chunks: RecodeShioriReviewChunk[];
 	pendingEntries: number;
+	lastPendingEntryId?: string;
 	hasMore: boolean;
 } {
 	const checkpoint = getRecodeShioriCheckpoint(branch);
 	const checkpointIndex = checkpoint ? branch.findIndex((entry) => entry.id === checkpoint.lastReviewedEntryId) : -1;
-	const pending = branch.slice(checkpointIndex + 1).filter((entry) => renderEntry(entry) !== undefined);
+	const pendingEntries = branch.slice(checkpointIndex + 1).filter((entry) => renderEntry(entry) !== undefined);
+	const throughIndex = options.throughEntryId
+		? pendingEntries.findIndex((entry) => entry.id === options.throughEntryId)
+		: -1;
+	const pending = throughIndex === -1 ? pendingEntries : pendingEntries.slice(0, throughIndex + 1);
 	const chunks: RecodeShioriReviewChunk[] = [];
 	let entries: SessionEntry[] = [];
 	let transcriptParts: string[] = [];
@@ -209,10 +220,12 @@ export function buildRecodeShioriReviewChunks(branch: SessionEntry[]): {
 	}
 	flush();
 
+	const maxChunks = options.maxChunks ?? SHIORI_MAX_CHUNKS_PER_RUN;
 	return {
-		chunks: chunks.slice(0, SHIORI_MAX_CHUNKS_PER_RUN),
+		chunks: chunks.slice(0, maxChunks),
 		pendingEntries: pending.length,
-		hasMore: chunks.length > SHIORI_MAX_CHUNKS_PER_RUN,
+		lastPendingEntryId: pending.at(-1)?.id,
+		hasMore: chunks.length > maxChunks,
 	};
 }
 
@@ -473,18 +486,40 @@ export async function executeRecodeShiori(options: {
 	) => Promise<RecodeMemoryScope | undefined>;
 	onProgress?: (event: RecodeShioriProgressEvent) => void;
 	appendMessage?: (message: string) => void;
+	maxChunks?: number;
+	throughEntryId?: string;
+	reviewedEntriesBefore?: number;
+	totalEntries?: number;
+	greetingText?: string;
+	reportStart?: boolean;
+	appendMessages?: boolean;
 }): Promise<RecodeShioriRunResult | undefined> {
 	const { config, manager, model, onProgress, sessionManager } = options;
 	if (!config.enabled) throw new Error("Kioku memory is disabled. Enable it from /memory");
 	if (!options.projectTrusted) throw new Error("Shiori is unavailable until this project is trusted");
 
 	const branch = sessionManager.getBranch();
-	const review = buildRecodeShioriReviewChunks(branch);
+	const review = buildRecodeShioriReviewChunks(branch, {
+		maxChunks: options.maxChunks,
+		throughEntryId: options.throughEntryId,
+	});
 	if (review.chunks.length === 0) return undefined;
 
 	const startedAt = new Date();
-	const greeting = `${getRecodeShioriGreeting(startedAt)} (${review.pendingEntries} entries)`;
-	onProgress?.({ type: "start", message: greeting });
+	const reviewedEntriesBefore = options.reviewedEntriesBefore ?? 0;
+	const totalEntries = options.totalEntries ?? review.pendingEntries;
+	const showProgress = options.totalEntries !== undefined || options.reviewedEntriesBefore !== undefined;
+	const greetingText = options.greetingText ?? getRecodeShioriGreeting(startedAt);
+	const greeting = showProgress
+		? `${greetingText} (${reviewedEntriesBefore}/${totalEntries} entries)`
+		: `${greetingText} (${review.pendingEntries} entries)`;
+	if (options.reportStart !== false) {
+		onProgress?.({
+			type: "start",
+			message: greeting,
+			...(showProgress ? { reviewedEntries: reviewedEntriesBefore, totalEntries } : {}),
+		});
+	}
 	let saved = 0;
 	let savedGlobal = 0;
 	let savedProject = 0;
@@ -528,6 +563,14 @@ export async function executeRecodeShiori(options: {
 		}
 		reviewedEntries += chunk.entries.length;
 		lastReviewedEntryId = chunk.entries.at(-1)!.id;
+		if (showProgress) {
+			onProgress?.({
+				type: "progress",
+				message: `${greetingText} (${reviewedEntriesBefore + reviewedEntries}/${totalEntries} entries)`,
+				reviewedEntries: reviewedEntriesBefore + reviewedEntries,
+				totalEntries,
+			});
+		}
 	}
 	for (const candidate of pendingWrites) {
 		saved += 1;
@@ -555,8 +598,10 @@ export async function executeRecodeShiori(options: {
 		.join(" · ");
 	const appendMessage =
 		options.appendMessage ?? ((message: string) => appendRecodeShioriMessage(sessionManager, message));
-	appendMessage(greeting);
-	appendMessage(completion);
+	if (options.appendMessages !== false) {
+		appendMessage(greeting);
+		appendMessage(completion);
+	}
 	onProgress?.({ type: "complete", message: completion });
 	return {
 		reviewedEntries,

@@ -155,7 +155,7 @@ describe("re.code core memory", () => {
 			const command = loader.getExtensions().extensions[0]?.commands.get("shiori");
 			if (!command) throw new Error("Shiori command missing");
 			expect(command.description).toContain("use /shiori review for current-session memory review");
-			expect(command.argumentHint).toBe("[new|review [path]|<task>]");
+			expect(command.argumentHint).toBe("[new|review|review all|review <path>|<task>]");
 			const waitForIdle = vi.fn(async () => {});
 			const context = {
 				waitForIdle,

@@ -283,6 +283,69 @@ describe("Shiori (栞) memory review", () => {
 		expect(review.chunks[0]?.transcript).not.toContain("[first] USER");
 	});
 
+	it("reviews every bounded batch with live progress when review all is requested", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "repi-shiori-review-all-"));
+		const runtime = new RecodeMemoryRuntime();
+		runtime.setConfig(normalizeRecodeMemoryConfig({ cardinalRouting: "project" }));
+		const sessionManager = SessionManager.inMemory(cwd);
+		for (let index = 0; index < 5; index++) {
+			sessionManager.appendMessage({
+				role: "user",
+				content: `Entry ${index}: ${"x".repeat(24_000)}`,
+				timestamp: index,
+			});
+		}
+		const fetchMock = vi.fn().mockImplementation(
+			async () =>
+				new Response(JSON.stringify({ output: [{ type: "message", content: '{"memories":[]}' }] }), {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				}),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+		const progress: Array<{ type: string; reviewedEntries?: number; totalEntries?: number }> = [];
+		const appendMessage = vi.fn();
+		try {
+			const result = await runtime.runShioriAll({
+				cwd,
+				sessionManager,
+				modelRegistry: {
+					getApiKeyAndHeaders: vi.fn().mockResolvedValue({ ok: true, apiKey: "test-key", headers: {} }),
+				} as never,
+				projectTrusted: true,
+				model: {
+					id: "qwen3.5-9b",
+					name: "Qwen3.5 9B",
+					api: "openai-completions",
+					provider: "open-provider",
+					baseUrl: "http://127.0.0.1:1234/v1",
+					reasoning: true,
+					input: ["text"],
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+					contextWindow: 32768,
+					maxTokens: 8192,
+				},
+				onProgress: (event) => progress.push(event),
+				appendMessage,
+			});
+
+			expect(result).toMatchObject({ reviewedEntries: 5, hasMore: false });
+			expect(fetchMock).toHaveBeenCalledTimes(5);
+			expect(progress[0]).toMatchObject({ type: "start", reviewedEntries: 0, totalEntries: 5 });
+			expect(progress.filter((event) => event.type === "progress").map((event) => event.reviewedEntries)).toEqual([
+				1, 2, 3, 4, 5,
+			]);
+			expect(appendMessage).toHaveBeenCalledWith(expect.stringContaining("Reviewed 5/5 entries"));
+			expect(getRecodeShioriCheckpoint(sessionManager.getBranch())).toMatchObject({
+				lastReviewedEntryId: expect.any(String),
+			});
+		} finally {
+			runtime.close();
+			vi.unstubAllGlobals();
+			await rm(cwd, { recursive: true, force: true });
+		}
+	});
+
 	it("accepts fenced JSON, rejects low-confidence noise, normalizes tags, and deduplicates candidates", () => {
 		const output = `A discarded draft looked like {memories: pending}. Here is the result:\n\`\`\`json
 {
