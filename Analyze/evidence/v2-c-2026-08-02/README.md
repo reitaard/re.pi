@@ -28,7 +28,23 @@ Artifact: `recode-0.81.6-installed/summary.json`, exact installed Windows x64 bi
 | TUI input echo | isolated | 778.3 ms | 753.6–1,032.0 ms |
 | RPC `get_state` | isolated | 891.0 ms | 762.0–1,099.4 ms |
 
-These compiled-binary results are not directly ratio-compared with the earlier Node-source results because runtime and artifact topology differ. During compiled Maestro certification, its child launcher was found to reference obsolete `pi.exe`; source commit `5ea2bfdf6` corrects it to the Recode companion executable. Compiled Maestro session/resource measurements require the corrected artifact to be installed before they are accepted.
+These compiled-binary results are not directly ratio-compared with the earlier Node-source results because runtime and artifact topology differ. During compiled Maestro certification, its child launcher was found to reference obsolete `pi.exe`; source commit `5ea2bfdf6` corrects it to the Recode companion executable.
+
+Corrected installed compiled Maestro artifact (`maestro-service.json`, commit `c86c809a19fb94c1cb23da403d51b4eed8cfd27a`):
+
+| Endpoint | Result |
+|---|---:|
+| Service start to authenticated ready | 930.8 ms |
+| Warm direct `list` median | 1.0 ms |
+| Warm compiled CLI `list` median | 536.9 ms |
+| One configured read-only session spawn | 4,335.6 ms |
+| Warm interactive attachment | 2.4 ms |
+| One-session aggregate working set | 555,147,264 bytes |
+| Ten-session aggregate working set | 5,075,718,144 bytes |
+
+Ten sessions were admitted. The aggregate Windows working-set topology includes shared mapped pages and one extension-launched descendant, so it is not a private-memory or Linux-PSS claim.
+
+The exact jcode `v0.54.4` Windows x64 binary was reverified at SHA-256 `2572765b72f776ef4bfdd41efc055e0078910d60aae600aa35c6b1fcb5f54523`. Its five-run `--version` process median was 31.6 ms. An isolated daemon/session endpoint could not be established because the binary refuses to start without configured jcode credentials; no login, credential mutation or provider request was performed. See `jcode-v0.54.4-matched.json`. Therefore no daemon/session/resource ratio is claimed.
 
 ## Maestro service and session endpoints
 
