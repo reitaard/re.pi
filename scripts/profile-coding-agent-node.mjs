@@ -668,11 +668,11 @@ async function main() {
 		throw new Error(`CLI entrypoint not found: ${entryPath}`);
 	}
 
+	const sourceIdentity = readSourceIdentity();
 	mkdirSync(profileDir, { recursive: true });
 	if (options.artifactDir) {
 		mkdirSync(options.artifactDir, { recursive: true });
 	}
-	const sourceIdentity = readSourceIdentity();
 
 	const measuredRuns = [];
 	const totalRuns = options.warmup + options.runs;
