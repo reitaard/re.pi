@@ -2,7 +2,7 @@
 
 ## Scope and provenance
 
-- Audited checkout: `agent-harness` at `733df388`.
+- Audited checkout: `agent-harness`, updated through the Recode `0.81.6` V2-C optimization checkpoint on 2026-08-02.
 - Upstream inspected: `earendil-works/pi` `upstream/main` at `c820aa26` (fetched 2026-07-28).
 - This checkout diverged from upstream at `1f9e846c`; it contains 142 commits beyond that merge base. The delta is 577 files, 32,831 insertions, and 3,781 deletions. This is not a claim that every changed line is custom product logic; it is the verified repository delta.
 - No jcode comparison is included in this document.
@@ -11,17 +11,18 @@
 
 Recode is a capable, Pi-derived interactive coding agent. Its core is strong: terminal UI, session persistence/tree/fork/compaction, many providers, filesystem and shell tools, JSON/RPC/SDK modes, and a mature extension/skill/theme/package model. `packages/coding-agent` has 214 test files.
 
-The main product risks are startup latency, an unfinished multi-session orchestrator, documentation identity drift, and a host-privilege security boundary.
+The main product risks are configured extension/package startup latency, high per-session process working sets, distribution polish, documentation identity drift, and a host-privilege security boundary. Maestro is no longer an unfinished experiment: it has bounded lifecycle control, persistence/recovery, authenticated IPC, workspace admission, turn leases, service supervision, diagnostics, direct attach/search, completion delivery, and tested ten-session admission.
 
 ### Measured startup observation
 
-A local Node RPC benchmark of the already-built coding-agent CLI, using offline mode and an isolated agent directory, recorded 10 measured runs:
+The retained installed Recode `0.81.6` Windows x64 compiled baseline uses one warmup plus five measured runs per endpoint with offline mode, no provider request and uncontrolled caches:
 
-- ready-state median: **1,513.8 ms**
-- range: **1,497.3–1,597.6 ms**
-- first isolated warmup: **28,856.0 ms**
+- configured TUI input echo: **4,035.8 ms** median
+- configured RPC `get_state`: **3,889.8 ms** median
+- isolated TUI input echo: **778.3 ms** median
+- isolated RPC `get_state`: **891.0 ms** median
 
-The benchmark waits for an actual RPC `get_state` response (`scripts/profile-coding-agent-node.mjs`), so this is a useful readiness metric. It is not yet a release SLO: there is no retained environment fingerprint, cold-start phase breakdown, or checked-in benchmark artifact. The ~29-second first launch should be investigated before external performance comparisons.
+Standalone minification reduced isolated RPC readiness to **729.0 ms**, while configured RPC remained **3,876.3 ms** and therefore within run variance. Configured extensions/packages, rather than the isolated core, are now the dominant measured startup cost. These are retained reproducible artifacts, but remain uncontrolled-cache observations rather than destructive cold-cache claims.
 
 ## Additions over the Pi merge base
 
@@ -53,14 +54,14 @@ The benchmark waits for an actual RPC `get_state` response (`scripts/profile-cod
 - Added Telegram gateway integration and an OpenAI-compatible provider entry point (`packages/coding-agent/src/recode-telegram-gateway.ts`, `packages/coding-agent/src/recode-open-provider.ts`).
 - The AI layer also has substantial provider/model catalog changes relative to the merge base (`packages/ai/src/providers/`).
 
-### Multi-session experiment
+### Multi-session lifecycle
 
-- Added `@reitaard/repi-orchestrator`, which starts coding-agent RPC children, tracks instances, and exposes a coordinator path (`packages/orchestrator/`).
-- This is explicitly experimental and is **not production-ready**: it has no tests, no RPC/termination deadlines, non-atomic JSON persistence, deleted terminal records, and no installed `orchestrator` executable despite README instructions.
+- `@reitaard/repi-orchestrator` now provides the Recode Maestro service, authenticated control plane, searchable dashboard, direct attach, bounded RPC children, durable lifecycle/completion state, workspace safety and native supervision (`packages/orchestrator/`).
+- The corrected compiled `0.81.6` artifact reached authenticated service readiness in **930.8 ms**, warm direct control in **1.0 ms**, one configured read-only session in **4,335.6 ms**, and admitted ten sessions. Aggregate Windows working set reached **5,075,718,144 bytes**, which includes shared pages and is not a Linux-PSS or private-memory claim.
 
 ## Priority gaps
 
 1. **Startup (P0):** profile the first isolated launch and divide time among Node/module loading, configuration/context discovery, extension/skill loading, provider initialization, persistence, and TUI rendering. Establish cold/warm TUI and RPC baselines with retained artifacts.
-2. **Orchestrator reliability (P0):** add RPC and shutdown timeouts, termination escalation, atomic persistence/recovery, retained terminal state, an explicit ownership/reattach model, a package `bin` or corrected documentation, and failure-path tests.
+2. **Multi-session efficiency (P0):** retain lifecycle isolation until private/shared memory attribution proves safe ownership boundaries; reduce repeated configured package initialization without weakening extension order, credentials, transcript, workspace or owner isolation.
 3. **Product identity (P1):** rewrite primary Pi-branded install/run documentation to use Recode identity and `recode`; the package itself already exposes `recode`.
 4. **Background security (P1):** do not position unattended workers as sandboxed. Tools and extensions operate with host-user privileges; background or untrusted-repository workflows need explicit containment.

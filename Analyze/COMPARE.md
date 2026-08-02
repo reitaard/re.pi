@@ -2,11 +2,11 @@
 
 ## Scope and provenance
 
-**Review date:** 2026-07-30
+**Review date:** 2026-08-02 (V2-C update)
 
 | Product | Exact source/artifact | Execution status |
 |---|---|---|
-| Recode | `agent-harness` parent `98bcccfe6477af8795ece5835dba75fbebcc7f50`, plus the checkpoint changes committed with this report | Windows and Linux Node paths exercised; exact `0.81.5` artifact SHA-256 `0abaed2ae364753e091a832cf981668fb6cd9fc67b37893784374bc151ddcee0` |
+| Recode | installed `0.81.6` Windows x64 baseline from `c86c809a19fb94c1cb23da403d51b4eed8cfd27a`, followed by the bounded three-cycle optimization through standalone minification with preserved function names | Configured/isolated compiled TUI and RPC startup, compiled Maestro service/session control, and ten-session admission/resources exercised without provider requests |
 | jcode | tag `v0.54.4`, commit `fb7a5ea501e56084fa665b91b52ece9ab7761c3c`; official Windows x64 binary SHA-256 `2572765b72f776ef4bfdd41efc055e0078910d60aae600aa35c6b1fcb5f54523` | Binary version/help and daemon-control probes executed; source archived and inspected; Rust tests not run because no Rust toolchain is installed |
 | upstream Pi | `earendil-works/pi` `c820aa26fe0907e053e881a957722693fc094c9c` | Source/reference baseline; no new standalone execution in this checkpoint |
 | Hermes | `5b22bd955682a8fc7b07769784c5129e23f53eaf` | Lifecycle provenance only, not a fourth product |
@@ -34,6 +34,17 @@ Machine-readable evidence is retained in [`Analyze/evidence/2026-07-30-three-way
 - Starting Maestro through the Windows scheduled task opened a visible PowerShell console. This checkpoint hides both the PowerShell task host and its child process.
 - Earlier retained configured-runtime measurements remain the valid Recode baseline: approximately 3.76 seconds warm RPC readiness and 4.26 seconds warm TUI input/integration readiness. The dominant cold cost was extension/package import and initialization.
 
+### V2-C optimization and matched-comparison update
+
+- The installed Recode `0.81.6` compiled baseline measured configured TUI at 4,035.8 ms, configured RPC at 3,889.8 ms, isolated TUI at 778.3 ms and isolated RPC at 891.0 ms. Caches were uncontrolled.
+- Corrected compiled Maestro measured 930.8 ms service readiness, 1.0 ms warm direct control, 536.9 ms warm CLI control, 4,335.6 ms configured read-only session spawn and 2.4 ms warm attach. It admitted ten sessions.
+- The bounded optimization loop fixed compiled identity/session launch, then minified standalone bundles. Maestro's short-lived command median improved 11.2%, its binary shrank 4.4%, and isolated RPC readiness improved 18.2% to 729.0 ms. Preserving function names added only 512 bytes and did not regress the measured command endpoint.
+- Configured RPC remained essentially unchanged at 3,876.3 ms because configured extension/package initialization dominates it. No unsafe parallel extension initialization or feature removal was introduced.
+- The exact jcode artifact was reverified. Its short-lived `--version` endpoint measured 32.1 ms median versus optimized Maestro's 388.5 ms, confirming jcode's native CLI advantage. jcode daemon/session/resource endpoints remained unavailable without configuring credentials, so no lifecycle or resource ratio is claimed.
+- Recode's corrected compiled ten-session aggregate Windows working set was 5,075,718,144 bytes. This includes shared mapped pages and an extension-launched descendant and is not a private-memory or Linux-PSS claim; process-sharing changes remain unjustified without stronger attribution.
+
+Artifacts: [`Analyze/evidence/v2-c-2026-08-02/`](./evidence/v2-c-2026-08-02/).
+
 ### jcode
 
 - The verified `v0.54.4` Windows binary exposes integrated `server`, `connect`, `run`, `login`, `account`, `memory`, `ambient`, `pair`, `permissions`, `browser`, `provider-doctor`, `auth-test`, `restart`, `dictate` and session/model commands.
@@ -53,7 +64,7 @@ No ratio is reported: Recode session readiness, jcode daemon command latency and
 | Session history | Transparent JSONL tree, branch/fork/clone/export | Server-owned sessions, cross-harness resume and memorable names | Different strengths; jcode easier across harnesses |
 | Multi-session lifecycle | Maestro owns launch/status/wait/cancel/result/attach/detach/stop with durable recovery | Persistent server and lightweight reconnecting clients | Recode stronger invariants; jcode smoother user experience and lower duplication |
 | Visible session workspace | Maestro board shows health, branch, activity, output, input and controls | Persistent clients plus broader session commands; multi-surface workspace remains evolving | jcode easier to enter; Recode board is safer but separate |
-| Direct attach | Board selection and RPC stream exist; no simple documented `recode maestro attach <id>` | `connect`, resume and session commands are obvious | jcode |
+| Direct attach | `recode maestro attach <id-or-label>`, bounded search and searchable dashboard entry are implemented | `connect`, resume and session commands are obvious | Both are direct; jcode remains more integrated into its primary daemon UX |
 | Named specialists | Levi, Mayuri and Shiori are bounded, private and tool-scoped | General swarm members and autonomous teams | Recode for disciplined specialists; jcode for general collaboration |
 | Swarm coordination | Concurrent workers and full sessions, but no shared plan/DM/touch protocol | DMs, broadcasts, plans, task graph, touch notifications and bounded swarm modes | jcode |
 | Memory authority | Markdown source, project/global scopes, Teach/Cardinal admission, read-only worker recall | Automatic extraction, local embeddings, graph retrieval and consolidation workflows | Recode for governance; jcode for automation/semantic depth |
@@ -73,7 +84,7 @@ No ratio is reported: Recode session readiness, jcode daemon command latency and
 | Notifications | Completion queue reaches Aizen; no general desktop/system notification center | Notification subsystem and session/ambient messages | jcode |
 | Remote/channel use | Durable Telegram gateway for one authorized private user; no pairing/device enrollment | `pair` command and iOS/remote plans; broader native mobile product is still coming | Recode has a working channel; both lack a complete general remote-security product |
 | Permissions UX | Interactive owner and generation protect mutations; project trust is explicit | `permissions` command and ambient pending requests | jcode easier to inspect/respond; Recode lifecycle authority stronger |
-| Diagnostics | Maestro health and redacted bundle now exist; no product-wide doctor | Provider doctor, auth tests, browser status, debug commands | jcode decisively easier |
+| Diagnostics | Generic read-only `recode doctor` groups release, installation, settings, provider auth, dynamic package/runtime, MCP, Maestro, memory and LSP evidence | Provider doctor, auth tests, browser status, debug commands | Recode broader product snapshot; jcode deeper guided provider/auth troubleshooting |
 | Installation | Exact npm artifact and builders exist; public trusted publication/self-update remain disabled | One-line platform installers, checksums and official binaries | jcode decisively easier |
 | Update/rollback | Fail-closed identity, installation classification, confirmation and rollback receipt | Integrated binary update and self-dev reload | Recode safer in source preservation; jcode complete for end users |
 | Windows service UX | Native task and Job Object; this checkpoint fixes visible console and deadline mismatch | Background daemon is a primary product path | jcode still smoother |

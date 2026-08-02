@@ -69,12 +69,22 @@ These are aggregate Windows working-set samples, not Linux PSS and not topology-
 
 ## Capacity result
 
-The requested ten-session measurement is blocked by production `maxLiveInstances = 8`. The isolated benchmark admitted eight sessions and rejected the ninth with `Maestro live instance limit reached`. The benchmark preserved the bound instead of weakening it to manufacture a ten-session result.
+The initial checkpoint was bounded at eight sessions. After measured review, the production default was raised to ten and both Node-source and corrected compiled-artifact runs admitted all ten. The compiled aggregate working-set result is retained above; it does not by itself justify sharing process-local state.
+
+## Three-cycle optimization result
+
+The Creator-bounded optimization loop stopped after three cycles. Machine-readable detail is in `optimization-summary.json`, with raw cycle-two endpoint samples in `optimization-cycle-2-cli.json` and `optimization-cycle-2-rpc.json`.
+
+1. Corrected clean builds and compiled Maestro identity/session launch. The result progressed from a build failure and unusable compiled session launcher to a ten-session validated artifact.
+2. Minified standalone bundles. Maestro's ten-run `--version` process median improved from 463.3 ms to 411.4 ms (11.2%), its executable shrank from 110,075,904 to 105,224,192 bytes (4.4%), and isolated compiled RPC readiness improved from 891.0 ms to 729.0 ms (18.2%). Configured RPC remained effectively unchanged at 3,876.3 ms versus 3,889.8 ms because configured extension/package initialization dominates that endpoint.
+3. Preserved function names under minification. The resulting Maestro executable was 105,224,704 bytes, only 512 bytes above full minification, and its measured `--version` median was 388.5 ms; diagnostic function names therefore remain available without a measurable endpoint regression.
+
+jcode's equivalent `--version` median was 32.1 ms, so its short-lived native CLI remains materially faster. No ratio is extended to daemon readiness, session spawn or ten-session resources because jcode could not run those endpoints without credentials on this machine.
 
 ## Remaining matched work
 
 - Repeat resource samples and add per-process attribution before changing ownership boundaries.
-- Decide whether the production bound should remain eight or be raised for the ten-session roadmap gate; change it only with resource and safety evidence.
-- Run exact jcode and upstream Pi probes at the same lifecycle endpoints and report unlike process topologies separately.
+- Attribute private versus shared mapped memory and extension-launched descendants before changing ownership boundaries.
+- Run jcode daemon/session endpoints only when they can be established without credential mutation or provider requests; continue reporting unlike process topologies separately.
 - A destructive cold-cache run still requires separate approval and a documented cache-control procedure.
 - Active model-generation measurements require explicit approval for a fixed provider/model request; no paid request was made here.
