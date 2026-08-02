@@ -162,11 +162,11 @@ for platform in "${PLATFORMS[@]}"; do
     # explicit build entrypoints. The runtime can still use new URL(...), but the
     # worker must be present in the compiled executable.
     if [[ "$platform" == windows-* ]]; then
-        bun build --compile --target=bun-$platform ./dist/bun/cli.js ./src/utils/image-resize-worker.ts --outfile "$OUTPUT_DIR/$platform/recode.exe"
-        bun build --compile --target=bun-$platform ../orchestrator/dist/cli.js --outfile "$OUTPUT_DIR/$platform/recode-maestro.exe"
+        bun build --compile --minify --target=bun-$platform ./dist/bun/cli.js ./src/utils/image-resize-worker.ts --outfile "$OUTPUT_DIR/$platform/recode.exe"
+        bun build --compile --minify --target=bun-$platform ../orchestrator/dist/cli.js --outfile "$OUTPUT_DIR/$platform/recode-maestro.exe"
     else
-        bun build --compile --target=bun-$platform ./dist/bun/cli.js ./src/utils/image-resize-worker.ts --outfile "$OUTPUT_DIR/$platform/recode"
-        bun build --compile --target=bun-$platform ../orchestrator/dist/cli.js --outfile "$OUTPUT_DIR/$platform/recode-maestro"
+        bun build --compile --minify --target=bun-$platform ./dist/bun/cli.js ./src/utils/image-resize-worker.ts --outfile "$OUTPUT_DIR/$platform/recode"
+        bun build --compile --minify --target=bun-$platform ../orchestrator/dist/cli.js --outfile "$OUTPUT_DIR/$platform/recode-maestro"
     fi
 done
 
