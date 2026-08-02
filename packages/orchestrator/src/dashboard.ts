@@ -4,6 +4,7 @@ import {
 	type Focusable,
 	Input,
 	Key,
+	type KeyId,
 	matchesKey,
 	ProcessTerminal,
 	TUI,
@@ -57,11 +58,48 @@ function appendEventOutput(current: string, event: AgentSessionEvent): string {
 	return safeText(`${current}${event.assistantMessageEvent.delta}`, "").slice(-MAX_DISPLAY_OUTPUT_CHARS);
 }
 
+export interface MaestroDashboardKeybindings {
+	search: KeyId;
+	clearSearch: KeyId;
+}
+
+export const DEFAULT_MAESTRO_DASHBOARD_KEYBINDINGS: MaestroDashboardKeybindings = {
+	search: "/",
+	clearSearch: "ctrl+x",
+};
+
 export interface MaestroDashboardOptions {
 	client?: MaestroDashboardClient;
 	requestRender(): void;
 	onQuit(): void;
 	now?: () => number;
+	initialQuery?: string;
+	initialSelector?: string;
+	keybindings?: Partial<MaestroDashboardKeybindings>;
+}
+
+export function searchMaestroInstances(instances: readonly InstanceSummary[], query: string): InstanceSummary[] {
+	const normalized = query.trim().toLowerCase();
+	if (!normalized) return [...instances];
+	return instances.filter((instance) =>
+		[instance.id, instance.label, instance.cwd, instance.workspace?.branch, instance.workspace?.worktreeRoot]
+			.filter((value): value is string => typeof value === "string")
+			.some((value) => value.toLowerCase().includes(normalized)),
+	);
+}
+
+export function resolveMaestroInstance(instances: readonly InstanceSummary[], selector: string): InstanceSummary {
+	const normalized = selector.trim().toLowerCase();
+	if (!normalized) throw new Error("A session id or label is required");
+	const exact = instances.filter(
+		(instance) => instance.id.toLowerCase() === normalized || instance.label?.toLowerCase() === normalized,
+	);
+	const matches = exact.length > 0 ? exact : searchMaestroInstances(instances, normalized);
+	if (matches.length === 0) throw new Error(`No Maestro session matches ${JSON.stringify(selector)}`);
+	if (matches.length > 1) {
+		throw new Error(`Maestro session selector ${JSON.stringify(selector)} is ambiguous (${matches.length} matches)`);
+	}
+	return matches[0];
 }
 
 export class MaestroDashboard implements Component, Focusable {
@@ -77,10 +115,13 @@ export class MaestroDashboard implements Component, Focusable {
 	private pendingUiRequest: RpcExtensionUIRequest | undefined;
 	private pendingSelection = 0;
 	private input: Input | undefined;
-	private inputPurpose: "prompt" | "ui" | undefined;
+	private inputPurpose: "prompt" | "search" | "ui" | undefined;
 	private busy = false;
 	private statusMessage = "Connecting to Maestro";
 	private stopConfirmation: { instanceId: string; expiresAt: number } | undefined;
+	private query: string;
+	private initialSelector: string | undefined;
+	private readonly keybindings: MaestroDashboardKeybindings;
 	private _focused = false;
 
 	constructor(options: MaestroDashboardOptions) {
@@ -88,6 +129,9 @@ export class MaestroDashboard implements Component, Focusable {
 		this.requestRender = options.requestRender;
 		this.onQuit = options.onQuit;
 		this.now = options.now ?? Date.now;
+		this.query = options.initialQuery?.trim() ?? "";
+		this.initialSelector = options.initialSelector;
+		this.keybindings = { ...DEFAULT_MAESTRO_DASHBOARD_KEYBINDINGS, ...options.keybindings };
 	}
 
 	get focused(): boolean {
@@ -102,16 +146,28 @@ export class MaestroDashboard implements Component, Focusable {
 	async refresh(): Promise<void> {
 		try {
 			this.snapshot = await this.client.refresh();
-			this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.snapshot.instances.length - 1));
-			if (!this.busy) this.statusMessage = "Live";
+			const instances = this.visibleInstances();
+			this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, instances.length - 1));
+			if (this.initialSelector) {
+				const selected = resolveMaestroInstance(this.snapshot.instances, this.initialSelector);
+				this.initialSelector = undefined;
+				const selectedIndex = instances.findIndex((instance) => instance.id === selected.id);
+				if (selectedIndex === -1) throw new Error("Selected Maestro session is excluded by the current search");
+				this.selectedIndex = selectedIndex;
+				await this.attachSelected();
+			} else if (!this.busy) this.statusMessage = "Live";
 		} catch (error) {
 			this.statusMessage = error instanceof Error ? error.message : String(error);
 		}
 		this.requestRender();
 	}
 
+	private visibleInstances(): InstanceSummary[] {
+		return searchMaestroInstances(this.snapshot?.instances ?? [], this.query);
+	}
+
 	private selectedInstance(): InstanceSummary | undefined {
-		return this.snapshot?.instances[this.selectedIndex];
+		return this.visibleInstances()[this.selectedIndex];
 	}
 
 	private runAction(action: () => Promise<void>): void {
@@ -204,7 +260,7 @@ export class MaestroDashboard implements Component, Focusable {
 		this.statusMessage = `Attached to ${safeText(instance.label, instance.id.slice(0, 8))}`;
 	}
 
-	private beginInput(purpose: "prompt" | "ui", initialValue = ""): void {
+	private beginInput(purpose: "prompt" | "search" | "ui", initialValue = ""): void {
 		const input = new Input();
 		input.focused = this.focused;
 		input.setValue(initialValue);
@@ -218,6 +274,10 @@ export class MaestroDashboard implements Component, Focusable {
 			if (!text) return;
 			if (purpose === "prompt") {
 				this.attachment?.send({ type: "prompt", message: text });
+			} else if (purpose === "search") {
+				this.query = text;
+				this.selectedIndex = 0;
+				this.statusMessage = `Filtered to ${this.visibleInstances().length} session(s)`;
 			} else if (this.pendingUiRequest) {
 				this.attachment?.send({ type: "extension_ui_response", id: this.pendingUiRequest.id, value: text });
 				this.pendingUiRequest = undefined;
@@ -268,11 +328,17 @@ export class MaestroDashboard implements Component, Focusable {
 			return;
 		}
 		if (matchesKey(data, Key.down)) {
-			this.selectedIndex = Math.max(0, Math.min((this.snapshot?.instances.length ?? 1) - 1, this.selectedIndex + 1));
+			this.selectedIndex = Math.max(0, Math.min(this.visibleInstances().length - 1, this.selectedIndex + 1));
 			return;
 		}
 		const key = data.toLowerCase();
-		if (key === "q" || matchesKey(data, Key.escape)) {
+		if (matchesKey(data, this.keybindings.search)) {
+			this.beginInput("search", this.query);
+		} else if (matchesKey(data, this.keybindings.clearSearch)) {
+			this.query = "";
+			this.selectedIndex = 0;
+			this.statusMessage = "Search cleared";
+		} else if (key === "q" || matchesKey(data, Key.escape)) {
 			this.detach();
 			this.onQuit();
 		} else if (key === "r") {
@@ -325,9 +391,16 @@ export class MaestroDashboard implements Component, Focusable {
 
 	render(width: number): string[] {
 		const lines = this.renderHeader(width);
-		const instances = this.snapshot?.instances ?? [];
+		const instances = this.visibleInstances();
 		if (instances.length === 0) {
-			lines.push("", chalk.gray("  No Maestro sessions. Use `recode maestro spawn --read-only` to start one."));
+			lines.push(
+				"",
+				chalk.gray(
+					this.query
+						? `  No Maestro sessions match ${JSON.stringify(this.query)}.`
+						: "  No Maestro sessions. Use `recode maestro spawn --read-only` to start one.",
+				),
+			);
 		} else {
 			for (let index = 0; index < instances.length; index++) {
 				const instance = instances[index];
@@ -389,13 +462,18 @@ export class MaestroDashboard implements Component, Focusable {
 		}
 		if (this.input) {
 			lines.push(chalk.gray("─".repeat(width)));
-			lines.push(chalk.cyan(this.inputPurpose === "prompt" ? "  PROMPT" : "  RESPONSE"));
+			lines.push(
+				chalk.cyan(
+					this.inputPurpose === "prompt" ? "  PROMPT" : this.inputPurpose === "search" ? "  SEARCH" : "  RESPONSE",
+				),
+			);
 			lines.push(...this.input.render(Math.max(1, width - 2)).map((line) => `  ${line}`));
 		}
+		if (this.query) lines.push(truncateToWidth(`  ${chalk.cyan("SEARCH")}  ${safeText(this.query)}`, width));
 		lines.push(chalk.gray("─".repeat(width)));
 		lines.push(
 			truncateToWidth(
-				`  ${chalk.cyan("↑↓")} select  ${chalk.cyan("A/Enter")} attach  ${chalk.cyan("D")} detach  ${chalk.cyan("P")} prompt  ${chalk.yellow("C")} cancel  ${chalk.red("S×2")} stop  ${chalk.cyan("R")} refresh  ${chalk.cyan("Q")} quit`,
+				`  ${chalk.cyan("↑↓")} select  ${chalk.cyan("/")} search  ${chalk.cyan("A/Enter")} attach  ${chalk.cyan("D")} detach  ${chalk.cyan("P")} prompt  ${chalk.yellow("C")} cancel  ${chalk.red("S×2")} stop  ${chalk.cyan("R")} refresh  ${chalk.cyan("Q")} quit`,
 				width,
 			),
 		);
@@ -416,6 +494,7 @@ export class MaestroDashboard implements Component, Focusable {
 
 export async function runMaestroDashboard(
 	client: MaestroDashboardClient = new IpcMaestroDashboardClient(),
+	options: { initialQuery?: string; initialSelector?: string } = {},
 ): Promise<void> {
 	if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error("Maestro TUI requires an interactive terminal");
 	const terminal = new ProcessTerminal();
@@ -427,6 +506,8 @@ export async function runMaestroDashboard(
 		onQuit: () => {
 			stopped = true;
 		},
+		initialQuery: options.initialQuery,
+		initialSelector: options.initialSelector,
 	});
 	tui.addChild(dashboard);
 	tui.setFocus(dashboard);

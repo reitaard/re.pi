@@ -1,5 +1,15 @@
 # Update Work Log
 
+## 2026-08-02 — Operational Doctor phase
+
+- Implemented the first read-only `recode doctor` foundation with human/JSON output and local identity, configuration, integration, Maestro, memory and LSP checks.
+- Rejected presence-only diagnostics as product-complete because they do not explain live failures.
+- Refactored the V2 plan around three exact references: Codex Doctor for bounded redacted evidence and failure isolation, Hermes Doctor for broad operational coverage without adopting automatic repair, and jcode Provider Doctor for tiered provider checkpoints and first-blocker guidance.
+- Kept the implementation minimal by reusing Open Provider's existing configuration and model-catalogue parser for a bounded non-generation probe.
+- Added secret-safe classification for timeout, DNS, refused connection, TLS, HTTP/auth, empty catalogue and missing selected model failures.
+- The real configured Open Provider catalogue probe passed with three models; no prompt or model-generation request was made.
+- Doctor tests pass 4/4, full `npm run check` passes, and `git diff --check` passes.
+
 ## 2026-07-26 — Initial investigation
 
 ### Completed
@@ -291,3 +301,13 @@
 - Rejected the first development-suffix package after its prerelease version correctly failed the extensions' stable `>=0.81.5 <0.82.0` runtime contract. Repacked with clean `0.81.5`, matching the embedded release manifest and project SemVer policy.
 - After the Creator restarted Recode to release the Windows clipboard DLL, the exact stable tarball completed a clean global npm installation in 478 ms. Version and source metadata match `0.81.5` and `5d37b556c`.
 - The hidden scheduled task reached authenticated ready health, remained `Running`, and a read-only full session reached lifecycle `RUNNING` in 9,210 ms without the former false five-second timeout. The temporary child was stopped cleanly. One reboot/logon persistence check remains pending.
+
+## 2026-08-02 — V2 phase boundary and Maestro entry UX
+
+- Froze deeper Doctor expansion after the generic read-only package/capability discovery checkpoint; exact-artifact packaging remains V2-A closure.
+- Reorganized near-term V2 into four explicit phases before memory work: Doctor certification, direct Maestro entry, matched startup/session measurements, and measurement-justified non-memory O9 sharing.
+- Added direct Maestro attachment by unambiguous full/partial id or label, bounded search across ids, labels, workspaces and branches, and prefiltered TUI entry without creating another runtime.
+- Added focused selector ambiguity, missing-session, workspace search and automatic-attach coverage.
+- Preserved startup and cold-start comparison as a first-class V2-C requirement, including service cold start, warm attach and one/ten-session evidence at matched endpoints.
+- Added a secret-safe dirty-worktree fingerprint to startup artifacts so measurements from an uncommitted checkout cannot be mistaken for an exact clean source result.
+- Stopped the plan before automatic memory retrieval, semantic reranking/embeddings or shared Kioku indexes pending Creator review.

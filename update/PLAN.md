@@ -284,10 +284,13 @@ The repository already has one intended release path: `scripts/local-release.mjs
 
 ## Immediate next step
 
-V1 and the exact `0.81.5` Windows/VPS Node checkpoint are complete. V2 is active; self-update discovery remains disabled until Recode-owned metadata exists.
+V1 and the exact stable `0.81.5` Windows/VPS Node checkpoint are complete. Hidden Windows Maestro startup, authenticated readiness and reboot stability are certified. V2 is active; self-update discovery remains disabled until Recode-owned metadata exists.
 
-1. Commit and package the reviewed successor to `bde499491`, including hidden Windows supervision, readiness-gated native start/install/restart, corrected IPC deadlines and the latest accepted LSP fixes.
-2. Install the exact local artifact and certify invisible logon startup, authenticated readiness and at least 60 seconds of stable availability after reboot.
-3. Rerun matched one-session and ten-session startup/resource probes only after that gate passes.
-4. Implement the product-wide doctor and direct Maestro attach/session-picker UX.
-5. Execute O9 sharing only in the measured order recorded above; keep V3 Telegram/remote authorization deferred.
+The first `recode doctor` foundation is implemented and validated. Freeze deeper Doctor expansion for this checkpoint; package and certify the current read-only implementation, then proceed through four bounded V2 phases before any further memory-retrieval work:
+
+1. **V2-A — Doctor checkpoint:** review, package/install and certify human plus JSON output from the exact artifact. Do not add broad new probes in this phase.
+2. **V2-B — Maestro entry:** finish direct attach by unambiguous id/label and searchable session/workspace filtering without creating a duplicate runtime. Source implementation and focused dashboard coverage are now present; installed-artifact/TUI certification remains.
+3. **V2-C — Matched performance evidence:** retain configured and isolated cold/warm startup artifacts, service cold-start and warm-attach endpoints, and one/ten idle/active-session resource measurements. Compare Recode, exact jcode and upstream Pi only at matched endpoints; never use warm daemon attach to conceal cold startup.
+4. **V2-D — Measured non-memory O9:** optimize verified package manifests, immutable provider/model metadata and explicit MCP/Browser service ownership only where V2-C shows material duplication. Keep credentials, transcripts and mutable session state isolated.
+
+Stop for Creator review before **V2-E memory retrieval/index sharing**. Do not change automatic retrieval, add embeddings/reranking, share Kioku indexes or remove/supersede durable memory before that discussion. V3 Telegram and remote authorization remain deferred.

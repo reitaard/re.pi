@@ -6,7 +6,7 @@ import type {
 	RpcExtensionUIResponse,
 	RpcResponse,
 } from "@reitaard/repi-coding-agent";
-import { MaestroDashboard } from "../src/dashboard.ts";
+import { MaestroDashboard, resolveMaestroInstance, searchMaestroInstances } from "../src/dashboard.ts";
 import type {
 	MaestroDashboardAttachment,
 	MaestroDashboardClient,
@@ -110,6 +110,70 @@ class FakeDashboardClient implements MaestroDashboardClient {
 }
 
 describe("Maestro dashboard", () => {
+	test("searches sessions across ids, labels, workspaces, and branches", () => {
+		const release = createInstance();
+		const review: InstanceSummary = {
+			...createInstance(),
+			id: "instance-87654321",
+			label: "Security review",
+			cwd: "/workspace/security",
+			workspace: {
+				access: "read-only",
+				worktreeRoot: "/workspace/security",
+				branch: "security-hardening",
+				worktreeIdentity: "d".repeat(64),
+			},
+		};
+		const instances = [release, review];
+		assert.deepEqual(searchMaestroInstances(instances, "release"), [release]);
+		assert.deepEqual(searchMaestroInstances(instances, "security-hardening"), [review]);
+		assert.equal(resolveMaestroInstance(instances, "instance-123").id, release.id);
+		assert.throws(() => resolveMaestroInstance(instances, "instance"), /ambiguous/);
+		assert.throws(() => resolveMaestroInstance(instances, "missing"), /No Maestro session/);
+	});
+
+	test("filters the live picker through configurable search keybindings", async () => {
+		const release = createInstance();
+		const security: InstanceSummary = {
+			...createInstance(),
+			id: "instance-security",
+			label: "Security review",
+		};
+		const snapshot = createSnapshot(release);
+		snapshot.instances.push(security);
+		const dashboard = new MaestroDashboard({
+			client: new FakeDashboardClient(snapshot),
+			requestRender() {},
+			onQuit() {},
+			keybindings: { search: "ctrl+f", clearSearch: "ctrl+k" },
+		});
+		await dashboard.refresh();
+		dashboard.handleInput("\x06");
+		for (const character of "security") dashboard.handleInput(character);
+		dashboard.handleInput("\r");
+		const filtered = dashboard.render(120).join("\n");
+		assert.match(filtered, /Security review/);
+		assert.doesNotMatch(filtered, /Release audit/);
+		dashboard.handleInput("\x0b");
+		assert.match(dashboard.render(120).join("\n"), /Release audit/);
+	});
+
+	test("opens a filtered picker and directly attaches an unambiguous selector", async () => {
+		const instance = createInstance();
+		const client = new FakeDashboardClient(createSnapshot(instance));
+		const dashboard = new MaestroDashboard({
+			client,
+			requestRender() {},
+			onQuit() {},
+			initialQuery: "agent-harness",
+			initialSelector: "Release audit",
+		});
+		await dashboard.refresh();
+		const rendered = dashboard.render(120).join("\n");
+		assert.match(rendered, /SEARCH.*agent-harness/);
+		assert.match(rendered, /ATTACHED/);
+	});
+
 	test("renders bounded health, workspace, activity, input, and latest-output state", async () => {
 		const instance = createInstance();
 		const client = new FakeDashboardClient(createSnapshot(instance));

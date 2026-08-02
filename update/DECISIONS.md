@@ -162,6 +162,14 @@ Every npm package, Bun binary archive, Termux archive and source archive carries
 
 **Reason:** An archive cannot embed its own final cryptographic hash without a circular value. The two-layer format preserves identical embedded provenance while giving release consumers final-byte hashes and sizes.
 
+## D-023 — Recode Doctor diagnoses operations through existing subsystem boundaries
+
+**Status:** Accepted
+
+`recode doctor` remains a read-only, secret-safe diagnostic command rather than an agent persona or repair engine. Keep its implementation small by orchestrating existing provider discovery, package runtime contracts, Maestro lifecycle projection, Browser/MCP health, Kioku storage and LSP boundaries. Packages, extensions, capabilities, services and MCP servers are discovered generically from configured installation paths, standard configuration locations and runtime declarations; Doctor never keys behavior to known package names or a fixed component count. Human output stays grouped into bounded product categories rather than emitting one top-level check per component. Use Codex Doctor as the reference for bounded concurrent checks, structured redacted evidence and failure isolation; Hermes Doctor for practical service/database/executable coverage without automatic repair; and jcode Provider Doctor for offline/catalog/explicit-full tiers and first-blocker guidance. Default live probes may perform bounded non-generation health/catalogue requests but never paid model generation, state mutation or automatic repair.
+
+**Reason:** Presence-only checks do not answer why Recode cannot work now. Reusing production boundaries minimizes duplicate logic while proven external diagnostic patterns provide actionable failure classification.
+
 ## Pending decisions
 
 - Final package identity and initial version for the future standalone `recode` repository

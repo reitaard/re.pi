@@ -6,7 +6,7 @@ import { cwd } from "node:process";
 import { fileURLToPath } from "node:url";
 import type { RpcCommand, RpcExtensionUIResponse } from "@reitaard/repi-coding-agent";
 import { getSocketPath } from "./config.ts";
-import { runMaestroDashboard } from "./dashboard.ts";
+import { resolveMaestroInstance, runMaestroDashboard, searchMaestroInstances } from "./dashboard.ts";
 import { createMaestroDiagnosticBundle } from "./diagnostics.ts";
 import { sendIpcRequest } from "./ipc/client.ts";
 import { encodeMessage } from "./ipc/protocol.ts";
@@ -22,7 +22,7 @@ const packageJson = JSON.parse(readFileSync(join(__dirname, "../package.json"), 
 
 function printHelp(): void {
 	console.log(
-		`Recode Maestro v${packageJson.version}\n\nUsage:\n  recode maestro tui\n  recode maestro service <install|uninstall|start|stop|restart|status>\n  recode maestro service run [--supervision <manual|systemd|windows-task>]\n  recode maestro health\n  recode maestro diagnose\n  recode maestro list\n  recode maestro spawn (--read-only | --write) [--cwd <path>] [--label <label>] [--parent <instance-id>]\n  recode maestro status <instance-id>\n  recode maestro cancel <instance-id>\n  recode maestro stop <instance-id>\n  recode maestro rpc <instance-id> <json-command>\n  recode maestro rpc-stream <instance-id>\n  recode maestro --help\n  recode maestro --version\n\nThe native service owns all full-session children. Closing the TUI detaches; stop is destructive.`,
+		`Recode Maestro v${packageJson.version}\n\nUsage:\n  recode maestro tui [--search <query>]\n  recode maestro attach <session-id-or-label>\n  recode maestro search <query>\n  recode maestro service <install|uninstall|start|stop|restart|status>\n  recode maestro service run [--supervision <manual|systemd|windows-task>]\n  recode maestro health\n  recode maestro diagnose\n  recode maestro list\n  recode maestro spawn (--read-only | --write) [--cwd <path>] [--label <label>] [--parent <instance-id>]\n  recode maestro status <instance-id>\n  recode maestro cancel <instance-id>\n  recode maestro stop <instance-id>\n  recode maestro rpc <instance-id> <json-command>\n  recode maestro rpc-stream <instance-id>\n  recode maestro --help\n  recode maestro --version\n\nThe native service owns all full-session children. Closing the TUI detaches; stop is destructive.`,
 	);
 }
 
@@ -131,7 +131,37 @@ async function main(): Promise<void> {
 	}
 
 	if (args[0] === "tui") {
-		await runMaestroDashboard();
+		await runMaestroDashboard(undefined, { initialQuery: getFlagValue(args, "--search") });
+		return;
+	}
+
+	if (args[0] === "attach") {
+		const selector = args[1];
+		if (!selector) {
+			console.error("Usage: recode maestro attach <session-id-or-label>");
+			process.exit(1);
+		}
+		const response = await sendIpcRequest({ type: "list" });
+		if (response.type !== "list_result" || !response.ok || !response.instances) {
+			throw new Error(response.error ?? "Unable to list Maestro sessions");
+		}
+		const instance = resolveMaestroInstance(response.instances, selector);
+		await runMaestroDashboard(undefined, { initialSelector: instance.id });
+		return;
+	}
+
+	if (args[0] === "search") {
+		const query = args.slice(1).join(" ").trim();
+		if (!query) {
+			console.error("Usage: recode maestro search <query>");
+			process.exit(1);
+		}
+		const response = await sendIpcRequest({ type: "list" });
+		if (response.type !== "list_result" || !response.ok || !response.instances) {
+			printResponse(response);
+			return;
+		}
+		printResponse({ ...response, instances: searchMaestroInstances(response.instances, query) });
 		return;
 	}
 

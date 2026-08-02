@@ -157,17 +157,27 @@ Telegram and broad jcode performance benchmarking are not V1 critical-path work.
 
 ### Required work
 
-1. Execute O9 only from retained measurements:
+1. Complete operational `recode doctor` before broader V2 optimization:
+   - reuse existing subsystem health/discovery boundaries with minimal new code;
+   - use Codex-style bounded redacted evidence and check isolation;
+   - use Hermes-style service/database/executable coverage without automatic repair;
+   - use jcode-style provider tiers and first-blocker guidance;
+   - prove real provider, extension, Browser/MCP, Kioku, LSP and Maestro failure fixtures.
+2. Execute O9 only from retained measurements:
    - share immutable provider/model metadata;
    - share verified package manifests and stable tool schemas;
    - share rebuildable read-only Kioku indexes safely;
    - give MCP/browser backends explicit service ownership, readiness, health and reconnect contracts;
    - keep credentials and mutable session state isolated.
-2. Ratify startup SLOs using matched cold service, warm attach, TUI input, session-ready, integration-ready and first-model-event endpoints.
-3. Add one visible multi-session workspace/picker with search, attach, read-only observe, pending approval and recovery diagnostics.
-4. Add signed channel manifests, staged rollout, canary/rollback and fleet health for the primary machine, work PC, VPS and later Termux.
-5. Add optional hybrid lexical/semantic memory retrieval while preserving Markdown authority, Teach/Cardinal admission, provenance and stale-evidence rules.
-6. Curate default browser/MCP packages under explicit licensing, permissions and compatibility policy.
+3. Ratify startup SLOs using matched cold service, warm attach, TUI input, session-ready, integration-ready and first-model-event endpoints.
+4. Add one visible multi-session workspace/picker with search, attach, read-only observe, pending approval and recovery diagnostics.
+5. Add signed channel manifests, staged rollout, canary/rollback and fleet health for the primary machine, work PC, VPS and later Termux.
+6. Add optional hybrid lexical/semantic memory retrieval while preserving Markdown authority, Teach/Cardinal admission, provenance and stale-evidence rules.
+7. Curate default browser/MCP packages under explicit licensing, permissions and compatibility policy.
+
+### V2 execution boundary
+
+Near-term work is grouped into four phases: V2-A certify the frozen Doctor checkpoint; V2-B direct Maestro attach and searchable workspace/session filtering; V2-C matched configured/isolated cold and warm startup plus service cold-start, warm-attach and one/ten-session measurements; V2-D measurement-justified non-memory O9 sharing. Stop for Creator review before changing automatic memory retrieval, adding semantic reranking/embeddings or sharing Kioku indexes.
 
 ### V2 exit gate
 

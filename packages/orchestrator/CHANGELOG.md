@@ -5,6 +5,7 @@
 ### Added
 
 - Added Recode Maestro's versioned public lifecycle contract, bounded supervision service, and private worker/full-session adapters.
+- Added direct Maestro session attachment by unambiguous id or label, plus bounded session search and prefiltered dashboard entry across ids, labels, workspaces, and branches.
 - Added validated atomic instance/machine manifests with bounded backup recovery, corruption diagnostics, process-start identity verification, and terminal retention.
 - Added bounded RPC deadlines, command/instance cancellation results, prompt/request/session/subscriber limits, and verified graceful-to-forced shutdown outcomes.
 - Added fail-closed per-session turn leases with FIFO serialization, stale-generation-safe release, and compaction/session-rotation rebind.

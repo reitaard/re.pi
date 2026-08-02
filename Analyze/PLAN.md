@@ -635,10 +635,13 @@ After each code phase, run focused tests, `npm run check`, `git diff --check`, a
 13. O7 workspace safety — complete.
 14. O8 service supervision and TUI integration — complete as a component.
 15. V1 lifecycle closure — complete: O1 is connected to production execution, O3 includes independent iteration budgets, and production terminal transitions feed O6.
-16. **Checkpoint B now:** Hermes lifecycle conformance passes against the actual production authority and the long-lived service is usable end to end.
-17. Local control-plane security — complete; release identity/update/certification is the next bounded phase.
-18. C0–C3 fresh exact-source three-way test/performance comparison of Recode, jcode and upstream Pi.
-19. C4 gap decision and S4 performance-target ratification.
-20. O9 shared-service optimization, then V2/V3 product work in the measured order.
+16. Hermes lifecycle conformance against the production authority — complete.
+17. Local control-plane security, stable `0.81.5` release identity and Windows/VPS certification — complete.
+18. C0–C4 exact-source Recode/jcode/upstream-Pi product checkpoint — complete for prioritization; matched performance evidence remains pending.
+19. V2-A operational Recode Doctor checkpoint — freeze scope, then build/install and certify the current read-only human/JSON implementation from the exact artifact.
+20. V2-B direct Maestro attach and searchable session/workspace picker — source implementation and focused dashboard coverage are present; installed-artifact/TUI certification remains.
+21. V2-C matched startup evidence — configured/isolated cold and warm process startup, service cold start, warm attach, and one/ten idle/active-session latency/resource artifacts. Exact jcode and upstream Pi comparisons use only matched endpoints.
+22. V2-D measured non-memory O9 — package manifests, immutable provider/model metadata and explicit MCP/Browser service ownership only where V2-C proves material duplication.
+23. Stop for Creator review before V2-E memory retrieval/index sharing, then complete remaining distribution work and eventually V3 remote channels.
 
-This order fixes observability first, replaces the package runtime boundary, ports the lifecycle subsystem to a tested checkpoint, and only then compares exact implementations before broader product-gap closure. The service is never used to conceal cold startup cost, jcode claims are never compared against unlike Recode lifecycle points, and startup gains are not treated as overall feature parity.
+This order keeps startup and cold-start comparison explicit rather than allowing service readiness to conceal it. Doctor remains read-only and bounded. No automatic-retrieval, embedding/reranking, shared-Kioku-index or durable-memory supersession work begins before the V2-E review.

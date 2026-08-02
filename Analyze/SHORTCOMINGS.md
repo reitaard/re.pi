@@ -71,28 +71,35 @@ Users can receive an error while a background session is still created, leaving 
 - Cancel or explicitly report any operation that outlives its client deadline.
 - Execute the one/ten-session resource checkpoint only after this correction is installed.
 
-### S3. Recode lacks one product-wide doctor
+### S3. Recode Doctor must diagnose operational failures
 
 **Current behavior**
 
-Maestro has health and a redacted diagnostic bundle, while providers, OAuth, model availability, extensions, browser/MCP, Kioku and LSP expose separate errors or settings.
+The first `recode doctor` foundation is implemented. It runs without Aizen or extension execution and reports bounded, secret-safe local state for release identity, installation classification, settings, provider/model selection, credential presence, configured packages, Browser/MCP/web presence, Maestro health, memory files and LSP settings.
+
+That foundation is not sufficient to explain why Recode cannot work now. It verifies configuration and presence but does not yet prove provider reachability, extension loading, backend startup, MCP handshakes, Kioku integrity, language-server execution or native-service agreement.
 
 **User impact**
 
-A user must understand Recode internals to identify whether a failure is caused by credentials, provider catalogues, package compatibility, backend readiness, project trust or Maestro.
+A healthy-looking configuration can still fail at runtime. The user still has to inspect individual errors to distinguish unreachable providers, rejected authentication, missing models, extension load failures, backend crashes, unavailable executables, corrupt indexes and Maestro state divergence.
 
 **Required outcome**
 
-Add `recode doctor` with bounded redacted sections for:
+Keep `recode doctor` read-only, bounded, secret-safe and model-free by default, but make the next V2 phase operationally useful:
 
-- runtime/version/release identity;
-- installation classification and update eligibility;
-- provider, auth and selected-model readiness;
-- extension runtime contracts;
-- browser/MCP/web readiness;
-- Kioku and LSP state;
-- Maestro health and divergence diagnostics;
-- exact corrective commands where safe.
+- preserve the existing offline foundation and stable JSON schema;
+- add a bounded selected-provider endpoint probe that does not send a generation request or incur model usage;
+- classify DNS, route, timeout, refusal, TLS, HTTP/auth and selected-model catalogue failures without guessing the cause;
+- discover configured packages, extensions, declared capabilities, services and MCP servers generically, without package-name checks or fixed component counts;
+- organize bounded output by product category while retaining per-component evidence only for failures or requested detail;
+- verify extension runtime contracts and loading in an isolated diagnostic process;
+- verify declared Browser/backend ownership, startup and readiness through generic service health contracts without opening a user session;
+- verify all discovered MCP configurations, executable availability and an optional bounded handshake;
+- verify Kioku schema/integrity/lock/staleness and rebuild eligibility without mutating the index;
+- verify configured LSP executable discovery, startup and initialization without editing project files;
+- compare Maestro IPC health, native service state, process ownership and canonical projection, emitting `STATE_DIVERGENCE` when they disagree;
+- rank the most likely root cause, suppress secondary noise and print one simple corrective action;
+- keep paid/model requests, repairs, installs, service starts and index rebuilds behind separate explicit authorization.
 
 ### S4. Entering and reattaching to sessions is harder than necessary
 
@@ -218,16 +225,22 @@ These do not precede startup reliability, doctor, session entry, distribution, i
 
 1. Package/install `bde499491` or its reviewed successor.
 2. Certify hidden durable Windows startup and corrected IPC deadlines.
-3. Implement `recode doctor`.
-4. Add direct attach and the searchable session/workspace picker.
-5. Retain valid one/ten-session latency and memory evidence.
-6. Execute O9 sharing in measured order:
+3. Complete operational Recode Doctor in the next phase:
+   - retain the implemented offline foundation;
+   - use Codex Doctor's bounded parallel checks, structured evidence and centralized redaction;
+   - use Hermes Doctor's service/database/tool coverage without its automatic repair behavior;
+   - use jcode Provider Doctor's offline/catalog/full tiers and first-blocker guidance;
+   - validate real provider, extension, Browser, MCP, Kioku, LSP and Maestro failure fixtures.
+4. Build/install the completed Doctor and certify it against an installed artifact.
+5. Add direct attach and the searchable session/workspace picker.
+6. Retain valid one/ten-session latency and memory evidence.
+7. Execute O9 sharing in measured order:
    - verified package manifests and stable schemas;
    - provider/model catalogue;
    - rebuildable read-only Kioku indexes;
    - MCP/browser service ownership.
-7. Add optional hybrid Kioku retrieval.
-8. Finish curated extension artifacts and installer/update-channel UX.
+8. Add optional hybrid Kioku retrieval.
+9. Finish curated extension artifacts and installer/update-channel UX.
 
 ### V3 entry
 

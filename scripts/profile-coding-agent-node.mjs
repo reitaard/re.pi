@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { arch, platform, release, tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
@@ -224,13 +225,23 @@ function formatMs(value) {
 function readSourceIdentity() {
 	const packageMetadata = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8"));
 	let commit = "unknown";
+	let workingTree = "unknown";
+	let dirtyFingerprint;
 	try {
 		commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repoRoot, encoding: "utf8" }).trim();
+		const status = execFileSync("git", ["status", "--porcelain=v1", "-z", "--untracked-files=all"], {
+			cwd: repoRoot,
+			encoding: "utf8",
+		});
+		workingTree = status.length === 0 ? "clean" : "dirty";
+		if (status.length > 0) dirtyFingerprint = createHash("sha256").update(status).digest("hex");
 	} catch {
 		// A packaged profiler may run without repository metadata.
 	}
 	return {
 		commit,
+		workingTree,
+		...(dirtyFingerprint ? { dirtyFingerprint } : {}),
 		packageName: packageMetadata.name,
 		packageVersion: packageMetadata.version,
 	};

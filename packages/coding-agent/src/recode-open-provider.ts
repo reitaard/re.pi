@@ -8,6 +8,13 @@ interface RecodeOpenProviderConfig {
 	apiKey: string;
 }
 
+export interface RecodeOpenProviderProbe {
+	status: "not-configured" | "reachable" | "timeout" | "dns" | "refused" | "tls" | "network" | "http" | "empty";
+	httpStatus?: number;
+	modelCount?: number;
+	selectedModelPresent?: boolean;
+}
+
 interface DiscoveredModel {
 	id: string;
 	name?: string;
@@ -122,6 +129,36 @@ async function discoverNativeModels(baseUrl: string, headers: Record<string, str
 		return parseNativeModels(await response.json());
 	} catch {
 		return [];
+	}
+}
+
+export async function probeRecodeOpenProvider(
+	selectedModel: string | undefined,
+	timeoutMs = 3_000,
+): Promise<RecodeOpenProviderProbe> {
+	const config = await readConfig();
+	if (!config) return { status: "not-configured" };
+	try {
+		const headers: Record<string, string> = config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {};
+		const response = await fetch(`${config.baseUrl}/models`, { headers, signal: AbortSignal.timeout(timeoutMs) });
+		if (!response.ok) return { status: "http", httpStatus: response.status };
+		const models = parseModels(await response.json());
+		if (models.length === 0) return { status: "empty" };
+		return {
+			status: "reachable",
+			modelCount: models.length,
+			selectedModelPresent: selectedModel ? models.some((model) => model.id === selectedModel) : undefined,
+		};
+	} catch (error) {
+		if (error instanceof Error && error.name === "TimeoutError") return { status: "timeout" };
+		const code =
+			error instanceof Error && typeof error.cause === "object" && error.cause !== null && "code" in error.cause
+				? String(error.cause.code)
+				: "";
+		if (code === "ENOTFOUND" || code === "EAI_AGAIN") return { status: "dns" };
+		if (code === "ECONNREFUSED") return { status: "refused" };
+		if (code.includes("CERT") || code.includes("TLS")) return { status: "tls" };
+		return { status: "network" };
 	}
 }
 

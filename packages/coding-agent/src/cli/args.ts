@@ -235,6 +235,7 @@ ${chalk.bold("Usage:")}
 ${chalk.bold("Commands:")}
   ${APP_NAME} aizen                    Explicitly start the Aizen runtime
   ${APP_NAME} maestro [tui|service]     Open or manage the Maestro full-session service
+  ${APP_NAME} doctor [--json]           Run bounded read-only product diagnostics
   ${APP_NAME} install <source> [-l]     Install extension source and add to settings
   ${APP_NAME} remove <source> [-l]      Remove extension source from settings
   ${APP_NAME} uninstall <source> [-l]   Alias for remove
