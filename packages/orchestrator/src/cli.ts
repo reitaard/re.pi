@@ -1,11 +1,10 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
 import { createConnection } from "node:net";
 import { dirname, join } from "node:path";
 import { cwd } from "node:process";
 import { fileURLToPath } from "node:url";
 import type { RpcCommand, RpcExtensionUIResponse } from "@reitaard/repi-coding-agent";
-import { getSocketPath } from "./config.ts";
+import { getSocketPath, VERSION } from "./config.ts";
 import { resolveMaestroInstance, runMaestroDashboard, searchMaestroInstances } from "./dashboard.ts";
 import { createMaestroDiagnosticBundle } from "./diagnostics.ts";
 import { sendIpcRequest } from "./ipc/client.ts";
@@ -16,13 +15,9 @@ import { serveMaestro } from "./service-runtime.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const packageJson = JSON.parse(readFileSync(join(__dirname, "../package.json"), "utf-8")) as {
-	version: string;
-};
-
 function printHelp(): void {
 	console.log(
-		`Recode Maestro v${packageJson.version}\n\nUsage:\n  recode maestro tui [--search <query>]\n  recode maestro attach <session-id-or-label>\n  recode maestro search <query>\n  recode maestro service <install|uninstall|start|stop|restart|status>\n  recode maestro service run [--supervision <manual|systemd|windows-task>]\n  recode maestro health\n  recode maestro diagnose\n  recode maestro list\n  recode maestro spawn (--read-only | --write) [--cwd <path>] [--label <label>] [--parent <instance-id>]\n  recode maestro status <instance-id>\n  recode maestro cancel <instance-id>\n  recode maestro stop <instance-id>\n  recode maestro rpc <instance-id> <json-command>\n  recode maestro rpc-stream <instance-id>\n  recode maestro --help\n  recode maestro --version\n\nThe native service owns all full-session children. Closing the TUI detaches; stop is destructive.`,
+		`Recode Maestro v${VERSION}\n\nUsage:\n  recode maestro tui [--search <query>]\n  recode maestro attach <session-id-or-label>\n  recode maestro search <query>\n  recode maestro service <install|uninstall|start|stop|restart|status>\n  recode maestro service run [--supervision <manual|systemd|windows-task>]\n  recode maestro health\n  recode maestro diagnose\n  recode maestro list\n  recode maestro spawn (--read-only | --write) [--cwd <path>] [--label <label>] [--parent <instance-id>]\n  recode maestro status <instance-id>\n  recode maestro cancel <instance-id>\n  recode maestro stop <instance-id>\n  recode maestro rpc <instance-id> <json-command>\n  recode maestro rpc-stream <instance-id>\n  recode maestro --help\n  recode maestro --version\n\nThe native service owns all full-session children. Closing the TUI detaches; stop is destructive.`,
 	);
 }
 
@@ -89,7 +84,7 @@ async function main(): Promise<void> {
 	}
 
 	if (args[0] === "--version" || args[0] === "-v") {
-		console.log(packageJson.version);
+		console.log(VERSION);
 		process.exit(0);
 	}
 
@@ -173,7 +168,7 @@ async function main(): Promise<void> {
 	if (args[0] === "diagnose") {
 		printResponse(
 			createMaestroDiagnosticBundle({
-				version: packageJson.version,
+				version: VERSION,
 				releaseManifestPath: join(__dirname, "recode-release.json"),
 			}),
 		);

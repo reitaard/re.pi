@@ -22,6 +22,7 @@ interface PackageJson {
 }
 
 function getPackageJsonPath(): string {
+	if (isBunBinary) return join(dirname(process.execPath), "package.json");
 	let dir = __dirname;
 	while (dir !== dirname(dir)) {
 		const packageJsonPath = join(dir, "package.json");
