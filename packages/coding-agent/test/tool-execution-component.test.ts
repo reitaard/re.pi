@@ -472,6 +472,39 @@ describe("ToolExecutionComponent parity", () => {
 		expect(rendered).toContain("done");
 	});
 
+	test("renders write diagnostics outside the violet write preview surface", () => {
+		const component = new ToolExecutionComponent(
+			"write",
+			"tool-write-diagnostics",
+			{ path: "sample.ts", content: "const value = 1;\n" },
+			{},
+			createWriteToolDefinition(process.cwd()),
+			createFakeTui(),
+			process.cwd(),
+		);
+		component.updateResult(
+			{
+				content: [{ type: "text", text: "Successfully wrote sample.ts\nLSP: no issues" }],
+				details: {
+					diagnostics: {
+						summary: "LSP: no issues",
+						messages: [],
+						errored: false,
+						servers: ["typescript-language-server"],
+					},
+				},
+				isError: false,
+			},
+			false,
+		);
+
+		const lines = component.render(120);
+		const writeLine = lines.find((line) => stripAnsi(line).includes("write sample.ts"));
+		const diagnosticLine = lines.find((line) => stripAnsi(line).includes("LSP: no issues"));
+		expect(writeLine).toContain(theme.getBgAnsi("toolPendingBg"));
+		expect(diagnosticLine).not.toContain(theme.getBgAnsi("toolPendingBg"));
+	});
+
 	test("trims trailing blank display lines from write previews", () => {
 		const component = new ToolExecutionComponent(
 			"write",

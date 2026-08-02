@@ -1,5 +1,5 @@
 import type { AgentTool } from "@reitaard/repi-agent-core";
-import { Container, Spacer, Text } from "@reitaard/repi-tui";
+import { Box, Container, Spacer, Text } from "@reitaard/repi-tui";
 import { mkdir as fsMkdir, writeFile as fsWriteFile } from "fs/promises";
 import { dirname } from "path";
 import { type Static, Type } from "typebox";
@@ -59,11 +59,18 @@ type WriteHighlightCache = {
 	highlightedLines: string[];
 };
 
-class WriteCallRenderComponent extends Text {
-	cache?: WriteHighlightCache;
+class WriteCallRenderComponent extends Box {
+	highlightCache?: WriteHighlightCache;
+	private text: Text;
 
 	constructor() {
-		super("", 0, 0);
+		super(1, 1, (text: string) => text);
+		this.text = new Text("", 0, 0);
+		this.addChild(this.text);
+	}
+
+	setText(text: string): void {
+		this.text.setText(text);
 	}
 }
 
@@ -205,6 +212,7 @@ export function createWriteToolDefinition(
 		promptSnippet: "Create or overwrite files",
 		promptGuidelines: ["Use write only for new files or complete rewrites."],
 		parameters: writeSchema,
+		renderShell: "self",
 		async execute(
 			_toolCallId,
 			{ path, content }: { path: string; content: string },
@@ -255,19 +263,20 @@ export function createWriteToolDefinition(
 			const fileContent = str(renderArgs?.content);
 			const component =
 				(context.lastComponent as WriteCallRenderComponent | undefined) ?? new WriteCallRenderComponent();
+			component.setBgFn((text: string) => theme.bg("toolPendingBg", text));
 			if (fileContent !== null) {
-				component.cache = context.argsComplete
+				component.highlightCache = context.argsComplete
 					? rebuildWriteHighlightCacheFull(rawPath, fileContent)
-					: updateWriteHighlightCacheIncremental(component.cache, rawPath, fileContent);
+					: updateWriteHighlightCacheIncremental(component.highlightCache, rawPath, fileContent);
 			} else {
-				component.cache = undefined;
+				component.highlightCache = undefined;
 			}
 			component.setText(
 				formatWriteCall(
 					renderArgs,
 					{ expanded: context.expanded, isPartial: context.isPartial },
 					theme,
-					component.cache,
+					component.highlightCache,
 					context.cwd,
 				),
 			);
