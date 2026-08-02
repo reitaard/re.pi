@@ -92,6 +92,8 @@ export interface SupervisorRpcProcess {
 	detach?(): Promise<void>;
 }
 
+export const DEFAULT_MAX_LIVE_INSTANCES = 10;
+
 export interface OrchestratorSupervisorOptions {
 	createRpcProcess?: (options: { cwd: string; workspaceAccess: WorkspaceAccessMode }) => SupervisorRpcProcess;
 	maxLiveInstances?: number;
@@ -308,7 +310,7 @@ export class OrchestratorSupervisor {
 	constructor(options: OrchestratorSupervisorOptions = {}) {
 		this.createRpcProcess = options.createRpcProcess ?? createRpcProcessInstance;
 		this.presence = options.presence ?? radiusPresence;
-		this.maxLiveInstances = options.maxLiveInstances ?? 8;
+		this.maxLiveInstances = options.maxLiveInstances ?? DEFAULT_MAX_LIVE_INSTANCES;
 		this.maxSubscribersPerInstance = options.maxSubscribersPerInstance ?? 16;
 		this.turnLeaseTimeoutMs = options.turnLeaseTimeoutMs ?? 30_000;
 		this.turnLeases =

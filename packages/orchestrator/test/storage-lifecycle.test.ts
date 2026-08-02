@@ -13,7 +13,7 @@ import {
 	OrchestratorStorageError,
 	saveInstances,
 } from "../src/storage.ts";
-import { OrchestratorSupervisor, type SupervisorRpcProcess } from "../src/supervisor.ts";
+import { DEFAULT_MAX_LIVE_INSTANCES, OrchestratorSupervisor, type SupervisorRpcProcess } from "../src/supervisor.ts";
 import type { InstanceRecord } from "../src/types.ts";
 
 async function nextTurn(): Promise<void> {
@@ -212,6 +212,7 @@ describe("orchestrator durable lifecycle storage", () => {
 	});
 
 	it("bounds live sessions and begins shutdown of independent instances concurrently", async () => {
+		assert.equal(DEFAULT_MAX_LIVE_INSTANCES, 10);
 		useTestDir();
 		let disposeStarted = 0;
 		let releaseDisposals = (): void => undefined;

@@ -19,6 +19,10 @@
 - Added one fail-closed lifecycle state projection across IPC, service health, and the Maestro board, including explicit divergence diagnostics.
 - Added an offline redacted Maestro diagnostic bundle with release/runtime identity, bounded health and restart evidence, and hashed child/workspace identities.
 
+### Changed
+
+- Raised the bounded default Maestro live-session capacity from eight to ten for the measured V2 multi-session target.
+
 ### Fixed
 
 - Resolved the coding-agent RPC entry through its ESM export so Node-based child startup works.
