@@ -27,6 +27,46 @@ function readSourceIdentity() {
 	};
 }
 
+function measureProcessTree(rootPid) {
+	let processes;
+	if (process.platform === "win32") {
+		const script =
+			"Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,WorkingSetSize | ConvertTo-Json -Compress";
+		const value = JSON.parse(
+			execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8" }),
+		);
+		processes = (Array.isArray(value) ? value : [value]).map((entry) => ({
+			pid: Number(entry.ProcessId),
+			parentPid: Number(entry.ParentProcessId),
+			rssBytes: Number(entry.WorkingSetSize),
+		}));
+	} else {
+		processes = execFileSync("ps", ["-e", "-o", "pid=,ppid=,rss="], { encoding: "utf8" })
+			.trim()
+			.split(/\r?\n/)
+			.map((line) => {
+				const [pid, parentPid, rssKiB] = line.trim().split(/\s+/).map(Number);
+				return { pid, parentPid, rssBytes: rssKiB * 1_024 };
+			});
+	}
+	const owned = new Set([rootPid]);
+	let changed = true;
+	while (changed) {
+		changed = false;
+		for (const processEntry of processes) {
+			if (owned.has(processEntry.parentPid) && !owned.has(processEntry.pid)) {
+				owned.add(processEntry.pid);
+				changed = true;
+			}
+		}
+	}
+	const ownedProcesses = processes.filter((processEntry) => owned.has(processEntry.pid));
+	return {
+		processes: ownedProcesses.length,
+		rssBytes: ownedProcesses.reduce((sum, processEntry) => sum + processEntry.rssBytes, 0),
+	};
+}
+
 function percentile(values, ratio) {
 	const sorted = [...values].sort((left, right) => left - right);
 	return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * ratio))];
@@ -101,6 +141,7 @@ try {
 	);
 	const warmAttachMs = performance.now() - attachStarted;
 	attachment.close();
+	const oneSessionResources = measureProcessTree(service.pid);
 	await stopInstance(spawned.instance.id);
 	ownedInstances.length = 0;
 
@@ -119,6 +160,7 @@ try {
 		ownedInstances.push(response.instance.id);
 	}
 
+	const admittedResources = measureProcessTree(service.pid);
 	const artifact = {
 		schemaVersion: 1,
 		source: readSourceIdentity(),
@@ -129,6 +171,10 @@ try {
 			warmControlP90Ms: percentile(controlSamples, 0.9),
 			oneSessionSpawnMs,
 			warmAttachMs,
+		},
+		resources: {
+			oneSession: oneSessionResources,
+			maximumAdmitted: admittedResources,
 		},
 		capacity: {
 			requestedSessions: 10,

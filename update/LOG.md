@@ -311,3 +311,9 @@
 - Preserved startup and cold-start comparison as a first-class V2-C requirement, including service cold start, warm attach and one/ten-session evidence at matched endpoints.
 - Added a secret-safe dirty-worktree fingerprint to startup artifacts so measurements from an uncommitted checkout cannot be mistaken for an exact clean source result.
 - Stopped the plan before automatic memory retrieval, semantic reranking/embeddings or shared Kioku indexes pending Creator review.
+- Committed the Doctor/Maestro entry checkpoint at `4dbfbb690`, the benchmark output-identity correction at `79b9855c6`, and the isolated Maestro benchmark harness at `ad85afd1a`.
+- Retained clean-source uncontrolled-cache V2-C startup evidence: configured RPC median 3,446.5 ms, configured TUI input echo 3,307.3 ms, isolated RPC 1,450.3 ms and isolated TUI input echo 1,500.6 ms.
+- Configured RPC extension loading measured 1,988 ms median, led by Browser/OpenClaw entry 720 ms, Open Provider factory 654 ms, web-access 439 ms and MCP adapter 192 ms. No optimization decision is inferred from one baseline.
+- The isolated Maestro service reached authenticated ready in 2,059.7 ms, one read-only session spawned in 3,620.0 ms, and warm interactive attach completed in 2.2 ms; warm control requests measured 1.0 ms median.
+- The ten-session gate exposed a real capacity boundary: production admitted eight sessions and rejected the ninth with `Maestro live instance limit reached`. The benchmark preserved the bound rather than weakening it to manufacture a ten-session result.
+- No paid provider request, destructive cache clearing, active-session stop, installed-product mutation or remote operation was performed.
