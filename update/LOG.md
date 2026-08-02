@@ -317,3 +317,5 @@
 - The isolated Maestro service reached authenticated ready in 2,059.7 ms, one read-only session spawned in 3,620.0 ms, and warm interactive attach completed in 2.2 ms; warm control requests measured 1.0 ms median.
 - The ten-session gate exposed a real capacity boundary: production admitted eight sessions and rejected the ninth with `Maestro live instance limit reached`. The benchmark preserved the bound rather than weakening it to manufacture a ten-session result.
 - No paid provider request, destructive cache clearing, active-session stop, installed-product mutation or remote operation was performed.
+- Extended the isolated harness with cross-platform process-tree RSS sampling at clean commit `b6050d665`; the Windows service plus one configured read-only session used 539,320,320 aggregate working-set bytes across three processes, while the service plus maximum-admitted eight sessions used 3,546,009,600 bytes across ten processes.
+- The resource-enabled repeat measured service readiness at 1,802.3 ms, one-session spawn at 3,845.6 ms and warm attach at 1.7 ms. These Windows RSS values are not presented as Linux PSS or topology-neutral jcode comparisons.
