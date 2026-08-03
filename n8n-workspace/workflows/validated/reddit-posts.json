@@ -1,0 +1,71 @@
+{
+  "name": "reddit-posts",
+  "active": false,
+  "nodes": [
+    {
+      "id": "8e2bb38c-86a6-407f-98b2-6daaca209b3b",
+      "name": "Collect Reddit Posts",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-240, 0],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "reddit-posts",
+        "responseMode": "lastNode",
+        "responseData": "allEntries",
+        "options": {}
+      },
+      "webhookId": "efc905f7-64fd-4a1f-b433-e3a38c67e21c",
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "63db8681-7dbb-42ae-858d-f52821479c93",
+      "name": "Fetch Recent Reddit Posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [80, 0],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/actors/spry_wholemeal~reddit-scraper/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { mode: 'scrape', listings: [{ subreddit: $json.query.subreddit || 'n8n', sort: 'new', maxPosts: 10 }], includeCommentsMode: 'none' } }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": false,
+              "neverError": false
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "4HVSdo11iO57LlRa",
+          "name": "Apify temporary test"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Collect Reddit Posts": {
+      "main": [[{
+        "node": "Fetch Recent Reddit Posts",
+        "type": "main",
+        "index": 0
+      }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  }
+}

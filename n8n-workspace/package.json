@@ -1,0 +1,9 @@
+{
+  "name": "recode-n8n-workspace",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Structured workspace for Recode-managed n8n workflows",
+  "dependencies": {
+    "n8n-mcp": "2.67.2"
+  }
+}
