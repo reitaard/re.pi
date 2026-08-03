@@ -26,7 +26,10 @@ function sanitizeStatusText(text: string): string {
 
 function formatFooterStatus(key: string, text: string): string {
 	const sanitized = sanitizeStatusText(text);
-	return key === "mcp" && sanitized.startsWith("MCP ") ? `MCP: ${sanitized.slice(4)}` : sanitized;
+	if (key !== "mcp") return sanitized;
+
+	// MCP colors its status before handing it to the footer, so preserve any ANSI prefix.
+	return sanitized.replace(/^((?:\u001b\[[0-?]*[ -/]*[@-~])*)MCP /, "$1MCP: ");
 }
 
 /**

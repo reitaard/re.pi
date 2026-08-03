@@ -153,7 +153,7 @@ describe("FooterComponent width handling", () => {
 			...createFooterData(1),
 			getExtensionStatuses: () =>
 				new Map([
-					["mcp", "MCP 0/1"],
+					["mcp", "\u001b[38;5;214mMCP 0/1\u001b[39m"],
 					["recode-memory", "Kioku (記憶): project"],
 				]),
 		});
