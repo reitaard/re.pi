@@ -239,7 +239,7 @@ ${chalk.bold("Commands:")}
   ${APP_NAME} install <source> [-l]     Install extension source and add to settings
   ${APP_NAME} remove <source> [-l]      Remove extension source from settings
   ${APP_NAME} uninstall <source> [-l]   Alias for remove
-  ${APP_NAME} update [source|self]      Update RePi (use --all for RePi and extensions)
+  ${APP_NAME} update [source|self]      Update Recode (use --all for Recode and extensions)
   ${APP_NAME} list                      List installed extensions from settings
   ${APP_NAME} config [-l]               Open TUI to enable/disable package resources (Tab switches scope)
   ${APP_NAME} telegram                  Run the Telegram gateway (long polling)

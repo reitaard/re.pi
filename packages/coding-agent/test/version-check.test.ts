@@ -47,7 +47,7 @@ describe("version checks", () => {
 
 	it("suppresses newer releases for a foreign package identity", async () => {
 		const fetchMock = vi.fn(async () =>
-			Response.json({ packageName: "@earendil-works/pi-coding-agent", version: "0.82.1" }),
+			Response.json({ packageName: "@reitaard/repi-coding-agent", version: "0.82.1" }),
 		);
 		vi.stubGlobal("fetch", fetchMock);
 
@@ -55,9 +55,9 @@ describe("version checks", () => {
 			checkForNewPiVersion("0.81.4", "@reitaard/repi-coding-agent", { endpoint: testUpdateEndpoint }),
 		).resolves.toBeUndefined();
 		await expect(
-			checkForNewPiVersion("0.81.4", "@earendil-works/pi-coding-agent", { endpoint: testUpdateEndpoint }),
+			checkForNewPiVersion("0.81.4", "@reitaard/repi-coding-agent", { endpoint: testUpdateEndpoint }),
 		).resolves.toEqual({
-			packageName: "@earendil-works/pi-coding-agent",
+			packageName: "@reitaard/repi-coding-agent",
 			version: "0.82.1",
 		});
 	});

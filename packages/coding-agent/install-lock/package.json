@@ -1,10 +1,10 @@
 {
 	"name": "@reitaard/repi-coding-agent-install",
-	"version": "0.81.6",
+	"version": "0.82.1",
 	"private": true,
-	"description": "Lockfile root used by the Pi installer and updater.",
+	"description": "Lockfile root used by the Recode installer and updater.",
 	"dependencies": {
-		"@reitaard/repi-coding-agent": "0.81.6"
+		"@reitaard/repi-coding-agent": "0.82.1"
 	},
 	"overrides": {
 		"rimraf": "6.1.2",

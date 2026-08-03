@@ -12,6 +12,7 @@ import {
 	validateToolArguments,
 } from "@reitaard/repi-ai/compat";
 import { DEFAULT_AGENT_MAX_ITERATIONS, IterationBudget } from "./iteration-budget.ts";
+import { getDefaultStreamFn } from "./stream-fn.ts";
 import type {
 	AgentContext,
 	AgentEvent,
@@ -331,7 +332,7 @@ async function streamAssistantResponse(
 		tools: context.tools,
 	};
 
-	const streamFunction = streamFn || streamSimple;
+	const streamFunction = streamFn ?? getDefaultStreamFn(streamSimple);
 
 	// Resolve API key (important for expiring tokens)
 	const resolvedApiKey =
@@ -768,6 +769,7 @@ async function finalizeExecutedToolCall(
 					content: afterResult.content ?? result.content,
 					details: afterResult.details ?? result.details,
 					terminate: afterResult.terminate ?? result.terminate,
+					usage: afterResult.usage ?? result.usage,
 				};
 				isError = afterResult.isError ?? isError;
 			}
@@ -810,6 +812,7 @@ function createToolResultMessage(finalized: FinalizedToolCallOutcome): ToolResul
 		// so the null never enters session history or provider payloads.
 		content: finalized.result.content ?? [],
 		details: finalized.result.details,
+		usage: finalized.result.usage,
 		...(finalized.result.addedToolNames?.length ? { addedToolNames: finalized.result.addedToolNames } : {}),
 		isError: finalized.isError,
 		timestamp: Date.now(),

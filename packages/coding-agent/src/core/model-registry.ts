@@ -2,6 +2,7 @@
  * Model registry - manages built-in and custom models, provides API key resolution.
  */
 
+import { type AuthResult, defaultProviderAuthContext, type Provider } from "@reitaard/repi-ai";
 import {
 	type AnthropicMessagesCompat,
 	type Api,
@@ -11,14 +12,13 @@ import {
 	getModels,
 	getProviders,
 	type Model,
-	type OAuthProviderInterface,
 	type OpenAICompletionsCompat,
 	type OpenAIResponsesCompat,
 	registerApiProvider,
 	resetApiProviders,
 	type SimpleStreamOptions,
 } from "@reitaard/repi-ai/compat";
-import { registerOAuthProvider, resetOAuthProviders } from "@reitaard/repi-ai/oauth";
+import { type OAuthProviderInterface, registerOAuthProvider, resetOAuthProviders } from "@reitaard/repi-ai/oauth";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { type Static, Type } from "typebox";
@@ -27,7 +27,8 @@ import type { TLocalizedValidationError } from "typebox/error";
 import { getAgentDir } from "../config.ts";
 import { stripJsonComments } from "../utils/json.ts";
 import { normalizePath } from "../utils/paths.ts";
-import type { AuthStatus, AuthStorage } from "./auth-storage.ts";
+import { type AuthStatus, AuthStorage } from "./auth-storage.ts";
+import type { ModelRuntime } from "./model-runtime.ts";
 import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "./provider-display-names.ts";
 import { registerCustomRadiusOAuthProvider } from "./radius.ts";
 import {
@@ -378,14 +379,31 @@ export class ModelRegistry {
 	private modelRequestHeaders: Map<string, Record<string, string>> = new Map();
 	private configModelOverrides: Map<string, Map<string, ModelOverride>> = new Map();
 	private registeredProviders: Map<string, ProviderConfigInput> = new Map();
+	private nativeProviders: Map<string, Provider> = new Map();
 	private loadError: string | undefined = undefined;
 	readonly authStorage: AuthStorage;
 	private modelsJsonPath: string | undefined;
+	private readonly runtime: ModelRuntime | undefined;
 
-	private constructor(authStorage: AuthStorage, modelsJsonPath: string | undefined) {
-		this.authStorage = authStorage;
+	constructor(authStorageOrRuntime: AuthStorage | ModelRuntime, modelsJsonPath?: string, authStorage?: AuthStorage) {
+		if ("getAvailableSnapshot" in authStorageOrRuntime) {
+			this.runtime = authStorageOrRuntime;
+			this.authStorage = authStorage ?? AuthStorage.inMemory();
+			this.modelsJsonPath = undefined;
+			return;
+		}
+		this.runtime = undefined;
+		this.authStorage = authStorageOrRuntime;
 		this.modelsJsonPath = modelsJsonPath ? normalizePath(modelsJsonPath) : undefined;
 		this.loadModels();
+	}
+
+	static fromRuntime(runtime: ModelRuntime, authStorage: AuthStorage): ModelRegistry {
+		return new ModelRegistry(runtime, undefined, authStorage);
+	}
+
+	getModelRuntime(): ModelRuntime | undefined {
+		return this.runtime;
 	}
 
 	static create(authStorage: AuthStorage, modelsJsonPath: string = join(getAgentDir(), "models.json")): ModelRegistry {
@@ -412,6 +430,10 @@ export class ModelRegistry {
 
 		for (const [providerName, config] of this.registeredProviders.entries()) {
 			this.applyProviderConfig(providerName, config);
+		}
+		for (const provider of this.nativeProviders.values()) {
+			this.models = this.models.filter((model) => model.provider !== provider.id);
+			this.models.push(...provider.getModels());
 		}
 	}
 
@@ -678,14 +700,32 @@ export class ModelRegistry {
 	 * If models.json had errors, returns only built-in models.
 	 */
 	getAll(): Model<Api>[] {
-		return this.models;
+		return this.runtime ? [...this.runtime.getModels()] : this.models;
 	}
 
 	/**
 	 * Get only models that have auth configured.
 	 * This is a fast check that doesn't refresh OAuth tokens.
 	 */
+	getProvider(provider: string): Provider | undefined {
+		return this.runtime?.getProvider(provider) ?? this.nativeProviders.get(provider);
+	}
+
+	getRegisteredNativeProvider(provider: string): Provider | undefined {
+		return this.runtime?.getRegisteredNativeProvider(provider) ?? this.nativeProviders.get(provider);
+	}
+
+	getRegisteredProviderIds(): readonly string[] {
+		return (
+			this.runtime?.getRegisteredProviderIds() ?? [
+				...this.registeredProviders.keys(),
+				...this.nativeProviders.keys(),
+			]
+		);
+	}
+
 	getAvailable(): Model<Api>[] {
+		if (this.runtime) return [...this.runtime.getAvailableSnapshot()];
 		return this.models.filter((m) => this.hasConfiguredAuth(m));
 	}
 
@@ -693,7 +733,10 @@ export class ModelRegistry {
 	 * Find a model by provider and ID.
 	 */
 	find(provider: string, modelId: string): Model<Api> | undefined {
-		return this.models.find((m) => m.provider === provider && m.id === modelId);
+		return (
+			this.runtime?.getModel(provider, modelId) ??
+			this.models.find((m) => m.provider === provider && m.id === modelId)
+		);
 	}
 
 	/**
@@ -842,6 +885,31 @@ export class ModelRegistry {
 	/**
 	 * Get API key for a provider.
 	 */
+	async getProviderAuth(providerId: string): Promise<AuthResult | undefined> {
+		if (this.runtime) return this.runtime.getAuth(providerId);
+		const provider = this.nativeProviders.get(providerId);
+		if (!provider) {
+			const apiKey = await this.getApiKeyForProvider(providerId);
+			const config = this.providerRequestConfigs.get(providerId);
+			if (!apiKey && config?.authHeader !== false) return undefined;
+			return {
+				auth: { apiKey, headers: config?.headers },
+				env: this.authStorage.getProviderEnv(providerId),
+				source: apiKey ? "configured" : "local",
+			};
+		}
+		const credential = await this.authStorage.read(providerId);
+		if (credential?.type === "oauth" && provider.auth.oauth) {
+			return { auth: await provider.auth.oauth.toAuth(credential), source: "OAuth" };
+		}
+		const apiKeyAuth = provider.auth.apiKey;
+		if (!apiKeyAuth) return undefined;
+		return apiKeyAuth.resolve({
+			ctx: defaultProviderAuthContext(),
+			credential: credential?.type === "api_key" ? credential : undefined,
+		});
+	}
+
 	async getApiKeyForProvider(provider: string): Promise<string | undefined> {
 		const apiKey = await this.authStorage.getApiKey(provider);
 		if (apiKey !== undefined) {
@@ -869,10 +937,28 @@ export class ModelRegistry {
 	 * If provider has only baseUrl/headers: overrides existing models' URLs.
 	 * If provider has oauth: registers OAuth provider for /login support.
 	 */
-	registerProvider(providerName: string, config: ProviderConfigInput): void {
-		this.validateProviderConfig(providerName, config);
-		this.applyProviderConfig(providerName, config);
-		this.upsertRegisteredProvider(providerName, config);
+	registerProvider(provider: Provider): void;
+	registerProvider(providerName: string, config: ProviderConfigInput): void;
+	registerProvider(providerOrName: Provider | string, config?: ProviderConfigInput): void {
+		if (this.runtime) {
+			if (typeof providerOrName === "string") {
+				if (!config) throw new Error("Provider config is required when registering by name");
+				this.runtime.registerProvider(providerOrName, config);
+			} else {
+				this.runtime.registerNativeProvider(providerOrName);
+			}
+			return;
+		}
+		if (typeof providerOrName !== "string") {
+			this.nativeProviders.set(providerOrName.id, providerOrName);
+			this.models = this.models.filter((model) => model.provider !== providerOrName.id);
+			this.models.push(...providerOrName.getModels());
+			return;
+		}
+		if (!config) throw new Error("Provider config is required when registering by name");
+		this.validateProviderConfig(providerOrName, config);
+		this.applyProviderConfig(providerOrName, config);
+		this.upsertRegisteredProvider(providerOrName, config);
 	}
 
 	/**
@@ -885,6 +971,10 @@ export class ModelRegistry {
 	 * Has no effect if the provider was never registered.
 	 */
 	unregisterProvider(providerName: string): void {
+		if (this.runtime) {
+			this.runtime.unregisterProvider(providerName);
+			return;
+		}
 		if (!this.registeredProviders.has(providerName)) return;
 		this.registeredProviders.delete(providerName);
 		this.refresh();

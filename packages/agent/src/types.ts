@@ -11,6 +11,7 @@ import type {
 	TextContent,
 	Tool,
 	ToolResultMessage,
+	Usage,
 } from "@reitaard/repi-ai";
 import type { Static, TSchema } from "typebox";
 import type { IterationBudget } from "./iteration-budget.ts";
@@ -79,6 +80,8 @@ export interface AfterToolCallResult {
 	content?: (TextContent | ImageContent)[];
 	details?: unknown;
 	isError?: boolean;
+	/** Usage from the tool execution, excluded from main model-context accounting. */
+	usage?: Usage;
 	/**
 	 * Hint that the agent should stop after the current tool batch.
 	 * Early termination only happens when every finalized tool result in the batch sets this to true.
@@ -359,6 +362,8 @@ export interface AgentToolResult<T> {
 	content: (TextContent | ImageContent)[];
 	/** Arbitrary structured details for logs or UI rendering. */
 	details: T;
+	/** Usage from the tool execution, excluded from main model-context accounting. */
+	usage?: Usage;
 	/** Names of tools introduced by this result and available from this transcript point onward. */
 	addedToolNames?: string[];
 	/**

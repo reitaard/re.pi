@@ -1,4 +1,10 @@
-import type { SessionMetadata, SessionStorage, SessionTreeEntry } from "@reitaard/repi-agent-core";
+import type {
+	SessionEntryCursorOptions,
+	SessionMetadata,
+	SessionStats,
+	SessionStorage,
+	SessionTreeEntry,
+} from "@reitaard/repi-agent-core";
 import type { SessionManager } from "./session-manager.ts";
 
 /** Uses the existing RePi JSONL session as AgentRuntime's durable session store. */
@@ -54,11 +60,54 @@ export class RecodeSessionStorage implements SessionStorage {
 		return this.manager.getLabel(id);
 	}
 
+	async getSessionName(): Promise<string | undefined> {
+		return this.manager.getSessionName();
+	}
+
+	async getSessionStats(): Promise<SessionStats> {
+		let messageCount = 0;
+		let cachedTokens = 0;
+		let uncachedTokens = 0;
+		let totalTokens = 0;
+		let costTotal = 0;
+		for (const entry of this.manager.getEntries()) {
+			if (entry.type === "message") messageCount += 1;
+			const usage =
+				entry.type === "message"
+					? entry.message.role === "assistant"
+						? entry.message.usage
+						: undefined
+					: entry.type === "compaction" || entry.type === "branch_summary"
+						? entry.usage
+						: undefined;
+			if (!usage) continue;
+			cachedTokens += usage.cacheRead;
+			uncachedTokens += usage.input + usage.cacheWrite;
+			totalTokens += usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
+			costTotal += usage.cost.total;
+		}
+		return { messageCount, cachedTokens, uncachedTokens, totalTokens, costTotal };
+	}
+
 	async getPathToRoot(leafId: string | null): Promise<SessionTreeEntry[]> {
 		return leafId === null ? [] : this.manager.getBranch(leafId);
 	}
 
-	async getEntries(): Promise<SessionTreeEntry[]> {
-		return this.manager.getEntries();
+	async getPathToRootOrCompaction(leafId: string | null): Promise<SessionTreeEntry[]> {
+		if (leafId === null) return [];
+		const branch = this.manager.getBranch(leafId);
+		for (let index = branch.length - 1; index >= 0; index--) {
+			const entry = branch[index];
+			if (entry?.type === "compaction" && entry.retainedTail) return branch.slice(index);
+		}
+		return branch;
+	}
+
+	async getEntries(options?: SessionEntryCursorOptions): Promise<SessionTreeEntry[]> {
+		let entries = this.manager.getEntries();
+		if (options?.afterEntrySeq !== undefined) {
+			entries = entries.filter((_entry, index) => index + 1 > options.afterEntrySeq!);
+		}
+		return options?.limit === undefined ? entries : entries.slice(0, options.limit);
 	}
 }

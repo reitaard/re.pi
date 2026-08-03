@@ -71,7 +71,7 @@ const PROVIDER_MODEL_PAIRS: ProviderModelPair[] = [
 	{ provider: "github-copilot", model: "claude-sonnet-4.5", label: "copilot-claude-sonnet-4.5" },
 	{ provider: "github-copilot", model: "gpt-5.1-codex", label: "copilot-gpt-5.1-codex" },
 	{ provider: "github-copilot", model: "gemini-3-flash-preview", label: "copilot-gemini-3-flash-preview" },
-	{ provider: "github-copilot", model: "grok-code-fast-1", label: "copilot-grok-code-fast-1" },
+	{ provider: "github-copilot", model: "grok-4.3", label: "copilot-grok-4.3" },
 	// Amazon Bedrock
 	{
 		provider: "amazon-bedrock",
@@ -79,7 +79,7 @@ const PROVIDER_MODEL_PAIRS: ProviderModelPair[] = [
 		label: "bedrock-claude-sonnet-4-5",
 	},
 	// xAI
-	{ provider: "xai", model: "grok-code-fast-1", label: "xai-grok-code-fast-1" },
+	{ provider: "xai", model: "grok-4.3", label: "xai-grok-4.3" },
 	// Cerebras
 	{ provider: "cerebras", model: "zai-glm-4.7", label: "cerebras-zai-glm-4.7" },
 	// Cloudflare Workers AI

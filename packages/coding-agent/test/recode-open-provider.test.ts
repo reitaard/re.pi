@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -90,8 +90,34 @@ describe("built-in re.code Open Provider", () => {
 		expect(notify).toHaveBeenCalledWith("Open Provider configured with 1 chat model", "info");
 
 		const saved = JSON.parse(await readFile(join(agentDir, "recode-open-provider.json"), "utf8"));
-		expect(saved).toEqual({ baseUrl: "http://127.0.0.1:1234/v1", apiKey: "" });
+		expect(saved).toEqual({ baseUrl: "http://127.0.0.1:1234/v1" });
 
+		await rm(agentDir, { recursive: true, force: true });
+	});
+
+	it("migrates a legacy saved API key into the root credential store", async () => {
+		const agentDir = await mkdtemp(join(tmpdir(), "repi-open-provider-migrate-"));
+		process.env.PI_CODING_AGENT_DIR = agentDir;
+		await mkdir(agentDir, { recursive: true });
+		await writeFile(
+			join(agentDir, "recode-open-provider.json"),
+			JSON.stringify({ baseUrl: "http://127.0.0.1:1234/v1", apiKey: "legacy-secret" }),
+		);
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => new Response(JSON.stringify({ data: [{ id: "local-model" }] }))),
+		);
+		const pi = {
+			registerCommand: vi.fn(),
+			registerProvider: vi.fn(),
+		} as unknown as ExtensionAPI;
+
+		await recodeOpenProvider(pi);
+
+		const config = JSON.parse(await readFile(join(agentDir, "recode-open-provider.json"), "utf8"));
+		expect(config).toEqual({ baseUrl: "http://127.0.0.1:1234/v1" });
+		const auth = JSON.parse(await readFile(join(agentDir, "auth.json"), "utf8"));
+		expect(auth["open-provider"]).toEqual({ type: "api_key", key: "legacy-secret" });
 		await rm(agentDir, { recursive: true, force: true });
 	});
 });

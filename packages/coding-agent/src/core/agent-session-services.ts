@@ -13,6 +13,7 @@ import {
 } from "./delegation/index.ts";
 import type { ExtensionContext, SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
 import { ModelRegistry } from "./model-registry.ts";
+import { ModelRuntime } from "./model-runtime.ts";
 import {
 	DefaultResourceLoader,
 	type DefaultResourceLoaderOptions,
@@ -70,6 +71,7 @@ export interface AgentSessionServices {
 	authStorage: AuthStorage;
 	settingsManager: SettingsManager;
 	modelRegistry: ModelRegistry;
+	modelRuntime?: ModelRuntime;
 	resourceLoader: ResourceLoader;
 	/** Shared by every Aizen/session built from these services. */
 	workerDirectory?: WorkerDirectory;
@@ -214,7 +216,10 @@ export async function createAgentSessionServices(
 	const agentDir = options.agentDir ? resolvePath(options.agentDir) : getAgentDir();
 	const authStorage = options.authStorage ?? AuthStorage.create(join(agentDir, "auth.json"));
 	const settingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir);
-	const modelRegistry = options.modelRegistry ?? ModelRegistry.create(authStorage, join(agentDir, "models.json"));
+	const modelRuntime =
+		options.modelRegistry?.getModelRuntime() ??
+		(await ModelRuntime.create({ credentials: authStorage, modelsPath: join(agentDir, "models.json") }));
+	const modelRegistry = options.modelRegistry ?? ModelRegistry.fromRuntime(modelRuntime, authStorage);
 	const workerDirectory = isDelegationEnabled(process.env[DELEGATION_ENV])
 		? new WorkerDirectory({
 				cwd,
@@ -271,6 +276,7 @@ export async function createAgentSessionServices(
 		authStorage,
 		settingsManager,
 		modelRegistry,
+		modelRuntime,
 		resourceLoader,
 		workerDirectory,
 		diagnostics,

@@ -9,6 +9,7 @@ import {
 	type Transport,
 } from "@reitaard/repi-ai/compat";
 import { runAgentLoop, runAgentLoopContinue } from "./agent-loop.ts";
+import { getDefaultStreamFn } from "./stream-fn.ts";
 import type {
 	AfterToolCallContext,
 	AfterToolCallResult,
@@ -178,6 +179,14 @@ export class Agent {
 	public convertToLlm: (messages: AgentMessage[]) => Message[] | Promise<Message[]>;
 	public transformContext?: (messages: AgentMessage[], signal?: AbortSignal) => Promise<AgentMessage[]>;
 	public streamFn: StreamFn;
+
+	get streamFunction(): StreamFn {
+		return this.streamFn;
+	}
+
+	set streamFunction(streamFunction: StreamFn) {
+		this.streamFn = streamFunction;
+	}
 	public getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined;
 	public onPayload?: SimpleStreamOptions["onPayload"];
 	public onResponse?: SimpleStreamOptions["onResponse"];
@@ -214,7 +223,7 @@ export class Agent {
 		this._state = createMutableAgentState(options.initialState);
 		this.convertToLlm = options.convertToLlm ?? defaultConvertToLlm;
 		this.transformContext = options.transformContext;
-		this.streamFn = options.streamFn ?? streamSimple;
+		this.streamFn = options.streamFn ?? getDefaultStreamFn(streamSimple);
 		this.getApiKey = options.getApiKey;
 		this.onPayload = options.onPayload;
 		this.onResponse = options.onResponse;

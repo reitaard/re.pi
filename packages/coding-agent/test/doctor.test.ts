@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, test } from "node:test";
+import { describe, test } from "vitest";
 import { createDoctorReport, type DoctorSnapshot, renderDoctorReport } from "../src/doctor.ts";
 
 function createSnapshot(overrides: Partial<DoctorSnapshot> = {}): DoctorSnapshot {

@@ -1,5 +1,17 @@
 # Update Work Log
 
+## 2026-08-02 — Upstream 0.82.1 credential, AgentHarness, and storage integration
+
+- Integrated the upstream root credential/model runtime while preserving Recode Open Provider, OpenAI OAuth, Radius, Maestro, Shiori, and provider-extension registration. Open Provider key migration from its legacy configuration file into the root store remains a release gate.
+- Added native provider support, lazy model-catalog refresh, llama.cpp integration, serialized credential-store methods, and models.json hot reload.
+- Integrated AgentHarness tool contexts, compaction usage/retained tails, retry callbacks, session cursors/statistics, UUIDv7, and optional SQLite storage while retaining Recode durable operation journaling and iteration budgets.
+- Kept JSONL as the default session backend and `packages/orchestrator` as the sole supervisor; `packages/server` remains a Maestro facade.
+- Updated current-catalog test fixtures instead of restoring removed model IDs.
+- Advanced workspace packages to lockstep `0.82.1` and regenerated package-lock, coding-agent shrinkwrap, and install-lock metadata with lifecycle scripts disabled.
+- Validation passed: 81 focused Agent tests, 22 focused ModelRuntime/compaction/UI tests, 53 focused OAuth/Open Provider/Radius tests, full `npm run check`, browser smoke, and `git diff --check`.
+- No commit, release artifact, publication, global installation, or remote mutation was performed.
+- A later full `./test.sh` certification run exposed integration and Windows-host regressions, so installation remained blocked. Fixed root stream fallback, tool-result and branch-summary usage accounting, Windows `NodeExecutionEnv` basenames, model-auth header transformation, current model-catalogue expectations, extension `0.82.x` runtime ranges, Open Provider root-credential migration, stale example lockfiles, and shipped Recode identity text. AI now passes 667 tests with 751 provider-gated skips; Agent passes 225 tests with four skips and has only Windows symlink-capability cases excluded plus a path-format assertion corrected. Coding Agent still has unresolved regression/mock/platform failures and must reach its accepted cross-platform gate before packaging.
+
 ## 2026-08-02 — Operational Doctor phase
 
 - Implemented the first read-only `recode doctor` foundation with human/JSON output and local identity, configuration, integration, Maestro, memory and LSP checks.

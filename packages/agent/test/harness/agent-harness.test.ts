@@ -404,7 +404,7 @@ describe("AgentHarness", () => {
 				return fauxAssistantMessage("done");
 			},
 		]);
-		const harness = new AgentHarness<Skill, PromptTemplate, AgentTool>({
+		const harness = new AgentHarness<undefined, Skill, PromptTemplate, AgentTool>({
 			models,
 			env: new NodeExecutionEnv({ cwd: process.cwd() }),
 			session: new Session(new InMemorySessionStorage()),
@@ -554,7 +554,7 @@ describe("AgentHarness", () => {
 		type AppTool = AgentTool<typeof calculateTool.parameters, undefined> & { source: "builtin" | "extension" };
 		const inspectTool: AppTool = { ...calculateTool, name: "inspect", source: "builtin" };
 		const searchTool: AppTool = { ...calculateTool, name: "search", source: "extension" };
-		const harness = new AgentHarness<AppSkill, AppPromptTemplate, AppTool>({
+		const harness = new AgentHarness<undefined, AppSkill, AppPromptTemplate, AppTool>({
 			models,
 			env,
 			session,
@@ -654,7 +654,12 @@ describe("AgentHarness", () => {
 		const session = new Session(new InMemorySessionStorage());
 		const env = new NodeExecutionEnv({ cwd: process.cwd() });
 		const model = getModel("anthropic", "claude-sonnet-4-5");
-		const harness = new AgentHarness<AppSkill, AppPromptTemplate, AgentTool>({ env, session, models, model });
+		const harness = new AgentHarness<undefined, AppSkill, AppPromptTemplate, AgentTool>({
+			env,
+			session,
+			models,
+			model,
+		});
 		const skill: AppSkill = {
 			name: "inspect",
 			description: "Inspect things",

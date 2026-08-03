@@ -6,13 +6,11 @@
  * try to refresh tokens simultaneously.
  */
 
-import {
-	findEnvKeys,
-	getEnvApiKey,
-	type OAuthCredentials,
-	type OAuthLoginCallbacks,
-	type OAuthProviderId,
-} from "@reitaard/repi-ai/compat";
+import type { Credential, CredentialInfo, CredentialStore } from "@reitaard/repi-ai";
+import { findEnvKeys, getEnvApiKey, type OAuthCredentials, type OAuthLoginCallbacks } from "@reitaard/repi-ai/compat";
+
+type OAuthProviderId = string;
+
 import { getOAuthApiKey, getOAuthProvider, getOAuthProviders } from "@reitaard/repi-ai/oauth";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
@@ -23,7 +21,7 @@ import { resolveConfigValue } from "./resolve-config-value.ts";
 
 export type ApiKeyCredential = {
 	type: "api_key";
-	key: string;
+	key?: string;
 	env?: Record<string, string>;
 };
 
@@ -200,7 +198,7 @@ export class InMemoryAuthStorageBackend implements AuthStorageBackend {
 /**
  * Credential storage backed by a JSON file.
  */
-export class AuthStorage {
+export class AuthStorage implements CredentialStore {
 	private data: AuthStorageData = {};
 	private runtimeOverrides: Map<string, string> = new Map();
 	private loadError: Error | null = null;
@@ -334,11 +332,43 @@ export class AuthStorage {
 		this.data = this.persistProviderChange(provider, undefined);
 	}
 
-	/**
-	 * List all providers with credentials.
-	 */
-	list(): string[] {
-		return Object.keys(this.data);
+	async read(provider: string): Promise<Credential | undefined> {
+		const credential = this.data[provider];
+		if (credential?.type !== "api_key" || credential.key === undefined) return credential;
+		return { ...credential, key: resolveConfigValue(credential.key, credential.env) };
+	}
+
+	async modify(
+		provider: string,
+		fn: (current: Credential | undefined) => Promise<Credential | undefined>,
+	): Promise<Credential | undefined> {
+		return this.storage.withLockAsync(async (content) => {
+			const currentData = this.parseStorageData(content);
+			const next = await fn(currentData[provider]);
+			if (next === undefined) {
+				this.data = currentData;
+				return { result: currentData[provider] };
+			}
+			const merged = { ...currentData, [provider]: next };
+			this.data = merged;
+			this.loadError = null;
+			return { result: next, next: JSON.stringify(merged, null, 2) };
+		});
+	}
+
+	async delete(provider: string): Promise<void> {
+		await this.storage.withLockAsync(async (content) => {
+			const currentData = this.parseStorageData(content);
+			delete currentData[provider];
+			this.data = currentData;
+			this.loadError = null;
+			return { result: undefined, next: JSON.stringify(currentData, null, 2) };
+		});
+	}
+
+	/** List non-secret credential metadata for the root credential API. */
+	async list(): Promise<readonly CredentialInfo[]> {
+		return Object.entries(this.data).map(([providerId, credential]) => ({ providerId, type: credential.type }));
 	}
 
 	/**
@@ -479,7 +509,7 @@ export class AuthStorage {
 
 		const cred = this.data[providerId];
 
-		if (cred?.type === "api_key") {
+		if (cred?.type === "api_key" && cred.key !== undefined) {
 			return resolveConfigValue(cred.key, cred.env);
 		}
 

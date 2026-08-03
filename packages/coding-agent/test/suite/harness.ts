@@ -2,7 +2,7 @@
  * Local test harness for the new coding-agent test suite.
  */
 
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentMessage, AgentTool } from "@reitaard/repi-agent-core";
@@ -14,6 +14,7 @@ import { AuthStorage } from "../../src/core/auth-storage.ts";
 import type { ExtensionRunner } from "../../src/core/extensions/index.ts";
 import { convertToLlm } from "../../src/core/messages.ts";
 import { ModelRegistry } from "../../src/core/model-registry.ts";
+import { ModelRuntime } from "../../src/core/model-runtime.ts";
 import { SessionManager } from "../../src/core/session-manager.ts";
 import type { Settings } from "../../src/core/settings-manager.ts";
 import { SettingsManager } from "../../src/core/settings-manager.ts";
@@ -63,6 +64,7 @@ export interface HarnessOptions {
 	initialActiveToolNames?: string[];
 	allowedToolNames?: string[];
 	excludedToolNames?: string[];
+	modelsJson?: Record<string, unknown>;
 	resourceLoader?: ResourceLoader;
 	extensionFactories?: Array<InlineExtension | CreateTestExtensionsResultInput>;
 	withConfiguredAuth?: boolean;
@@ -110,7 +112,14 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
 	if (withConfiguredAuth) {
 		authStorage.setRuntimeApiKey(model.provider, "faux-key");
 	}
-	const modelRegistry = ModelRegistry.inMemory(authStorage);
+	const modelsPath = options.modelsJson ? join(tempDir, "models.json") : undefined;
+	if (modelsPath && options.modelsJson) writeFileSync(modelsPath, JSON.stringify(options.modelsJson));
+	const modelRuntime = modelsPath
+		? await ModelRuntime.create({ credentials: authStorage, modelsPath, allowModelNetwork: false })
+		: undefined;
+	const modelRegistry = modelRuntime
+		? ModelRegistry.fromRuntime(modelRuntime, authStorage)
+		: ModelRegistry.inMemory(authStorage);
 	if (withConfiguredAuth) {
 		modelRegistry.registerProvider(model.provider, {
 			baseUrl: model.baseUrl,
@@ -174,6 +183,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
 		settingsManager,
 		cwd: tempDir,
 		modelRegistry,
+		modelRuntime,
 		resourceLoader,
 		baseToolsOverride: toolMap,
 		initialActiveToolNames: options.initialActiveToolNames,

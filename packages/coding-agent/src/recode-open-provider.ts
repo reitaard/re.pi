@@ -1,11 +1,12 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { getAgentDir } from "./config.ts";
+import { AuthStorage } from "./core/auth-storage.ts";
 import type { ExtensionAPI, ProviderModelConfig } from "./core/extensions/types.ts";
 
 interface RecodeOpenProviderConfig {
 	baseUrl: string;
-	apiKey: string;
+	apiKey?: string;
 }
 
 export interface RecodeOpenProviderProbe {
@@ -33,8 +34,9 @@ interface NativeModel {
 
 const DEFAULT_CONFIG: RecodeOpenProviderConfig = {
 	baseUrl: "http://127.0.0.1:1234/v1",
-	apiKey: "",
 };
+
+const OPEN_PROVIDER_ID = "open-provider";
 
 function configPath(): string {
 	return join(getAgentDir(), "recode-open-provider.json");
@@ -103,10 +105,15 @@ async function readConfig(): Promise<RecodeOpenProviderConfig | undefined> {
 	try {
 		const parsed: unknown = JSON.parse(await readFile(configPath(), "utf8"));
 		if (!isRecord(parsed) || typeof parsed.baseUrl !== "string") return undefined;
-		return {
-			baseUrl: normalizeRecodeOpenProviderBaseUrl(parsed.baseUrl),
-			apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
-		};
+		const config = { baseUrl: normalizeRecodeOpenProviderBaseUrl(parsed.baseUrl) };
+		if (typeof parsed.apiKey === "string") {
+			const authStorage = AuthStorage.create();
+			if (parsed.apiKey && !storedApiKey(authStorage)) {
+				authStorage.set(OPEN_PROVIDER_ID, { type: "api_key", key: parsed.apiKey });
+			}
+			await saveConfig(config);
+		}
+		return config;
 	} catch {
 		return undefined;
 	}
@@ -115,7 +122,12 @@ async function readConfig(): Promise<RecodeOpenProviderConfig | undefined> {
 async function saveConfig(config: RecodeOpenProviderConfig): Promise<void> {
 	const path = configPath();
 	await mkdir(dirname(path), { recursive: true });
-	await writeFile(path, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+	await writeFile(path, `${JSON.stringify({ baseUrl: config.baseUrl }, null, 2)}\n`, "utf8");
+}
+
+function storedApiKey(authStorage: AuthStorage): string {
+	const credential = authStorage.get(OPEN_PROVIDER_ID);
+	return credential?.type === "api_key" ? (credential.key ?? "") : "";
 }
 
 function nativeApiBaseUrl(value: string): string {
@@ -139,7 +151,8 @@ export async function probeRecodeOpenProvider(
 	const config = await readConfig();
 	if (!config) return { status: "not-configured" };
 	try {
-		const headers: Record<string, string> = config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {};
+		const apiKey = storedApiKey(AuthStorage.create());
+		const headers: Record<string, string> = apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
 		const response = await fetch(`${config.baseUrl}/models`, { headers, signal: AbortSignal.timeout(timeoutMs) });
 		if (!response.ok) return { status: "http", httpStatus: response.status };
 		const models = parseModels(await response.json());
@@ -198,15 +211,19 @@ export async function registerRecodeOpenProvider(pi: ExtensionAPI, config: Recod
 		baseUrl,
 		api: "openai-completions",
 		apiKey: config.apiKey || "local",
-		authHeader: config.apiKey.length > 0,
+		authHeader: (config.apiKey?.length ?? 0) > 0,
 		models,
 	});
 	return models.length;
 }
 
 export async function recodeOpenProvider(pi: ExtensionAPI): Promise<void> {
+	const authStorage = AuthStorage.create();
 	const savedConfig = await readConfig();
-	let config = savedConfig ?? DEFAULT_CONFIG;
+	let config: RecodeOpenProviderConfig = {
+		baseUrl: savedConfig?.baseUrl ?? DEFAULT_CONFIG.baseUrl,
+		apiKey: storedApiKey(authStorage),
+	};
 
 	if (savedConfig) {
 		try {
@@ -229,9 +246,12 @@ export async function recodeOpenProvider(pi: ExtensionAPI): Promise<void> {
 			);
 			if (apiKey === undefined) return;
 
+			const nextApiKey = apiKey === "-" ? "" : apiKey.trim() || storedApiKey(authStorage);
+			if (nextApiKey) authStorage.set(OPEN_PROVIDER_ID, { type: "api_key", key: nextApiKey });
+			else authStorage.remove(OPEN_PROVIDER_ID);
 			config = {
 				baseUrl: normalizeRecodeOpenProviderBaseUrl(baseUrl),
-				apiKey: apiKey === "-" ? "" : apiKey.trim() || config.apiKey,
+				apiKey: nextApiKey,
 			};
 			await saveConfig(config);
 			try {

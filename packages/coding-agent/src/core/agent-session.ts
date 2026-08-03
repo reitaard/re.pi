@@ -39,6 +39,7 @@ import type {
 	PrepareNextTurnContext,
 	ThinkingLevel,
 } from "@reitaard/repi-agent-core";
+import type { RetryCallbacks } from "@reitaard/repi-ai";
 import type {
 	AssistantMessage,
 	ImageContent,
@@ -46,6 +47,7 @@ import type {
 	Model,
 	ProviderHeaders,
 	TextContent,
+	Usage,
 } from "@reitaard/repi-ai/compat";
 import {
 	clampThinkingLevel,
@@ -111,6 +113,7 @@ import {
 import { emitSessionShutdownEvent } from "./extensions/runner.ts";
 import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
 import type { ModelRegistry } from "./model-registry.ts";
+import type { ModelRuntime } from "./model-runtime.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
 import { RecodeSessionControlHost } from "./recode-session-control.ts";
 import { getRecodeSessionReference } from "./recode-session-identity.ts";
@@ -180,6 +183,20 @@ export type AgentSessionEvent =
 			willRetry: boolean;
 			errorMessage?: string;
 	  }
+	| {
+			type: "summarization_retry_scheduled";
+			attempt: number;
+			maxAttempts: number;
+			delayMs: number;
+			errorMessage: string;
+	  }
+	| { type: "summarization_retry_attempt_start"; source: "branchSummary" }
+	| {
+			type: "summarization_retry_attempt_start";
+			source: "compaction";
+			reason: "manual" | "threshold" | "overflow";
+	  }
+	| { type: "summarization_retry_finished" }
 	| { type: "auto_retry_start"; attempt: number; maxAttempts: number; delayMs: number; errorMessage: string }
 	| { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string };
 
@@ -203,6 +220,8 @@ export interface AgentSessionConfig {
 	customTools?: ToolDefinition[];
 	/** Model registry for API key resolution and model discovery */
 	modelRegistry: ModelRegistry;
+	/** Root model and credential runtime when this session uses the 0.82 provider architecture. */
+	modelRuntime?: ModelRuntime;
 	/** Initial active built-in tool names. Default: [read, bash, edit, write] */
 	initialActiveToolNames?: string[];
 	/** Optional allowlist of tool names. When provided, only these tool names are exposed. */
@@ -391,6 +410,7 @@ export class AgentSession {
 
 	// Model registry for API key resolution
 	private _modelRegistry: ModelRegistry;
+	private readonly _modelRuntime: ModelRuntime | undefined;
 
 	// Tool registry for extension getTools/setTools
 	private _toolRegistry: Map<string, AgentTool> = new Map();
@@ -413,6 +433,7 @@ export class AgentSession {
 		this._customTools = config.customTools ?? [];
 		this._cwd = config.cwd;
 		this._modelRegistry = config.modelRegistry;
+		this._modelRuntime = config.modelRuntime ?? config.modelRegistry.getModelRuntime();
 		this._extensionRunnerRef = config.extensionRunnerRef;
 		this._initialActiveToolNames = config.initialActiveToolNames;
 		this._allowedToolNames = config.allowedToolNames ? new Set(config.allowedToolNames) : undefined;
@@ -430,6 +451,11 @@ export class AgentSession {
 			activeToolNames: this._initialActiveToolNames,
 			includeAllExtensionTools: true,
 		});
+	}
+
+	get modelRuntime(): ModelRuntime {
+		if (!this._modelRuntime) throw new Error("This AgentSession was created without a ModelRuntime");
+		return this._modelRuntime;
 	}
 
 	/** Model registry for API key resolution and model discovery */
@@ -1983,7 +2009,7 @@ export class AgentSession {
 			}
 
 			let summary: string;
-			let firstKeptEntryId: string;
+			let firstKeptEntryId: string | undefined;
 			let tokensBefore: number;
 			let details: unknown;
 
@@ -2005,6 +2031,8 @@ export class AgentSession {
 					compactionThinkingLevel,
 					this.agent.streamFn,
 					env,
+					this.settingsManager.getRetrySettings(),
+					this._summarizationRetryCallbacks({ source: "compaction", reason: "manual" }),
 				);
 				summary = result.summary;
 				firstKeptEntryId = result.firstKeptEntryId;
@@ -2259,7 +2287,7 @@ export class AgentSession {
 			}
 
 			let summary: string;
-			let firstKeptEntryId: string;
+			let firstKeptEntryId: string | undefined;
 			let tokensBefore: number;
 			let details: unknown;
 
@@ -2281,6 +2309,8 @@ export class AgentSession {
 					compactionThinkingLevel,
 					this.agent.streamFn,
 					env,
+					this.settingsManager.getRetrySettings(),
+					this._summarizationRetryCallbacks({ source: "compaction", reason }),
 				);
 				summary = compactResult.summary;
 				firstKeptEntryId = compactResult.firstKeptEntryId;
@@ -2828,6 +2858,18 @@ export class AgentSession {
 	 * Prepare a retryable error for continuation with exponential backoff.
 	 * @returns true if the caller should continue the agent, false otherwise
 	 */
+	private _summarizationRetryCallbacks(
+		source: { source: "branchSummary" } | { source: "compaction"; reason: "manual" | "threshold" | "overflow" },
+	): RetryCallbacks {
+		return {
+			onRetryScheduled: (attempt, maxAttempts, delayMs, errorMessage) => {
+				this._emit({ type: "summarization_retry_scheduled", attempt, maxAttempts, delayMs, errorMessage });
+			},
+			onRetryAttemptStart: () => this._emit({ type: "summarization_retry_attempt_start", ...source }),
+			onRetryFinished: () => this._emit({ type: "summarization_retry_finished" }),
+		};
+	}
+
 	private async _prepareRetry(message: AssistantMessage): Promise<boolean> {
 		const settings = this.settingsManager.getRetrySettings();
 		if (!settings.enabled) {
@@ -3088,7 +3130,7 @@ export class AgentSession {
 		this._branchSummaryAbortController = new AbortController();
 
 		try {
-			let extensionSummary: { summary: string; details?: unknown } | undefined;
+			let extensionSummary: { summary: string; details?: unknown; usage?: Usage } | undefined;
 			let fromExtension = false;
 
 			// Emit session_before_tree event
@@ -3123,6 +3165,7 @@ export class AgentSession {
 			// Run default summarizer if needed
 			let summaryText: string | undefined;
 			let summaryDetails: unknown;
+			let summaryUsage: Usage | undefined;
 			if (options.summarize && entriesToSummarize.length > 0 && !extensionSummary) {
 				const model = this.model!;
 				const { apiKey, headers, env } = await this._getSummarizationRequestAuth(model);
@@ -3149,9 +3192,11 @@ export class AgentSession {
 					readFiles: result.readFiles || [],
 					modifiedFiles: result.modifiedFiles || [],
 				};
+				summaryUsage = result.usage;
 			} else if (extensionSummary) {
 				summaryText = extensionSummary.summary;
 				summaryDetails = extensionSummary.details;
+				summaryUsage = extensionSummary.usage;
 			}
 
 			// Determine the new leaf position based on target type
@@ -3187,6 +3232,7 @@ export class AgentSession {
 					summaryText,
 					summaryDetails,
 					fromExtension,
+					summaryUsage,
 				);
 				summaryEntry = this.sessionManager.getEntry(summaryId) as BranchSummaryEntry;
 
@@ -3277,6 +3323,16 @@ export class AgentSession {
 		let totalCost = 0;
 
 		for (const entry of this.sessionManager.getEntries()) {
+			if (entry.type === "branch_summary" || entry.type === "compaction") {
+				if (entry.usage) {
+					totalInput += entry.usage.input;
+					totalOutput += entry.usage.output;
+					totalCacheRead += entry.usage.cacheRead;
+					totalCacheWrite += entry.usage.cacheWrite;
+					totalCost += entry.usage.cost.total;
+				}
+				continue;
+			}
 			if (entry.type !== "message") continue;
 			totalMessages++;
 			const message = entry.message;

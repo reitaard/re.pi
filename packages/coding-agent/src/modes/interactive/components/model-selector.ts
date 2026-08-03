@@ -10,11 +10,14 @@ import {
 	type TUI,
 } from "@reitaard/repi-tui";
 import type { ModelRegistry } from "../../../core/model-registry.ts";
+import type { ModelRuntime } from "../../../core/model-runtime.ts";
 import type { SettingsManager } from "../../../core/settings-manager.ts";
 import { getModelSelectorSearchText } from "../model-search.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint } from "./keybinding-hints.ts";
+
+type ModelSelectorRegistry = Pick<ModelRegistry, "refresh" | "getError" | "getAvailable" | "find"> | ModelRuntime;
 
 interface ModelItem {
 	provider: string;
@@ -52,10 +55,11 @@ export class ModelSelectorComponent extends Container implements Focusable {
 	private selectedIndex: number = 0;
 	private currentModel?: Model<any>;
 	private settingsManager: SettingsManager;
-	private modelRegistry: ModelRegistry;
+	private modelRegistry: ModelSelectorRegistry;
 	private onSelectCallback: (model: Model<any>) => void;
 	private onCancelCallback: () => void;
 	private errorMessage?: string;
+	private refreshStatusMessage?: string;
 	private tui: TUI;
 	private scopedModels: ReadonlyArray<ScopedModelItem>;
 	private scope: ModelScope = "all";
@@ -66,7 +70,7 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		tui: TUI,
 		currentModel: Model<any> | undefined,
 		settingsManager: SettingsManager,
-		modelRegistry: ModelRegistry,
+		modelRegistry: ModelSelectorRegistry,
 		scopedModels: ReadonlyArray<ScopedModelItem>,
 		onSelect: (model: Model<any>) => void,
 		onCancel: () => void,
@@ -140,12 +144,14 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		let models: ModelItem[];
 
 		// Refresh to pick up any changes to models.json
-		this.modelRegistry.refresh();
+		await this.modelRegistry.refresh();
 
 		// Check for models.json errors
 		const loadError = this.modelRegistry.getError();
 		if (loadError) {
 			this.errorMessage = loadError;
+		} else if (!("find" in this.modelRegistry)) {
+			this.refreshStatusMessage = "Model catalogs refreshed.";
 		}
 
 		// Load available models (built-in models still work even if models.json failed)
@@ -167,7 +173,10 @@ export class ModelSelectorComponent extends Container implements Focusable {
 
 		this.allModels = this.sortModels(models);
 		this.scopedModels = this.scopedModels.map((scoped) => {
-			const refreshed = this.modelRegistry.find(scoped.model.provider, scoped.model.id);
+			const refreshed =
+				"find" in this.modelRegistry
+					? this.modelRegistry.find(scoped.model.provider, scoped.model.id)
+					: this.modelRegistry.getModel(scoped.model.provider, scoped.model.id);
 			return refreshed ? { ...scoped, model: refreshed } : scoped;
 		});
 		this.scopedModelItems = this.scopedModels.map((scoped) => ({
@@ -266,6 +275,11 @@ export class ModelSelectorComponent extends Container implements Focusable {
 		if (startIndex > 0 || endIndex < this.filteredModels.length) {
 			const scrollInfo = theme.fg("muted", `  (${this.selectedIndex + 1}/${this.filteredModels.length})`);
 			this.listContainer.addChild(new Text(scrollInfo, 0, 0));
+		}
+
+		if (this.refreshStatusMessage) {
+			this.listContainer.addChild(new Spacer(1));
+			this.listContainer.addChild(new Text(theme.fg("success", this.refreshStatusMessage), 0, 0));
 		}
 
 		// Show error message or "no results" if empty

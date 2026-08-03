@@ -19,7 +19,6 @@ import {
 	type ImageContent,
 	type Message,
 	type Model,
-	type OAuthProviderId,
 	type OAuthSelectPrompt,
 } from "@reitaard/repi-ai/compat";
 import type {
@@ -5348,11 +5347,11 @@ export class InteractiveMode {
 		return filteredOptions.sort((a, b) => a.name.localeCompare(b.name));
 	}
 
-	private getLogoutProviderOptions(): AuthSelectorProvider[] {
+	private async getLogoutProviderOptions(): Promise<AuthSelectorProvider[]> {
 		const authStorage = this.session.modelRegistry.authStorage;
 		const options: AuthSelectorProvider[] = [];
 
-		for (const providerId of authStorage.list()) {
+		for (const { providerId } of await authStorage.list()) {
 			const credential = authStorage.get(providerId);
 			if (!credential) {
 				continue;
@@ -5521,7 +5520,7 @@ export class InteractiveMode {
 			return;
 		}
 
-		const providerOptions = this.getLogoutProviderOptions();
+		const providerOptions = await this.getLogoutProviderOptions();
 		if (providerOptions.length === 0) {
 			this.showStatus(
 				"No stored credentials to remove. /logout only removes credentials saved by /login; environment variables and models.json config are unchanged.",
@@ -5740,7 +5739,7 @@ export class InteractiveMode {
 		};
 
 		try {
-			await this.session.modelRegistry.authStorage.login(providerId as OAuthProviderId, {
+			await this.session.modelRegistry.authStorage.login(providerId, {
 				onAuth: (info: { url: string; instructions?: string }) => {
 					dialog.showAuth(info.url, info.instructions);
 

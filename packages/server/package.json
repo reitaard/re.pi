@@ -1,0 +1,45 @@
+{
+	"name": "@reitaard/repi-server",
+	"version": "0.82.1",
+	"description": "Experimental Recode server facade backed by Recode Maestro",
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist",
+		"README.md",
+		"CHANGELOG.md"
+	],
+	"scripts": {
+		"clean": "shx rm -rf dist",
+		"build": "tsgo -p tsconfig.build.json",
+		"prepublishOnly": "npm run clean && npm run build"
+	},
+	"keywords": [
+		"recode",
+		"server",
+		"maestro"
+	],
+	"author": "Recode",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/reitaard/re.pi.git",
+		"directory": "packages/server"
+	},
+	"engines": {
+		"node": ">=22.19.0"
+	},
+	"dependencies": {
+		"@reitaard/repi-orchestrator": "^0.82.1"
+	},
+	"devDependencies": {
+		"shx": "0.4.0"
+	}
+}

@@ -194,6 +194,14 @@ After explicit Creator approval, terminate the verified foreground `0.81.5` proc
 
 **Reason:** Only one live install path should remain addressable after certification; archived bytes and inventory provide rollback without mixed runtime resolution.
 
+## D-027 — Recode 0.82.1 adopts the root credential and model runtime
+
+**Status:** Accepted
+
+Recode uses the upstream root `CredentialStore` and `ModelRuntime` architecture for provider authentication, model refresh, and native provider registration. Existing `auth.json` data remains readable through the store. Open Provider retains dynamic OpenAI-compatible endpoint/model discovery and must complete migration of its saved key into the root store before release. Recode OpenAI OAuth and Radius remain product providers rather than independent credential authorities. JSONL remains the default session store; SQLite is optional.
+
+**Reason:** A single serialized credential authority prevents duplicate refreshes and lets built-in, native, local, and extension providers share the same authentication lifecycle without removing Recode provider capabilities.
+
 ## Pending decisions
 
 - Final package identity and initial version for the future standalone `recode` repository

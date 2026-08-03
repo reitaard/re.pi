@@ -6,8 +6,8 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync }
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Agent } from "@reitaard/repi-agent-core";
-import { getModel, type OAuthCredentials, type OAuthProvider } from "@reitaard/repi-ai/compat";
-import { getOAuthApiKey } from "@reitaard/repi-ai/oauth";
+import { getModel, type OAuthCredentials } from "@reitaard/repi-ai/compat";
+import { getOAuthApiKey, type OAuthProvider } from "@reitaard/repi-ai/oauth";
 import { AgentSession } from "../src/core/agent-session.ts";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { createEventBus } from "../src/core/event-bus.ts";

@@ -2,6 +2,8 @@
 	"extends": "./tsconfig.base.json",
 	"compilerOptions": {
 		"noEmit": true,
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
 		"paths": {
 			"*": ["./*"],
 			"@reitaard/repi-ai": ["./packages/ai/src/index.ts"],
@@ -10,6 +12,7 @@
 			"@reitaard/repi-ai/dist/*": ["./packages/ai/src/*"],
 			"@reitaard/repi-agent-core": ["./packages/agent/src/index.ts"],
 			"@reitaard/repi-agent-core/*": ["./packages/agent/src/*"],
+			"@reitaard/repi-storage-sqlite-node": ["./packages/storage/sqlite-node/src/index.ts"],
 			"@reitaard/repi-coding-agent": ["./packages/coding-agent/src/index.ts"],
 			"@reitaard/repi-coding-agent/hooks": ["./packages/coding-agent/src/core/hooks/index.ts"],
 			"@reitaard/repi-coding-agent/*": ["./packages/coding-agent/src/*"],
@@ -22,6 +25,6 @@
 			"@reitaard/repi-agent-old/*": ["./packages/agent-old/src/*"]
 		}
 	},
-	"include": ["packages/*/src/**/*", "packages/*/test/**/*", "packages/coding-agent/examples/**/*"],
+	"include": ["packages/*/src/**/*", "packages/*/test/**/*", "packages/storage/*/src/**/*", "packages/storage/*/test/**/*", "packages/coding-agent/examples/**/*"],
 	"exclude": ["**/dist/**", "packages/coding-agent/examples/extensions/gondolin/**"]
 }

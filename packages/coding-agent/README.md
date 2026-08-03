@@ -1,22 +1,12 @@
-<p align="center">
-  <a href="https://pi.dev">
-    <img alt="pi logo" src="https://pi.dev/logo-auto.svg" width="128">
-  </a>
-</p>
-<p align="center">
-  <a href="https://discord.com/invite/3cU7Bz4UPx"><img alt="Discord" src="https://img.shields.io/badge/discord-community-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
-  <a href="https://www.npmjs.com/package/@reitaard/repi-coding-agent"><img alt="npm" src="https://img.shields.io/npm/v/@reitaard/repi-coding-agent?style=flat-square" /></a>
-</p>
+# Recode Coding Agent
+
+[![npm](https://img.shields.io/npm/v/@reitaard/repi-coding-agent?style=flat-square)](https://www.npmjs.com/package/@reitaard/repi-coding-agent)
+
+Recode is a customized terminal coding harness derived from Pi. The installed product is `@reitaard/repi-coding-agent` and its command is `recode`; upstream Pi packages and installers do not update or replace Recode.
+
+Recode provides interactive, print/JSON, RPC, and SDK modes together with Maestro session supervision, named workers, Kioku memory integration, guarded Browser tooling, TypeScript extensions, skills, prompt templates, and themes.
 
 > New issues and PRs from new contributors are auto-closed by default. Maintainers review auto-closed issues daily. See [CONTRIBUTING.md](../../CONTRIBUTING.md).
-
----
-
-Pi is a minimal terminal coding harness. Adapt pi to your workflows, not the other way around, without having to fork and modify pi internals. Extend it with TypeScript [Extensions](#extensions), [Skills](#skills), [Prompt Templates](#prompt-templates), and [Themes](#themes). Put your extensions, skills, prompt templates, and themes in [Pi Packages](#pi-packages) and share them with others via npm or git.
-
-Pi ships with powerful defaults but skips features like sub agents and plan mode. Instead, you can ask pi to build what you want or install a third party pi package that matches your workflow.
-
-Pi runs in four modes: interactive, print or JSON, RPC for process integration, and an SDK for embedding in your own apps. See [openclaw/openclaw](https://github.com/openclaw/openclaw) for a real-world SDK integration.
 
 ## Share your OSS coding agent sessions
 
@@ -66,13 +56,9 @@ I regularly publish my own `pi-mono` work sessions here:
 npm install -g --ignore-scripts @reitaard/repi-coding-agent
 ```
 
-`--ignore-scripts` disables dependency lifecycle scripts during install. Pi does not require install scripts for normal npm installs.
+`--ignore-scripts` disables dependency lifecycle scripts during install. Recode does not require install scripts for normal npm installs.
 
-Installer alternative:
-
-```bash
-curl -fsSL https://pi.dev/install.sh | sh
-```
+Do not use the upstream `pi.dev` installer for Recode; it installs a different product.
 
 Authenticate with an API key:
 

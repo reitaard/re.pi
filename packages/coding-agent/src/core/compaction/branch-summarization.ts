@@ -6,7 +6,7 @@
  */
 
 import type { AgentMessage, StreamFn } from "@reitaard/repi-agent-core";
-import type { Model, SimpleStreamOptions } from "@reitaard/repi-ai/compat";
+import type { Model, SimpleStreamOptions, Usage } from "@reitaard/repi-ai/compat";
 import { completeSimple } from "@reitaard/repi-ai/compat";
 import {
 	convertToLlm,
@@ -36,6 +36,7 @@ export interface BranchSummaryResult {
 	modifiedFiles?: string[];
 	aborted?: boolean;
 	error?: string;
+	usage?: Usage;
 }
 
 /** Details stored in BranchSummaryEntry.details for file tracking */
@@ -367,5 +368,6 @@ export async function generateBranchSummary(
 		summary: summary || "No summary generated",
 		readFiles,
 		modifiedFiles,
+		usage: response.usage,
 	};
 }
