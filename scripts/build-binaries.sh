@@ -176,7 +176,7 @@ for platform in "${PLATFORMS[@]}"; do
     fi
 done
 
-echo "==> Creating release archives..."
+echo "==> Preparing binary distributions..."
 
 # Copy shared files to each platform directory
 for platform in "${PLATFORMS[@]}"; do
