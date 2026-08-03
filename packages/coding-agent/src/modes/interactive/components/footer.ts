@@ -7,6 +7,10 @@ import { theme } from "../theme/theme.ts";
 import { formatRecodeThinkingLevel } from "./recode-thinking-label.ts";
 
 const SMART_CONTEXT_COMPACT_THRESHOLD_PERCENT = 40;
+const FOOTER_STATUS_PRIORITIES = new Map([
+	["recode-memory", 0],
+	["mcp", 1],
+]);
 
 /**
  * Sanitize text for display in a single-line status.
@@ -18,6 +22,11 @@ function sanitizeStatusText(text: string): string {
 		.replace(/[\r\n\t]/g, " ")
 		.replace(/ +/g, " ")
 		.trim();
+}
+
+function formatFooterStatus(key: string, text: string): string {
+	const sanitized = sanitizeStatusText(text);
+	return key === "mcp" && sanitized.startsWith("MCP ") ? `MCP: ${sanitized.slice(4)}` : sanitized;
 }
 
 /**
@@ -230,9 +239,14 @@ export class FooterComponent implements Component {
 		const coreStatuses = Array.from(this.footerData.getCoreStatuses?.().entries() ?? []);
 		const extensionStatuses = Array.from(this.footerData.getExtensionStatuses().entries());
 		if (coreStatuses.length > 0 || extensionStatuses.length > 0) {
-			const sortedStatuses = [...coreStatuses, ...extensionStatuses]
-				.sort(([a], [b]) => a.localeCompare(b))
-				.map(([, text]) => sanitizeStatusText(text));
+			const sortedStatuses = [
+				...coreStatuses,
+				...extensionStatuses.sort(([a], [b]) => {
+					const priorityA = FOOTER_STATUS_PRIORITIES.get(a) ?? Number.MAX_SAFE_INTEGER;
+					const priorityB = FOOTER_STATUS_PRIORITIES.get(b) ?? Number.MAX_SAFE_INTEGER;
+					return priorityA - priorityB || a.localeCompare(b);
+				}),
+			].map(([key, text]) => formatFooterStatus(key, text));
 			const statusLine = sortedStatuses.join("  ");
 			lines.push(truncateToWidth(statusLine, width, theme.fg("footer", "...")));
 		}

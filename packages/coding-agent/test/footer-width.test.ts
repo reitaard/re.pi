@@ -148,6 +148,20 @@ describe("FooterComponent width handling", () => {
 		expect(statusLine).toContain("extension-ready");
 	});
 
+	it("places Kioku before MCP and restores the MCP colon", () => {
+		const footer = new FooterComponent(createSession({ sessionName: "" }), {
+			...createFooterData(1),
+			getExtensionStatuses: () =>
+				new Map([
+					["mcp", "MCP 0/1"],
+					["recode-memory", "Kioku (記憶): project"],
+				]),
+		});
+
+		const statusLine = stripAnsi(footer.render(120)[2]);
+		expect(statusLine).toBe("Kioku (記憶): project  MCP: 0/1");
+	});
+
 	it("shows the latest cache hit rate when cache usage is present", () => {
 		const session = createSession({
 			sessionName: "",
