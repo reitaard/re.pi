@@ -17,7 +17,7 @@ Builds the current clean checkout and installs its binary into the local Recode
 installation directory. No remote release, tag, or publication is performed.
 
 Options:
-  --skip-install       Skip npm ci --ignore-scripts
+  --skip-install       Skip npm install --ignore-scripts
   --keep-build         Keep the temporary binary build directory
   --help               Show this help
 `);
@@ -197,7 +197,7 @@ const buildArgument = relative(repositoryRoot, buildDirectory).replaceAll("\\", 
 const outputPlatformDirectory = join(buildDirectory, platform);
 let installedBinary;
 try {
-	if (!options.skipInstall) run("npm", ["ci", "--ignore-scripts"]);
+	if (!options.skipInstall) run("npm", ["install", "--ignore-scripts"]);
 	run("npm", ["run", "clean"]);
 	run("npm", ["run", "build:release"]);
 	run("bash", [
