@@ -11,6 +11,7 @@ packages/*/dist-firefox/
 
 # Environment
 .env
+.mcp.json
 
 # Editor files
 .vscode/
