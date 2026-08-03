@@ -520,14 +520,16 @@ export class DefaultResourceLoader implements ResourceLoader {
 			: this.mergePaths(cliEnabledExtensions, enabledExtensions);
 
 		const extensionsResult = await this.loadFinalExtensionSet(extensionPaths, preTrustExtensions);
-		extensionsResult.packageRuntimeDiagnostics = packageRuntimeResolution.diagnostics;
-		for (const runtimeError of packageRuntimeResolution.errors) {
-			if (
-				!extensionsResult.errors.some(
-					(error) => error.path === runtimeError.path && error.error === runtimeError.error,
-				)
-			) {
-				extensionsResult.errors.push(runtimeError);
+		if (!this.noExtensions) {
+			extensionsResult.packageRuntimeDiagnostics = packageRuntimeResolution.diagnostics;
+			for (const runtimeError of packageRuntimeResolution.errors) {
+				if (
+					!extensionsResult.errors.some(
+						(error) => error.path === runtimeError.path && error.error === runtimeError.error,
+					)
+				) {
+					extensionsResult.errors.push(runtimeError);
+				}
 			}
 		}
 		for (const p of this.additionalExtensionPaths) {
@@ -640,8 +642,10 @@ export class DefaultResourceLoader implements ResourceLoader {
 			? cliEnabledExtensions
 			: this.mergePaths(cliEnabledExtensions, enabledExtensions);
 		const extensionsResult = await loadExtensionsCached(extensionPaths, this.cwd, this.eventBus);
-		extensionsResult.packageRuntimeDiagnostics = packageRuntimeResolution.diagnostics;
-		extensionsResult.errors.push(...packageRuntimeResolution.errors);
+		if (!this.noExtensions) {
+			extensionsResult.packageRuntimeDiagnostics = packageRuntimeResolution.diagnostics;
+			extensionsResult.errors.push(...packageRuntimeResolution.errors);
+		}
 		if (!options.includeInlineFactories) {
 			finalizePackageRuntimeDiagnostics(extensionsResult);
 			return extensionsResult;
