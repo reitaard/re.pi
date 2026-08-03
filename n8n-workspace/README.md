@@ -11,7 +11,7 @@ Dedicated project directory for designing, validating, and explicitly deploying 
 - `notes/` — design notes and test records
 - `skills/` — reviewed n8n guidance
 - `instructions/` — workspace operating rules
-- `.mcp.json` — local ignored MCP configuration for the community server
+- `.mcp.json` — committed MCP configuration for the community server; it reads `N8N_API_KEY` from the environment
 - `.mcp.example.json` — credential-free configuration template
 - `node_modules/n8n-mcp/` — pinned standalone community server
 

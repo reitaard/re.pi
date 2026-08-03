@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "n8n-mcp": {
+      "command": "C:\\Users\\re_Lax\\AppData\\Local\\nvm\\v22.16.0\\node.exe",
+      "args": ["node_modules/n8n-mcp/dist/mcp/stdio-wrapper.js"],
+      "cwd": ".",
+      "env": {
+        "N8N_API_URL": "https://n8.retakt.cc",
+        "N8N_API_KEY": "${N8N_API_KEY}"
+      },
+      "lifecycle": "lazy",
+      "toolPrefix": "server"
+    }
+  }
+}
