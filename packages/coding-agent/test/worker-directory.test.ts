@@ -221,6 +221,37 @@ describe("WorkerDirectory", () => {
 		expect(directory.getStatus()).toHaveLength(0);
 	});
 
+	it("cancels an active initial direct chat without losing its private controller", async () => {
+		const { registration, models } = createFaux();
+		let releaseWorker = () => {};
+		const blockedWorker = new Promise<void>((resolve) => {
+			releaseWorker = resolve;
+		});
+		registration.setResponses([
+			async () => {
+				await blockedWorker;
+				return fauxAssistantMessage("Late direct-chat result.");
+			},
+		]);
+		const directory = new WorkerDirectory({
+			cwd: process.cwd(),
+			workers: workers(),
+			model: registration.getModel(),
+			models,
+		});
+		const chat = new WorkerChatController(directory);
+		const pending = chat.send("Levi", "Start a long direct chat turn.");
+
+		await vi.waitFor(() => expect(directory.getStatus()[0]?.status).toBe("running"));
+		expect(chat.cancel("監査")).toBe(true);
+		releaseWorker();
+
+		const turn = await pending;
+		expect(turn.result.status).toBe("cancelled");
+		expect(chat.getConversationId("Levi")).toBe(turn.conversation.conversationId);
+		expect(chat.close("Levi")).toBe(true);
+	});
+
 	it("restores a bounded direct chat into a new runtime", async () => {
 		const firstRuntime = createFaux();
 		firstRuntime.registration.setResponses([() => fauxAssistantMessage("I will remember bluebird.")]);

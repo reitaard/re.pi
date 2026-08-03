@@ -41,6 +41,7 @@
 
 ### Fixed
 
+- Kept direct worker-chat steering inside the active worker conversation, serialized queued turns, and kept cancellation from falling through to Aizen.
 - Kept input submitted during long-running worker or extension commands visible in the queued-message area instead of making it disappear until the command completes.
 - Preserved AgentHarness tool-result and branch-summary usage in persisted session statistics.
 - Kept Open Provider configuration files secret-free after credential migration and retained dynamic OpenAI-compatible model discovery.

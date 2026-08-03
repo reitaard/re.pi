@@ -416,6 +416,7 @@ async function sendDirectMessage(
 	agentDir: string,
 	workerReference: string,
 	message?: string,
+	signal?: AbortSignal,
 ): Promise<void> {
 	const worker = directory.resolveWorker(workerReference);
 	const prompt = message?.trim() || (await ctx.ui.input(`Direct chat · ${identity(worker)}`, "Write a message"));
@@ -431,7 +432,7 @@ async function sendDirectMessage(
 	const widgetKey = workerActivityWidgetKey(worker.id);
 	workerLoader(ctx, worker, "direct", turnNumber);
 	try {
-		const turn = await chat.send(worker.id, prompt);
+		const turn = await chat.send(worker.id, prompt, signal);
 		settleWorkerActivity(
 			() => ctx.ui.setWidget(widgetKey, undefined),
 			() => {
@@ -570,27 +571,87 @@ async function openDirectChat(
 	try {
 		while (true) {
 			await showWorkerInHeader(directory, agentDir, ctx, worker.id);
+			const queuedMessages: string[] = [];
+			let component: RecodeWorkerDirectChatComponent | undefined;
+			let processing = false;
+			let stopAfterCurrentTurn = false;
+			let activeAbortController: AbortController | undefined;
+			const processQueue = async (): Promise<void> => {
+				if (processing) return;
+				processing = true;
+				component?.setBusy(true);
+				try {
+					while (queuedMessages.length > 0 && !stopAfterCurrentTurn) {
+						const nextMessage = queuedMessages.shift();
+						if (!nextMessage) continue;
+						component?.setQueuedMessages(queuedMessages);
+						const abortController = new AbortController();
+						activeAbortController = abortController;
+						try {
+							await sendDirectMessage(
+								pi,
+								chat,
+								directory,
+								teach,
+								ctx,
+								agentDir,
+								worker.id,
+								nextMessage,
+								abortController.signal,
+							);
+						} catch (error: unknown) {
+							ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
+						} finally {
+							if (activeAbortController === abortController) activeAbortController = undefined;
+						}
+					}
+				} finally {
+					processing = false;
+					component?.setBusy(false);
+					component?.setQueuedMessages(queuedMessages);
+				}
+			};
 			const message = await ctx.ui.custom<string | undefined>((_tui, _activeTheme, _keybindings, done) => {
 				const descriptor = directory.listWorkers().find((candidate) => candidate.id === worker.id);
 				if (!descriptor) throw new Error(`Worker descriptor is unavailable: ${worker.id}`);
-				return new RecodeWorkerDirectChatComponent(descriptor, done, () => done(undefined));
+				component = new RecodeWorkerDirectChatComponent(
+					descriptor,
+					(nextMessage) => {
+						if (!nextMessage.trim()) {
+							if (!processing) done("");
+							return;
+						}
+						stopAfterCurrentTurn = false;
+						queuedMessages.push(nextMessage.trim());
+						component?.setQueuedMessages(queuedMessages);
+						void processQueue();
+					},
+					() => {
+						if (!processing) {
+							done(undefined);
+							return;
+						}
+						stopAfterCurrentTurn = true;
+						queuedMessages.length = 0;
+						component?.setQueuedMessages(queuedMessages);
+						activeAbortController?.abort();
+						chat.cancel(worker.id);
+					},
+				);
+				return component;
 			});
 			if (message === undefined) return;
-			if (!message.trim()) {
-				chat.close(worker.id);
-				pi.appendEntry(
-					WORKER_DIRECT_RESET_ENTRY,
-					{
-						workerId: worker.id,
-						workerName: identity(worker),
-						createdAt: Date.now(),
-					} satisfies WorkerDirectResetEntry,
-					{ persistImmediately: true },
-				);
-				ctx.ui.notify(`New ${identity(worker)} direct conversation started.`, "info");
-				continue;
-			}
-			await sendDirectMessage(pi, chat, directory, teach, ctx, agentDir, worker.id, message);
+			chat.close(worker.id);
+			pi.appendEntry(
+				WORKER_DIRECT_RESET_ENTRY,
+				{
+					workerId: worker.id,
+					workerName: identity(worker),
+					createdAt: Date.now(),
+				} satisfies WorkerDirectResetEntry,
+				{ persistImmediately: true },
+			);
+			ctx.ui.notify(`New ${identity(worker)} direct conversation started.`, "info");
 		}
 	} finally {
 		clearWorkerHeader(ctx);

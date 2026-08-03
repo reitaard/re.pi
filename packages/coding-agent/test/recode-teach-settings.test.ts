@@ -62,4 +62,19 @@ describe("worker direct-chat Teach Mode hints", () => {
 		component.handleInput("\r");
 		expect(onSubmit).toHaveBeenCalledWith("");
 	});
+
+	it("keeps queued messages inside the direct chat while a turn is running", () => {
+		initTheme("dark");
+		const onSubmit = vi.fn();
+		const component = new RecodeWorkerDirectChatComponent(worker, onSubmit, vi.fn());
+		component.setBusy(true);
+		component.setQueuedMessages(["also check technology news"]);
+
+		const rendered = stripAnsi(component.render(100).join("\n"));
+		expect(rendered).toContain("Working…");
+		expect(rendered).toContain("Queued: also check technology news");
+
+		component.handleInput("\r");
+		expect(onSubmit).not.toHaveBeenCalled();
+	});
 });

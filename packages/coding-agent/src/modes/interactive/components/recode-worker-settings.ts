@@ -417,6 +417,8 @@ export class RecodeWorkerDirectChatComponent extends Container {
 	private readonly onSubmit: (message: string) => void;
 	private readonly onCancel: () => void;
 	private showTeachHints = false;
+	private busy = false;
+	private queuedMessages: string[] = [];
 
 	constructor(worker: WorkerDescriptor, onSubmit: (message: string) => void, onCancel: () => void) {
 		super();
@@ -429,6 +431,16 @@ export class RecodeWorkerDirectChatComponent extends Container {
 		this.addChild(new DynamicBorder());
 	}
 
+	setBusy(busy: boolean): void {
+		this.busy = busy;
+		this.invalidate();
+	}
+
+	setQueuedMessages(messages: readonly string[]): void {
+		this.queuedMessages = [...messages];
+		this.invalidate();
+	}
+
 	handleInput(data: string): void {
 		const keybindings = getKeybindings();
 		if (keybindings.matches(data, "tui.select.cancel")) {
@@ -436,7 +448,11 @@ export class RecodeWorkerDirectChatComponent extends Container {
 			return;
 		}
 		if (keybindings.matches(data, "tui.input.submit")) {
-			this.onSubmit(this.input.getValue().trim());
+			const message = this.input.getValue().trim();
+			if (!message && this.busy) return;
+			this.input.setValue("");
+			this.showTeachHints = false;
+			this.onSubmit(message);
 			return;
 		}
 		if (keybindings.matches(data, "tui.input.tab")) {
@@ -461,6 +477,13 @@ export class RecodeWorkerDirectChatComponent extends Container {
 
 	override render(width: number): string[] {
 		const lines = super.render(width);
+		const statusLines = [
+			...(this.busy ? [truncateToWidth(theme.fg("dim", "  Working…"), width, "")] : []),
+			...this.queuedMessages.map((message) => truncateToWidth(theme.fg("dim", `  Queued: ${message}`), width, "")),
+		];
+		if (statusLines.length > 0) {
+			lines.splice(Math.max(0, lines.length - 1), 0, ...statusLines);
+		}
 		if (!this.showTeachHints) return lines;
 		const prefix = this.input.getValue().slice("/teach ".length);
 		const options = ["on", "status", "review", "save <id>", "off"].filter((option) => option.startsWith(prefix));

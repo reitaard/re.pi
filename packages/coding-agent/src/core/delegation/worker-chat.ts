@@ -5,6 +5,7 @@ import type { WorkerConversationTurnResult, WorkerDirectory } from "./worker-dir
 /** Host-owned direct-chat state. Conversation ids never need to enter user input. */
 export class WorkerChatController {
 	private readonly conversations = new Map<string, string>();
+	private readonly activeControllers = new Map<string, AbortController>();
 	private readonly directory: WorkerDirectory;
 	private readonly speaker: OrchestrationActorIdentity;
 	private readonly getContext?: (worker: NamedWorkerDefinition) => Promise<string | undefined>;
@@ -21,13 +22,23 @@ export class WorkerChatController {
 
 	async send(workerReference: string, message: string, signal?: AbortSignal): Promise<WorkerConversationTurnResult> {
 		const worker = this.directory.resolveWorker(workerReference);
-		const conversationId = this.conversations.get(worker.id);
-		const context = await this.getContext?.(worker);
-		const turn = conversationId
-			? await this.directory.messageConversation(conversationId, message, context, signal)
-			: await this.directory.startConversation(worker.id, message, context, signal, this.speaker);
-		this.conversations.set(worker.id, turn.conversation.conversationId);
-		return turn;
+		const controller = new AbortController();
+		const onAbort = () => controller.abort();
+		signal?.addEventListener("abort", onAbort, { once: true });
+		if (signal?.aborted) controller.abort();
+		this.activeControllers.set(worker.id, controller);
+		try {
+			const conversationId = this.conversations.get(worker.id);
+			const context = await this.getContext?.(worker);
+			const turn = conversationId
+				? await this.directory.messageConversation(conversationId, message, context, controller.signal)
+				: await this.directory.startConversation(worker.id, message, context, controller.signal, this.speaker);
+			this.conversations.set(worker.id, turn.conversation.conversationId);
+			return turn;
+		} finally {
+			if (this.activeControllers.get(worker.id) === controller) this.activeControllers.delete(worker.id);
+			signal?.removeEventListener("abort", onAbort);
+		}
 	}
 
 	getConversationId(workerReference: string): string | undefined {
@@ -43,16 +54,32 @@ export class WorkerChatController {
 		this.conversations.set(worker.id, conversationId);
 	}
 
-	close(workerReference: string): boolean {
+	cancel(workerReference: string): boolean {
 		const worker = this.directory.resolveWorker(workerReference);
+		const activeController = this.activeControllers.get(worker.id);
+		if (activeController) {
+			activeController.abort();
+			return true;
+		}
 		const conversationId = this.conversations.get(worker.id);
 		if (!conversationId) return false;
+		return this.directory.cancelConversation(conversationId);
+	}
+
+	close(workerReference: string): boolean {
+		const worker = this.directory.resolveWorker(workerReference);
+		const activeController = this.activeControllers.get(worker.id);
+		activeController?.abort();
+		const conversationId = this.conversations.get(worker.id);
+		if (!conversationId) return activeController !== undefined;
 		this.directory.closeConversation(conversationId);
 		this.conversations.delete(worker.id);
 		return true;
 	}
 
 	clear(): void {
+		for (const controller of this.activeControllers.values()) controller.abort();
+		this.activeControllers.clear();
 		for (const conversationId of this.conversations.values()) {
 			try {
 				this.directory.closeConversation(conversationId);
