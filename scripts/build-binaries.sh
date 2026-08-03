@@ -4,12 +4,13 @@
 # Mirrors .github/workflows/build-binaries.yml
 #
 # Usage:
-#   ./scripts/build-binaries.sh [--skip-install] [--skip-deps] [--skip-build] [--platform <platform>] [--out <dir>]
+#   ./scripts/build-binaries.sh [--skip-install] [--skip-deps] [--skip-build] [--skip-archives] [--platform <platform>] [--out <dir>]
 #
 # Options:
 #   --skip-install      Skip npm ci
 #   --skip-deps         Skip installing cross-platform dependencies
 #   --skip-build        Skip npm run build
+#   --skip-archives     Skip release archive creation and extraction
 #   --platform <name>   Build only for specified platform (linux-x64, linux-arm64, windows-x64, windows-arm64)
 #   --out <dir>         Output directory (default: packages/coding-agent/binaries)
 #
@@ -29,6 +30,7 @@ REPO_ROOT="$(pwd)"
 SKIP_INSTALL=false
 SKIP_DEPS=false
 SKIP_BUILD=false
+SKIP_ARCHIVES=false
 PLATFORM=""
 OUTPUT_DIR=""
 
@@ -44,6 +46,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-build)
             SKIP_BUILD=true
+            shift
+            ;;
+        --skip-archives)
+            SKIP_ARCHIVES=true
             shift
             ;;
         --platform)
@@ -232,6 +238,20 @@ for platform in "${PLATFORMS[@]}"; do
         cp ../tui/native/win32/prebuilds/$win32_arch_dir/win32-console-mode.node "$OUTPUT_DIR/$platform/native/win32/prebuilds/$win32_arch_dir/"
     fi
 done
+
+if [[ "$SKIP_ARCHIVES" == "true" ]]; then
+    echo "==> Skipping release archives (--skip-archives)"
+    echo ""
+    echo "==> Build complete!"
+    for platform in "${PLATFORMS[@]}"; do
+        if [[ "$platform" == windows-* ]]; then
+            echo "  $OUTPUT_DIR/$platform/recode.exe"
+        else
+            echo "  $OUTPUT_DIR/$platform/recode"
+        fi
+    done
+    exit 0
+fi
 
 # Create archives
 cd "$OUTPUT_DIR"

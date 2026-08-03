@@ -127,6 +127,8 @@ test("all packaging and publication entrypoints invoke the shared identity gate"
 	assert.match(workflow, /release-identity\.mjs --mode tag/);
 	const binaryBuilder = readFileSync(join(RELEASE_REPOSITORY_ROOT, "scripts/build-binaries.sh"), "utf8");
 	assert.match(binaryBuilder, /--skip-build is forbidden for tagged release artifacts/);
+	assert.match(binaryBuilder, /--skip-archives/);
+	assert.match(readFileSync(join(RELEASE_REPOSITORY_ROOT, "scripts/install-local.mjs"), "utf8"), /"--skip-archives"/);
 	assert.match(binaryBuilder, /tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner/);
 	assert.match(binaryBuilder, /zip -X/);
 	assert.match(readFileSync(join(RELEASE_REPOSITORY_ROOT, "scripts/publish.mjs"), "utf8"), /run\("npm", \["run", "clean"\]\)/);

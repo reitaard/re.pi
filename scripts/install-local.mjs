@@ -205,6 +205,7 @@ try {
 		"--skip-install",
 		"--skip-deps",
 		"--skip-build",
+		"--skip-archives",
 		"--platform",
 		platform,
 		"--out",
