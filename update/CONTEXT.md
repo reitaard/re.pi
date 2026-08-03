@@ -101,6 +101,8 @@ Extend this package and lifecycle authority; do not add another supervisor.
 
 ## Release and deployment context
 
+- GitHub release `v0.82.1` is published from exact Recode source `c035bc2fc06d0282ddf0b97210e575a22cd007a2`; workflow run `30787466331` passed and produced nine checksummed Windows/Linux/Termux/source/manifest assets.
+- The exact self-contained Node artifact is retained at `%LOCALAPPDATA%/Recode/artifacts/reitaard-repi-coding-agent-0.82.1-c035bc2f.tgz`, SHA-256 `8e916dec5c313af6c7e37e9eb11b85238f4b7bb6a0468a34d0d956c65d6d0668`. Isolated configured RPC and real local Open Provider generation passed. The active global process must restart before this final artifact can replace the already functional `0.82.1` checkpoint because Windows holds the clipboard DLL open.
 - The desired deployment model is one certified Recode release for npm/Node, Windows, Linux, Termux, the primary machine, work PC, and VPS.
 - Existing foundations are `scripts/local-release.mjs`, `scripts/build-binaries.sh`, `scripts/build-termux-release.sh`, and `.github/workflows/build-binaries.yml`.
 - Current binary targets are Windows x64/arm64 and Linux x64/arm64; Termux uses a deterministic Node archive containing workspace tarballs and an installer.

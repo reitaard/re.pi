@@ -1,5 +1,15 @@
 # Update Work Log
 
+## 2026-08-03 — Recode 0.82.1 checkpoint and GitHub assets
+
+- Committed the protected upstream integration at `e6b2b5db9`, then closed configured-runtime blockers for disabled extension discovery, stale compaction model settings, keyless Open Provider authentication, release identity, and full-history CI ancestry through exact release commit `c035bc2fc06d0282ddf0b97210e575a22cd007a2`.
+- Updated controlled Browser package compatibility through `4b149a6afe960d9a33e770e828f06e23d261b21d`; its 90/91 suite result retained the known real-Chrome download-event timeout. Updated installed web/MCP packages to their current contract-free releases.
+- Published GitHub release `v0.82.1`; workflow run `30787466331` passed all build, preview, staging, and publication jobs. The release contains nine checksummed Windows/Linux/Termux/source/manifest assets.
+- Downloaded and verified `recode-windows-x64.zip` against `SHA256SUMS`; binary version/help/model listing, configured RPC startup, Browser/Kioku/Shiori activation, and a real local Open Provider prompt returning exactly `ok` passed.
+- Built the exact self-contained Node artifact `reitaard-repi-coding-agent-0.82.1-c035bc2f.tgz`, SHA-256 `8e916dec5c313af6c7e37e9eb11b85238f4b7bb6a0468a34d0d956c65d6d0668`. Isolated version, configured RPC, source identity, and real local prompt passed.
+- Global Recode is running functional `0.82.1` from `eb560c2a8`; replacing it with the final metadata-equivalent `c035bc2f` artifact is deferred until the active Recode process releases the Windows clipboard DLL.
+- npm publication remains separate because trusted publishing is not configured; no local npm publication was attempted.
+
 ## 2026-08-02 — Upstream 0.82.1 credential, AgentHarness, and storage integration
 
 - Integrated the upstream root credential/model runtime while preserving Recode Open Provider, OpenAI OAuth, Radius, Maestro, Shiori, and provider-extension registration. Open Provider key migration from its legacy configuration file into the root store remains a release gate.
