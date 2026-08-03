@@ -117,6 +117,46 @@ describe("InteractiveMode.showStatus", () => {
 	});
 });
 
+describe("InteractiveMode pending input queue", () => {
+	beforeAll(() => {
+		initTheme("dark");
+	});
+
+	test("renders input submitted while a long-running command owns the loop", () => {
+		const fakeThis: any = {
+			pendingUserInputs: ["keep this visible"],
+			pendingMessagesContainer: new Container(),
+			aizenRuntime: undefined,
+			session: {
+				getSteeringMessages: () => [],
+				getFollowUpMessages: () => [],
+			},
+			compactionQueuedMessages: [],
+			getAllQueuedMessages: () => ({ steering: [], followUp: [], pending: ["keep this visible"] }),
+			getAppKeyDisplay: () => "Alt+Up",
+		};
+
+		(InteractiveMode as any).prototype.updatePendingMessagesDisplay.call(fakeThis);
+
+		const rendered = normalizeRenderedOutput(fakeThis.pendingMessagesContainer);
+		expect(rendered).toContain("Queued: keep this visible");
+		expect(rendered).toContain("Alt+Up to edit all queued messages");
+	});
+
+	test("removes a queued input from the pending display when it is handed to the loop", async () => {
+		const fakeThis: any = {
+			pendingUserInputs: ["deliver this next"],
+			updatePendingMessagesDisplay: vi.fn(),
+			ui: { requestRender: vi.fn() },
+		};
+
+		await expect((InteractiveMode as any).prototype.getUserInput.call(fakeThis)).resolves.toBe("deliver this next");
+		expect(fakeThis.pendingUserInputs).toEqual([]);
+		expect(fakeThis.updatePendingMessagesDisplay).toHaveBeenCalledOnce();
+		expect(fakeThis.ui.requestRender).toHaveBeenCalledOnce();
+	});
+});
+
 describe("InteractiveMode.setToolsExpanded", () => {
 	test("applies expansion state to the active header and chat entries", () => {
 		const header = { setExpanded: vi.fn() };

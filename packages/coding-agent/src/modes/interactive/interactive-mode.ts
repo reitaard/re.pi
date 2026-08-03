@@ -3272,6 +3272,8 @@ export class InteractiveMode {
 				this.onInputCallback(text);
 			} else {
 				this.pendingUserInputs.push(text);
+				this.updatePendingMessagesDisplay();
+				this.ui.requestRender();
 			}
 			this.editor.addToHistory?.(text);
 		};
@@ -3919,6 +3921,8 @@ export class InteractiveMode {
 	async getUserInput(): Promise<string> {
 		const queuedInput = this.pendingUserInputs.shift();
 		if (queuedInput !== undefined) {
+			this.updatePendingMessagesDisplay();
+			this.ui.requestRender();
 			return queuedInput;
 		}
 
@@ -4383,9 +4387,9 @@ export class InteractiveMode {
 
 	/**
 	 * Get all queued messages (read-only).
-	 * Combines session queue and compaction queue.
+	 * Combines agent, compaction, and deferred interactive-input queues.
 	 */
-	private getAllQueuedMessages(): { steering: string[]; followUp: string[] } {
+	private getAllQueuedMessages(): { steering: string[]; followUp: string[]; pending: string[] } {
 		return {
 			steering: [
 				...(this.aizenRuntime ? this.runtimeSteeringMessages : this.session.getSteeringMessages()),
@@ -4395,14 +4399,15 @@ export class InteractiveMode {
 				...(this.aizenRuntime ? this.runtimeFollowUpMessages : this.session.getFollowUpMessages()),
 				...this.compactionQueuedMessages.filter((msg) => msg.mode === "followUp").map((msg) => msg.text),
 			],
+			pending: [...this.pendingUserInputs],
 		};
 	}
 
 	/**
 	 * Clear all queued messages and return their contents.
-	 * Clears both session queue and compaction queue.
+	 * Clears agent, compaction, and deferred interactive-input queues.
 	 */
-	private clearAllQueues(): { steering: string[]; followUp: string[] } {
+	private clearAllQueues(): { steering: string[]; followUp: string[]; pending: string[] } {
 		const { steering, followUp } = this.aizenRuntime
 			? { steering: this.runtimeSteeringMessages, followUp: this.runtimeFollowUpMessages }
 			: this.session.clearQueue();
@@ -4418,16 +4423,23 @@ export class InteractiveMode {
 			.filter((msg) => msg.mode === "followUp")
 			.map((msg) => msg.text);
 		this.compactionQueuedMessages = [];
+		const pending = [...this.pendingUserInputs];
+		this.pendingUserInputs = [];
 		return {
 			steering: [...steering, ...compactionSteering],
 			followUp: [...followUp, ...compactionFollowUp],
+			pending,
 		};
 	}
 
 	private updatePendingMessagesDisplay(): void {
 		this.pendingMessagesContainer.clear();
-		const { steering: steeringMessages, followUp: followUpMessages } = this.getAllQueuedMessages();
-		if (steeringMessages.length > 0 || followUpMessages.length > 0) {
+		const {
+			steering: steeringMessages,
+			followUp: followUpMessages,
+			pending: pendingMessages,
+		} = this.getAllQueuedMessages();
+		if (steeringMessages.length > 0 || followUpMessages.length > 0 || pendingMessages.length > 0) {
 			this.pendingMessagesContainer.addChild(new Spacer(1));
 			for (const message of steeringMessages) {
 				const text = theme.fg("dim", `Steering: ${message}`);
@@ -4437,6 +4449,10 @@ export class InteractiveMode {
 				const text = theme.fg("dim", `Follow-up: ${message}`);
 				this.pendingMessagesContainer.addChild(new TruncatedText(text, 1, 0));
 			}
+			for (const message of pendingMessages) {
+				const text = theme.fg("dim", `Queued: ${message}`);
+				this.pendingMessagesContainer.addChild(new TruncatedText(text, 1, 0));
+			}
 			const dequeueHint = this.getAppKeyDisplay("app.message.dequeue");
 			const hintText = theme.fg("dim", `↳ ${dequeueHint} to edit all queued messages`);
 			this.pendingMessagesContainer.addChild(new TruncatedText(hintText, 1, 0));
@@ -4444,8 +4460,8 @@ export class InteractiveMode {
 	}
 
 	private restoreQueuedMessagesToEditor(options?: { abort?: boolean; currentText?: string }): number {
-		const { steering, followUp } = this.clearAllQueues();
-		const allQueued = [...steering, ...followUp];
+		const { steering, followUp, pending } = this.clearAllQueues();
+		const allQueued = [...steering, ...followUp, ...pending];
 		if (allQueued.length === 0) {
 			this.updatePendingMessagesDisplay();
 			if (options?.abort) {
