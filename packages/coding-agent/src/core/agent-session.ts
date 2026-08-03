@@ -1921,15 +1921,13 @@ export class AgentSession {
 
 		const separatorIndex = modelRef.indexOf("/");
 		if (separatorIndex <= 0 || separatorIndex === modelRef.length - 1) {
-			throw new Error(`Invalid compaction model "${modelRef}". Choose a model again in /settings.`);
+			return currentModel;
 		}
 		const provider = modelRef.slice(0, separatorIndex);
 		const modelId = modelRef.slice(separatorIndex + 1);
 		const model = this._modelRegistry.find(provider, modelId);
 		if (!model || !this._modelRegistry.hasConfiguredAuth(model)) {
-			throw new Error(
-				`Configured compaction model "${modelRef}" is unavailable. Choose another model in /settings.`,
-			);
+			return currentModel;
 		}
 		return model;
 	}
