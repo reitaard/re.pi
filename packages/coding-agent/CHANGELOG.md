@@ -24,6 +24,7 @@
 - Added the `recode maestro` service/TUI command surface and a non-blocking Maestro health and live-session indicator in Aizen's footer.
 - Added an absolute-deny bash gate for recursive destruction of filesystem roots, home directories, credential stores, raw devices, and process-exhaustion fork bombs.
 - Added deterministic embedded release provenance plus a detached final-artifact size and SHA-256 index.
+- Added `recode:install-local` to build and install the current clean checkout's platform binary without remote release operations.
 
 ### Changed
 

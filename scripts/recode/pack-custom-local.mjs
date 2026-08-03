@@ -23,10 +23,6 @@ function run(command, args, options = {}) {
 	return typeof output === "string" ? output.trim() : "";
 }
 
-function git(args) {
-	return run("git", args, { capture: true });
-}
-
 function runNpm(args, cwd = root, capture = false) {
 	return run(process.execPath, [npmCli, ...args], { cwd, capture });
 }
@@ -67,9 +63,6 @@ for (const path of releaseManifestPaths) {
 	if (!existsSync(dirname(path))) throw new Error(`Build output is missing for ${path}`);
 }
 writeReleaseManifest(releaseManifest, releaseManifestPaths);
-const shortCommit = git(["rev-parse", "--short=8", "HEAD"]);
-const distance = Number(git(["rev-list", "--count", `${CUSTOM_BASE_COMMIT}..HEAD`]));
-const version = process.env.RECODE_PACKAGE_VERSION?.trim() || `0.81.4-repi.2.dev.${distance}.${shortCommit}`;
 const outputRoot = resolve(process.env.RECODE_PACKAGE_OUT?.trim() || join(tmpdir(), "recode-custom-package"));
 const dependencyTarballs = join(outputRoot, "dependencies");
 const stage = join(outputRoot, "stage");
@@ -91,6 +84,7 @@ for (const name of ["dist", "docs", "examples", "containerization.md", "CHANGELO
 }
 
 const originalManifest = readJson(join(packageSource, "package.json"));
+const version = originalManifest.version;
 const installManifest = {
 	...originalManifest,
 	dependencies: { ...originalManifest.dependencies },

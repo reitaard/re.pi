@@ -113,6 +113,7 @@ test("all packaging and publication entrypoints invoke the shared identity gate"
 	for (const path of [
 		"scripts/release.mjs",
 		"scripts/local-release.mjs",
+		"scripts/install-local.mjs",
 		"scripts/publish.mjs",
 		"scripts/recode/pack-custom-local.mjs",
 		"scripts/build-binaries.sh",

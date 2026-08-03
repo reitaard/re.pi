@@ -50,6 +50,18 @@ npm run recode:pack-custom-local
 
 For coding-agent-only changes, rebuilding only `packages/coding-agent` avoids unrelated live model regeneration. The packer produces a self-contained tarball under the configured output directory, normally the system temporary directory.
 
+## Local binary installation
+
+Use the local installer for the current checkout:
+
+```bash
+npm run recode:install-local
+```
+
+The installer requires a clean `agent-harness` checkout descended from the custom baseline, reads the version from `packages/coding-agent/package.json`, runs the existing dependency/build/binary pipeline for the current platform, and installs the extracted binary under the user-local Recode directory. It does not publish, tag, push, or contact a release service.
+
+On Windows it installs under `%LOCALAPPDATA%\\Recode\\<manifest-version>` and updates the user `PATH` to prefer that version. Stop Recode before running it so the existing binary and clipboard native module are not locked. Use `--skip-install` when dependencies are already synchronized and `--keep-build` to retain the temporary binary output.
+
 Before global installation:
 
 1. Install the tarball into a fresh temporary prefix with lifecycle scripts disabled.
