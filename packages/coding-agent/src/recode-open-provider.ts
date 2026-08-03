@@ -37,6 +37,7 @@ const DEFAULT_CONFIG: RecodeOpenProviderConfig = {
 };
 
 const OPEN_PROVIDER_ID = "open-provider";
+const OPEN_PROVIDER_LOCAL_KEY = "local";
 
 function configPath(): string {
 	return join(getAgentDir(), "recode-open-provider.json");
@@ -127,7 +128,8 @@ async function saveConfig(config: RecodeOpenProviderConfig): Promise<void> {
 
 function storedApiKey(authStorage: AuthStorage): string {
 	const credential = authStorage.get(OPEN_PROVIDER_ID);
-	return credential?.type === "api_key" ? (credential.key ?? "") : "";
+	const key = credential?.type === "api_key" ? (credential.key ?? "") : "";
+	return key === OPEN_PROVIDER_LOCAL_KEY ? "" : key;
 }
 
 function nativeApiBaseUrl(value: string): string {
@@ -218,8 +220,11 @@ export async function registerRecodeOpenProvider(pi: ExtensionAPI, config: Recod
 }
 
 export async function recodeOpenProvider(pi: ExtensionAPI): Promise<void> {
-	const authStorage = AuthStorage.create();
 	const savedConfig = await readConfig();
+	const authStorage = AuthStorage.create();
+	if (!authStorage.hasAuth(OPEN_PROVIDER_ID)) {
+		authStorage.set(OPEN_PROVIDER_ID, { type: "api_key", key: OPEN_PROVIDER_LOCAL_KEY });
+	}
 	let config: RecodeOpenProviderConfig = {
 		baseUrl: savedConfig?.baseUrl ?? DEFAULT_CONFIG.baseUrl,
 		apiKey: storedApiKey(authStorage),
@@ -247,8 +252,10 @@ export async function recodeOpenProvider(pi: ExtensionAPI): Promise<void> {
 			if (apiKey === undefined) return;
 
 			const nextApiKey = apiKey === "-" ? "" : apiKey.trim() || storedApiKey(authStorage);
-			if (nextApiKey) authStorage.set(OPEN_PROVIDER_ID, { type: "api_key", key: nextApiKey });
-			else authStorage.remove(OPEN_PROVIDER_ID);
+			authStorage.set(OPEN_PROVIDER_ID, {
+				type: "api_key",
+				key: nextApiKey || OPEN_PROVIDER_LOCAL_KEY,
+			});
 			config = {
 				baseUrl: normalizeRecodeOpenProviderBaseUrl(baseUrl),
 				apiKey: nextApiKey,
