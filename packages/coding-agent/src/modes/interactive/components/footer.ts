@@ -3,6 +3,7 @@ import { type Component, truncateToWidth, visibleWidth } from "@reitaard/repi-tu
 import type { AgentSession } from "../../../core/agent-session.ts";
 import { areExperimentalFeaturesEnabled } from "../../../core/experimental.ts";
 import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.ts";
+import { stripAnsi } from "../../../utils/ansi.ts";
 import { theme } from "../theme/theme.ts";
 import { formatRecodeThinkingLevel } from "./recode-thinking-label.ts";
 
@@ -28,8 +29,25 @@ function formatFooterStatus(key: string, text: string): string {
 	const sanitized = sanitizeStatusText(text);
 	if (key !== "mcp") return sanitized;
 
-	// MCP colors its status before handing it to the footer, so preserve any ANSI prefix.
-	return sanitized.replace(/^((?:\u001b\[[0-?]*[ -/]*[@-~])*)MCP /, "$1MCP: ");
+	const visible = stripAnsi(sanitized);
+	if (!visible) return sanitized;
+
+	let formatted = visible;
+	const compactMatch = visible.match(/^MCP\s+(\d+)\s*\/\s*(\d+)$/i);
+	if (compactMatch) {
+		formatted = `MCP: ${compactMatch[1]}/${compactMatch[2]}`;
+	} else {
+		const fullMatch = visible.match(
+			/^(?:🔌\s*)?MCP:\s*(\d+)\s+servers?\s+enabled(?:\s+\((\d+)\s+connected\))?(?:\s+\(\d+\s+disabled\))?$/i,
+		);
+		if (fullMatch) {
+			formatted = `MCP: ${fullMatch[2] ?? "0"}/${fullMatch[1]}`;
+		} else {
+			formatted = visible.replace(/^(?:🔌\s*)?MCP:\s*/, "MCP: ");
+		}
+	}
+
+	return sanitized === visible ? formatted : sanitized.replace(visible, formatted);
 }
 
 /**

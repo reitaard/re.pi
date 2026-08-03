@@ -162,6 +162,20 @@ describe("FooterComponent width handling", () => {
 		expect(statusLine).toBe("Kioku (記憶): project  MCP: 0/1");
 	});
 
+	it("normalizes the MCP adapter default to compact status", () => {
+		const footer = new FooterComponent(createSession({ sessionName: "" }), {
+			...createFooterData(1),
+			getExtensionStatuses: () =>
+				new Map([
+					["mcp", "\u001b[38;5;214m🔌 MCP: 1 server enabled (1 connected)\u001b[39m"],
+					["recode-memory", "Kioku (記憶): project"],
+				]),
+		});
+
+		const statusLine = stripAnsi(footer.render(120)[2]);
+		expect(statusLine).toBe("Kioku (記憶): project  MCP: 1/1");
+	});
+
 	it("shows the latest cache hit rate when cache usage is present", () => {
 		const session = createSession({
 			sessionName: "",
