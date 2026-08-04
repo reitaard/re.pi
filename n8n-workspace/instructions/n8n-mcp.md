@@ -1,6 +1,11 @@
 # n8n MCP Working Instructions
 
-The active MCP server is the installed community `n8n-mcp` package configured in `.mcp.json`.
+`.mcp.json` configures two lazy MCP servers:
+
+- `n8n-official`: n8n's instance-level endpoint, authenticated with `N8N_MCP_TOKEN`.
+- `n8n-community`: the pinned local `n8n-mcp` package, authenticated against n8n's API with `N8N_API_URL` and `N8N_API_KEY`.
+
+The official server and community server may expose overlapping tools. Prefer the official server for native instance permissions and the community server for template, node-knowledge, and advanced management tools. Do not perform the same mutation through both servers.
 
 ## Tool sequence
 

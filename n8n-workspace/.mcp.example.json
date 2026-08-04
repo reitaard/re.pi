@@ -1,11 +1,18 @@
 {
   "mcpServers": {
-    "n8n-mcp": {
+    "n8n-official": {
+      "url": "https://n8.retakt.cc/mcp-server/http",
+      "auth": "bearer",
+      "bearerTokenEnv": "N8N_MCP_TOKEN",
+      "lifecycle": "lazy",
+      "toolPrefix": "server"
+    },
+    "n8n-community": {
       "command": "npx",
       "args": ["--no-install", "n8n-mcp"],
       "cwd": ".",
       "env": {
-        "N8N_API_URL": "https://n8.retakt.cc",
+        "N8N_API_URL": "${N8N_API_URL}",
         "N8N_API_KEY": "${N8N_API_KEY}"
       },
       "lifecycle": "lazy",
