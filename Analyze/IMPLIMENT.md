@@ -512,3 +512,12 @@ After S2–S3 and the O0–O8 Hermes lifecycle/service checkpoint:
 ## Later phases
 
 S3 and O0–O8, including the V1 O1/O3/O6 production closure, are complete. The next bounded phase will be selected by the Creator between local control-plane security and release/update/certification work. O9, Telegram and the exact jcode checkpoint remain outside this completed lifecycle phase.
+
+## MCP UI viewer default
+
+**Status:** complete
+**Completed:** 2026-08-04
+
+- Defaulted Recode's `MCP_UI_VIEWER` process value to `none` at the shared `main()` boundary, covering normal and RPC entrypoints without requiring a shell-level environment variable.
+- Preserved explicit `MCP_UI_VIEWER` values, including `browser` and `glimpse`, as opt-in overrides.
+- Kept the change scoped to Recode; the external `pi-mcp-adapter` package remains unmodified.

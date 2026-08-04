@@ -494,6 +494,8 @@ export interface MainOptions {
 }
 
 export async function main(args: string[], options?: MainOptions) {
+	// Recode keeps MCP UI browser windows opt-in; explicit environment overrides remain supported.
+	process.env.MCP_UI_VIEWER ??= "none";
 	resetTimings();
 	if (await handleMaestroCommand(args)) return;
 	const offlineMode = args.includes("--offline") || isTruthyEnvFlag(process.env.PI_OFFLINE);
