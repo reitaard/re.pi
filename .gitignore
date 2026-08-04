@@ -13,6 +13,10 @@ packages/*/dist-firefox/
 .env
 .mcp.json
 
+# Local agent skill overlays and Windows device-name artifacts
+.pi/skills/
+nul
+
 # Editor files
 .vscode/
 .zed/
