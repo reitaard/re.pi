@@ -28,6 +28,7 @@
 
 ### Changed
 
+- Defaulted MCP UI viewing to suppressed mode in Recode while preserving explicit `MCP_UI_VIEWER` overrides such as `browser` and `glimpse`.
 - Gave post-edit and post-write LSP diagnostics a 1.2-second inline budget, a shared 12-second completion deadline, and a structured severity-aware result card.
 - Minified standalone Recode and Maestro bundles while preserving function names, reducing binary size and command startup overhead without degrading diagnostic stack traces.
 - Organized Levi, Mayuri, and Shiori-owned definitions, tools, and reviewer modules under dedicated worker folders while keeping shared delegation runtime generic.
