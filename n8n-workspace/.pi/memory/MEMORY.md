@@ -193,3 +193,149 @@
 - #fact [[n8n]] [[reddit]] [[sorting]] [[workflow]] `reddit-posts` fetches up to 10 subreddit posts sorted by newest (`sort: "new"`).
 
 - #fact [[reddit]] [[showerthoughts]] [[validation]] The Showerthoughts test returned 10 posts ranked 1–10 with descending creation timestamps, confirming newest-first results at that point in time.
+
+- #workflow [[n8n]] [[workflow-lifecycle]] [[validation]] The n8n workspace stores drafts, validated, and published workflows separately; workflows move to validated only after MCP validation, and published artifacts require explicit approval.
+
+- #decision [[n8n]] [[security]] [[credentials]] Never store credentials, access tokens, cookies, .env files, or exported secret values in the n8n workspace; reference n8n credentials by name or type only.
+
+- #lesson [[reddit-posts]] [[webhook]] [[apify]] [[security]] The validated inactive reddit-posts workflow uses an unauthenticated webhook that can trigger paid Apify usage; add access control/rate limiting before production activation.
+
+- #correction [[reddit-posts]] [[apify]] [[credential-rotation]] [[security]] The reddit-posts workflow's temporary Apify credential was exposed during setup and must be rotated or removed before activation.
+
+- #workflow [[n8n]] [[mcp]] For new n8n workflows, search templates and nodes, retrieve exact schemas, validate unfamiliar nodes and the complete workflow, then review changes and credentials before saving as validated.
+
+- #fact [[n8n]] [[mcp]] [[sse]] n8n official MCP uses https://n8.retakt.cc/mcp-server/http with Bearer N8N_MCP_TOKEN; initialize and tools/list work over SSE without a session ID.
+
+- #fact [[n8n]] [[mcp]] [[tools]] Available official n8n MCP tools include search_workflows, execute_workflow, test_workflow, search_nodes, get_node_types, validate_workflow, and get_sdk_reference.
+
+- #workflow [[n8n]] [[mcp]] For building n8n workflows via MCP, follow this order: read SDK reference, get suggested nodes, search nodes, retrieve node types, then write and validate workflow code.
+
+- #fact [[windows]] [[n8n]] [[environment]] Windows Machine-scope environment variables are configured: N8N_API_URL=https://n8.retakt.cc, N8N_MCP_TOKEN, and N8N_API_KEY; applications must be restarted to inherit changes.
+
+- #fact [[mcp]] [[authentication]] [[windows]] [[environment]] RePi MCP HTTP authentication uses bearerTokenEnv, resolved from the MCP adapter process's process.env at connection time; Machine-scope Windows variables require starting a new process to be visible.
+
+- #fact [[n8n]] [[mcp]] [[configuration]] [[token]] The configured n8n MCP server is in n8n-workspace/.mcp.json and expects the environment variable N8N_MCP_TOKEN; direct PowerShell MCP calls authenticated successfully.
+
+- #lesson [[mcp]] [[debugging]] [[authorization]] RePi's n8n-official connection continued sending no Authorization header despite restarts, indicating the MCP adapter process was not receiving N8N_MCP_TOKEN or the connection configuration was not resolving it.
+
+- #fact [[n8n]] [[mcp]] [[endpoint]] n8n MCP endpoint is https://n8.retakt.cc/mcp-server/http and uses bearer authentication.
+
+- #correction [[recode]] [[windows]] [[authentication]] Recode's MCP host does not inherit the Windows Machine-scoped N8N_MCP_TOKEN, so bearerTokenEnv alone sends no Authorization header.
+
+- #lesson [[mcp]] [[powershell]] [[token]] Direct PowerShell retrieval of the Machine-scoped token works, but using it as a dynamic bearerToken command times out in the MCP adapter.
+
+- #decision [[mcp]] [[configuration]] The project reverted .mcp.json to bearerTokenEnv after dynamic command-based token resolution failed.
+
+- #lesson [[n8n]] [[mcp]] [[authentication]] [[environment]] n8n MCP authentication works after starting a fresh Recode/API session with environment variables inherited; restarting VS Code alone may not refresh the gateway.
+
+- #fact [[reddit]] [[apify]] [[workflow]] [[n8n]] The reddit-posts workflow uses a GET webhook and Apify Reddit scraper, fetching up to 10 newest posts for a supplied subreddit, defaulting to n8n, without comments or deduplication.
+
+- #workflow [[n8n]] [[templates]] [[validation]] For new n8n workflows, search templates first, then search and inspect node schemas, validate nodes and the workflow, and save drafts/validated artifacts with notes.
+
+- #workflow [[n8n-mcp]] [[templates]] [[command]] [[workspace]] The workspace command to refresh the local n8n-mcp template catalog is `node .\node_modules\n8n-mcp\dist\scripts\fetch-templates.js --update` after installing dependencies.
+
+- #fact [[n8n-mcp]] [[templates]] [[sql-js]] [[windows]] n8n-mcp template updates can fall back from better-sqlite3 to sql.js under Node v26 on Windows; an initial empty database may fail with missing templates table.
+
+- #lesson [[n8n-mcp]] [[template-fetch]] [[http-400]] [[workflow]] Running fetch-templates.js --update from node_modules/n8n-mcp may take a long time and encounter HTTP 400s for individual workflow details; the process can continue fetching many templates.
+
+- #workflow [[windows]] [[powershell]] [[long-running]] [[logging]] For long-running Windows commands, launch Node detached with PowerShell Start-Process and redirect stdout/stderr to temporary log files, then poll the process and tail logs.
+
+- #fact [[n8n-mcp]] [[sqlite]] [[fts5]] [[templates]] The n8n-mcp template catalog is stored in node_modules/n8n-mcp/data/nodes.db and requires native better-sqlite3 with FTS5; sql.js fallback cannot save the catalog.
+
+- #lesson [[nodejs]] [[better-sqlite3]] [[windows]] [[build]] On this Windows project, better-sqlite3 rebuilt successfully using Node.js 22.23.2; Node 24 lacked a prebuilt binary and required unavailable Visual Studio build tools.
+
+- #workflow [[n8n-mcp]] [[nodejs]] [[logging]] The n8n-mcp template fetcher should be run from node_modules/n8n-mcp with Node 22.23.2, redirecting output to the TEMP log for progress polling.
+
+- #decision [[n8n]] [[data-table]] [[reddit]] The Reddit Intelligence Results data table was created with ID ZmQ8rYc2iWGOFrcM and a fixed schema for Reddit posts/comments, analysis, timestamps, status, errors, and run IDs.
+
+- #fact [[n8n]] [[workflow]] [[compaction]] Workflow xrBvjuvnojsvrTTF (reddit-posts) was re-fetched after compaction and remained inactive; continue by re-fetching current workflow state when needed.
+
+- #fact [[reddit]] [[testing]] [[execution]] A successful execution fetched 10 recent r/LocalLLaMA Reddit posts using the Fetch Recent Reddit Posts node.
+
+- #lesson [[compaction]] [[n8n]] [[workflow]] Compaction does not lose persisted n8n state; workflow and created data tables can be re-fetched afterward.
+
+- #fact [[n8n]] [[schedule-trigger]] [[version]] Use typeVersion 1.3 for n8n Schedule Trigger nodes.
+
+- #fact [[n8n]] [[code]] [[if]] [[version]] Use typeVersion 2 for n8n Code nodes and typeVersion 2.3 for If nodes.
+
+- #fact [[n8n]] [[testing]] [[api]] [[triggers]] n8n's public API cannot directly execute schedule- or manual-triggered workflows; external testing requires webhook, form, or chat triggers.
+
+- #lesson [[n8n]] [[templates]] [[credentials]] [[security]] Imported n8n templates may require replacing test credentials and tokens with user-owned values; real secrets should never be committed to exported templates.
+
+- #decision [[n8n]] [[reddit-monitoring]] [[workflow]] The n8n workflow “reddit-posts” was replaced with a Reddit monitoring pipeline using Apify scraping, AI relevance analysis, Data Table deduplication/storage, Telegram alerts and digests, scheduled/Telegram/webhook triggers, retries, and error routing.
+
+- #fact [[n8n]] [[workflow-status]] [[timezone]] The updated “reddit-posts” workflow is saved but inactive; it contains 21 nodes and uses UTC timezone settings.
+
+- #fact [[n8n]] [[reddit-posts]] [[webhook]] [[validation]] The n8n workflow "reddit-posts" was fixed, validated, activated, and its POST webhook test succeeded, inserting 5 rows.
+
+- #decision [[n8n]] [[error-routing]] [[workflow-fix]] The workflow's error-routing validation issue was resolved by removing the duplicate-skip node and renaming explicit error-path nodes to neutral names.
+
+- #fact [[n8n]] [[webhook]] [[http-post]] The production webhook endpoint for "reddit-posts" accepts POST requests at path "reddit-posts".
+
+- #lesson [[n8n]] [[patching]] [[debugging]] A later attempt to patch Normalize AI Analysis failed because the expected JavaScript text did not exactly match; inspect the current node code before using patchNodeField.
+
+- #lesson [[n8n]] [[reddit]] [[workflow]] [[testing]] For the reddit-posts n8n workflow, avoid automatic retries and synchronous long-running tests; a webhook execution can appear hung while Apify and AI calls process.
+
+- #preference [[telegram]] [[reddit]] [[productivity]] [[ai]] User wants the Reddit Telegram bot optimized for productivity: fast acknowledgement, duplicate-free Reddit intelligence, focused AI analysis, and concise digests instead of waiting for full scraping.
+
+- #fact [[n8n]] [[reddit]] [[schedule]] [[diagnosis]] The reddit-posts workflow has no intentional loop; its schedule trigger runs every 6 hours. Apparent looping came from UI video events and a hanging webhook test.
+
+- #workflow [[n8n]] [[testing]] [[reliability]] When testing n8n workflows, check execution status once after a timeout and stop rather than repeatedly retrying or launching parallel tests.
+
+- #correction [[n8n]] [[mcp]] [[configuration]] The n8n community MCP requires N8N_API_URL to be the n8n base URL (https://n8.retakt.cc), not the /mcp-server/http endpoint.
+
+- #fact [[n8n]] [[reddit-posts]] [[telegram]] [[workflow]] The n8n workflow `reddit-posts` is active and contains Telegram and scheduled triggers plus Reddit collection, normalization, filtering, digest formatting, and Telegram delivery nodes.
+
+- #workflow [[recode]] [[n8n]] [[windows]] [[workflow-management]] The user prefers restarting Recode from the workspace with N8N_API_URL and N8N_API_KEY loaded from Windows environment variables before managing n8n workflows.
+
+- #fact [[n8n]] [[reddit-posts]] [[workflow]] Reddit monitor workflow ID xrBvjuvnojsvrTTF is named reddit-posts and has 20 nodes.
+
+- #decision [[n8n]] [[reddit]] [[optimization]] Applied latency/noise reduction: posts capped at 10 (default 6), comments at 5 (default 3), AI candidates limited to 8 with minimum content length, digest limited to 5, fetch timeout set to 90 seconds.
+
+- #fact [[n8n]] [[validation]] [[reddit]] After the Reddit workflow patch, runtime validation passed with 20 enabled nodes, 20 valid connections, zero errors, and zero warnings.
+
+- #fact [[apify]] [[reddit]] [[testing]] A bounded test using LocalLLaMA returned HTTP 200 but Telegram reported that Apify returned no Reddit records; this is an empty-result path, not proof of a workflow execution failure.
+
+- #lesson [[recode]] [[n8n-community]] [[safety]] VIDEO_XHR_CANDIDATE events caused a Recode/n8n-community UI event loop that flooded the terminal; pause immediately if this reappears and avoid further workflow tests until resolved.
+
+- #decision [[reddit]] [[apify]] [[telegram]] [[error-handling]] Reddit workflow should distinguish genuine Apify failures from valid empty scans; empty results should produce informational Telegram output, not a hard error.
+
+- #correction [[n8n]] [[mcp]] [[configuration]] The community n8n MCP server requires the base n8n API URL, not the official MCP endpoint; configure N8N_API_URL as https://n8.retakt.cc.
+
+- #lesson [[n8n]] [[mcp]] [[workflow-update]] Partial workflow patch attempts failed in the community MCP diff engine with an undefined find error; validate the tool configuration or use another update method.
+
+- #decision [[n8n]] [[reddit-posts]] [[alerts]] Project workflow: n8n workflow `reddit-posts` has ID `xrBvjuvnojsvrTTF` and should distinguish empty Reddit scans from genuine Apify failures in Telegram alerts.
+
+- #fact [[n8n]] [[validation]] [[workflow]] The `reddit-posts` workflow runtime validation passed with 20 nodes, 20 valid connections, and zero validation errors or warnings after the alert patch.
+
+- #lesson [[n8n]] [[javascript]] [[debugging]] A bounded workflow test exposed a syntax regression in `Prepare AI Analysis Prompt`: its JavaScript contained literal `\n` sequences instead of newlines. Verify code-node encoding after patches.
+
+- #fact [[mcp]] [[n8n]] [[configuration]] The MCP endpoint was corrected after restart: health check reports API URL `https://n8.retakt.cc`.
+
+- #correction [[n8n]] [[debugging]] [[code-nodes]] Project workflow `reddit-posts` had literal `\n` tokens in multiple Code nodes; replacing them with actual newlines restored runtime-valid JavaScript.
+
+- #fact [[n8n]] [[validation]] [[reddit-posts]] After syntax fixes, n8n structural/runtime validation passed with 20 nodes, 20 valid connections, 52 validated expressions, and no validation errors.
+
+- #lesson [[n8n]] [[llm]] [[gemma]] [[debugging]] The bounded webhook test still failed because the Gemma/OpenAI-compatible chat model returned `Bad request - please check your parameters` for all eight analyzed items; model configuration requires separate investigation.
+
+- #decision [[n8n]] [[lm-studio]] [[workflow]] The n8n workflow `reddit-posts` uses plain JSON prompting with defensive parsing for LM Studio compatibility; AI input is capped at five candidates and 2,500 characters each.
+
+- #fact [[n8n]] [[validation]] The `reddit-posts` workflow was validated with 19 nodes, 19 valid connections, zero errors, and zero warnings.
+
+- #fact [[n8n]] [[testing]] [[webhook]] A bounded live test of `reddit-posts` succeeded via webhook with HTTP 200 and five rows inserted.
+
+- #decision [[reddit]] [[filtering]] [[digest]] Reddit intelligence workflow should monitor new posts, not comments, and send only productive facts, news, releases, benchmarks, bugs, techniques, or useful insights.
+
+- #decision [[n8n]] [[reddit]] [[data-table]] [[workflow]] Monitored subreddits should be stored in an editable n8n Data Table so the hourly workflow can iterate sources and skip unchanged or low-value subreddits.
+
+- #workflow [[automation]] [[reddit]] [[telegram]] [[deduplication]] The Reddit workflow should run hourly, deduplicate previously seen posts, apply AI relevance filtering, and send a concise Telegram digest only when qualifying items exist.
+
+- #preference [[n8n]] [[low-code]] [[implementation]] Prefer available n8n nodes over writing many custom functions when implementing the Reddit monitoring workflow.
+
+- #decision [[n8n]] [[reddit]] [[data-table]] [[deduplication]] Reddit monitoring workflow uses n8n Data Tables for editable sources and persistent seen-post deduplication; the remote n8n server cannot access local workspace files.
+
+- #decision [[reddit]] [[apify]] [[comments]] Reddit collection should fetch posts only with Apify `includeCommentsMode: none`, preventing comments from dominating the digest.
+
+- #decision [[reddit]] [[automation]] [[telegram]] [[filtering]] Approved Reddit workflow runs hourly, filters for actionable technical intelligence, limits the digest to five items, and sends no Telegram message when nothing useful is new.
+
+- #fact [[localllama]] [[reddit]] [[sources]] Initial Reddit source is LocalLLaMA, focused on local LLM releases, model updates, inference, benchmarks, hardware, tools, bugs, and practical techniques; max_posts is 10.

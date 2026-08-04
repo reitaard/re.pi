@@ -155,6 +155,29 @@ describe("InteractiveMode pending input queue", () => {
 		expect(fakeThis.updatePendingMessagesDisplay).toHaveBeenCalledOnce();
 		expect(fakeThis.ui.requestRender).toHaveBeenCalledOnce();
 	});
+
+	test("bounds rendering when an external source floods the steering queue", () => {
+		const steering = Array.from({ length: 250 }, (_, index) => `event-${index}`);
+		const fakeThis: any = {
+			pendingMessagesContainer: new Container(),
+			aizenRuntime: undefined,
+			session: {
+				getSteeringMessages: () => steering,
+				getFollowUpMessages: () => [],
+			},
+			compactionQueuedMessages: [],
+			pendingUserInputs: [],
+			getAllQueuedMessages: () => ({ steering, followUp: [], pending: [] }),
+			getAppKeyDisplay: () => "Alt+Up",
+		};
+
+		(InteractiveMode as any).prototype.updatePendingMessagesDisplay.call(fakeThis);
+
+		const rendered = normalizeRenderedOutput(fakeThis.pendingMessagesContainer);
+		expect(rendered).toContain("Steering: … 150 older messages hidden");
+		expect(rendered).toContain("Steering: event-249");
+		expect(rendered).not.toContain("Steering: event-0");
+	});
 });
 
 describe("InteractiveMode.setToolsExpanded", () => {

@@ -41,6 +41,7 @@
 
 ### Fixed
 
+- Debounced repeated MCP UI intents, blocked UI-triggered turns after Escape cancellation until a new manual prompt, and bounded queued-message rendering so event floods cannot make Recode unresponsive.
 - Normalized placeholder arguments for `get_search_content` so finder calls remain compatible with strict third-party pagination validation.
 - Enforced the compact, icon-free MCP footer status and kept Kioku before MCP even when MCP configuration is absent.
 - Kept direct worker-chat steering inside the active worker conversation, serialized queued turns, and kept cancellation from falling through to Aizen.

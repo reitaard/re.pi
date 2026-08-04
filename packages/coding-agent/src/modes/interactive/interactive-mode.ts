@@ -234,6 +234,7 @@ function isCustomSessionEntry(item: RenderSessionItem): item is Extract<SessionE
 }
 
 const DEAD_TERMINAL_ERROR_CODES = new Set(["EIO", "EPIPE", "ENOTCONN"]);
+const MAX_PENDING_MESSAGES_TO_RENDER = 100;
 
 function isDeadTerminalError(error: unknown): boolean {
 	if (!error || typeof error !== "object" || !("code" in error)) {
@@ -4441,18 +4442,23 @@ export class InteractiveMode {
 		} = this.getAllQueuedMessages();
 		if (steeringMessages.length > 0 || followUpMessages.length > 0 || pendingMessages.length > 0) {
 			this.pendingMessagesContainer.addChild(new Spacer(1));
-			for (const message of steeringMessages) {
-				const text = theme.fg("dim", `Steering: ${message}`);
-				this.pendingMessagesContainer.addChild(new TruncatedText(text, 1, 0));
-			}
-			for (const message of followUpMessages) {
-				const text = theme.fg("dim", `Follow-up: ${message}`);
-				this.pendingMessagesContainer.addChild(new TruncatedText(text, 1, 0));
-			}
-			for (const message of pendingMessages) {
-				const text = theme.fg("dim", `Queued: ${message}`);
-				this.pendingMessagesContainer.addChild(new TruncatedText(text, 1, 0));
-			}
+			const renderQueue = (label: string, messages: readonly string[]): void => {
+				const hiddenCount = Math.max(0, messages.length - MAX_PENDING_MESSAGES_TO_RENDER);
+				if (hiddenCount > 0) {
+					const hiddenText = theme.fg(
+						"dim",
+						`${label}: … ${hiddenCount} older message${hiddenCount === 1 ? "" : "s"} hidden`,
+					);
+					this.pendingMessagesContainer.addChild(new TruncatedText(hiddenText, 1, 0));
+				}
+				for (const message of messages.slice(-MAX_PENDING_MESSAGES_TO_RENDER)) {
+					const text = theme.fg("dim", `${label}: ${message}`);
+					this.pendingMessagesContainer.addChild(new TruncatedText(text, 1, 0));
+				}
+			};
+			renderQueue("Steering", steeringMessages);
+			renderQueue("Follow-up", followUpMessages);
+			renderQueue("Queued", pendingMessages);
 			const dequeueHint = this.getAppKeyDisplay("app.message.dequeue");
 			const hintText = theme.fg("dim", `↳ ${dequeueHint} to edit all queued messages`);
 			this.pendingMessagesContainer.addChild(new TruncatedText(hintText, 1, 0));

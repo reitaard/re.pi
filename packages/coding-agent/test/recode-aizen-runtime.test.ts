@@ -269,4 +269,50 @@ describe("Aizen runtime", () => {
 			]),
 		);
 	});
+
+	test("does not let UI events restart the runtime after abort", async () => {
+		const root = mkdtempSync(join(tmpdir(), "recode-aizen-runtime-ui-abort-"));
+		tempDirs.push(root);
+		const manager = SessionManager.inMemory(root);
+		const models = createModels();
+		const faux = fauxProvider({ provider: "aizen-ui-abort-faux" });
+		faux.setResponses([fauxAssistantMessage("Before abort"), fauxAssistantMessage("Should not run")]);
+		models.setProvider(faux.provider);
+		const profile: AizenRuntimeProfile = {
+			model: faux.getModel(),
+			compactionModel: faux.getModel(),
+			compactionThinkingLevel: "off",
+			thinkingLevel: "off",
+			tools: [],
+			systemPrompt: "You are Aizen.",
+			activeToolNames: [],
+			steeringMode: "one-at-a-time",
+			followUpMode: "one-at-a-time",
+			resources: {},
+			hooks: noOpHooks,
+		};
+		const agentSession = {
+			sessionManager: manager,
+			sessionId: manager.getSessionId(),
+			sessionFile: manager.getSessionFile(),
+			modelRegistry: {},
+			createAizenRuntimeProfile: () => profile,
+		} as AgentSession;
+		const runtime = createAizenRuntime({ agentSession, cwd: root, models });
+
+		await runtime.prompt("Manual prompt");
+		await runtime.abort();
+		await runtime.sendCustomMessage(
+			{
+				customType: "mcp-ui-intent",
+				content: [{ type: "text", text: "User triggered intent from n8n-community UI: VIDEO_XHR_CANDIDATE {}" }],
+				display: false,
+			},
+			{ triggerTurn: true },
+		);
+
+		expect(faux.state.callCount).toBe(1);
+		await runtime.prompt("Resume manually");
+		expect(faux.state.callCount).toBe(2);
+	});
 });

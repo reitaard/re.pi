@@ -12,7 +12,7 @@
       "args": ["--no-install", "n8n-mcp"],
       "cwd": ".",
       "env": {
-        "N8N_API_URL": "${N8N_API_URL}",
+        "N8N_API_URL": "https://n8.retakt.cc",
         "N8N_API_KEY": "${N8N_API_KEY}"
       },
       "lifecycle": "lazy",

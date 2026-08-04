@@ -78,6 +78,14 @@ function isCompactionAbort(error: unknown): boolean {
 	return false;
 }
 
+function customMessageKey<T>(message: Pick<CustomMessage<T>, "customType" | "content">): string {
+	try {
+		return `${message.customType}\u0000${JSON.stringify(message.content)}`;
+	} catch {
+		return `${message.customType}\u0000${String(message.content)}`;
+	}
+}
+
 /** Build one Aizen runtime from RePi-owned configuration and session state. */
 export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRuntime {
 	const profile = options.agentSession.createAizenRuntimeProfile();
@@ -108,6 +116,7 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 	harness.on("tool_call", hooks.toolCall);
 	harness.on("tool_result", hooks.toolResult);
 	const listeners = new Set<AgentSessionEventListener>();
+	let acceptUiMessages = true;
 	const emit = (event: AgentSessionEvent): void => {
 		for (const listener of listeners) listener(event);
 	};
@@ -116,6 +125,7 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 	let pendingMessageCount = 0;
 	let retryAbortController: AbortController | undefined;
 	let activeRun: Promise<AssistantMessage> | undefined;
+	const activeUiMessageKeys = new Set<string>();
 	const sessionControl = new RecodeSessionControlHost(
 		getAgentDir(),
 		options.agentSession.sessionId,
@@ -280,7 +290,10 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 		const run = executeWithRecovery(start);
 		activeRun = run;
 		const clearActiveRun = (): void => {
-			if (activeRun === run) activeRun = undefined;
+			if (activeRun === run) {
+				activeRun = undefined;
+				activeUiMessageKeys.clear();
+			}
 		};
 		void run.then(clearActiveRun, clearActiveRun);
 		return run;
@@ -289,6 +302,7 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 		await run.catch(() => undefined);
 	};
 	const prompt = async (text: string, promptOptions?: { images?: ImageContent[] }): Promise<AssistantMessage> => {
+		acceptUiMessages = true;
 		emitStartupMilestone("prompt-accepted");
 		return await runWithRecovery(async () => await harness.prompt(text, promptOptions));
 	};
@@ -297,6 +311,11 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 		message: Pick<CustomMessage<T>, "customType" | "content" | "display" | "details">,
 		messageOptions?: { triggerTurn?: boolean; deliverAs?: "steer" | "followUp" | "nextTurn" },
 	): Promise<void> => {
+		const isUiMessage = message.customType.startsWith("mcp-ui-");
+		if (!acceptUiMessages && isUiMessage) return;
+		const uiMessageKey = isUiMessage ? customMessageKey(message) : undefined;
+		if (activeRun && uiMessageKey && activeUiMessageKeys.has(uiMessageKey)) return;
+		if (activeRun && uiMessageKey) activeUiMessageKeys.add(uiMessageKey);
 		const appMessage: CustomMessage<T> = {
 			role: "custom",
 			customType: message.customType,
@@ -329,6 +348,7 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 		content: string | (TextContent | ImageContent)[],
 		messageOptions?: { deliverAs?: "steer" | "followUp" },
 	): Promise<void> => {
+		acceptUiMessages = true;
 		const parts = typeof content === "string" ? [{ type: "text" as const, text: content }] : content;
 		const userMessage: UserMessage = { role: "user", content: parts, timestamp: Date.now() };
 		if (!activeRun) {
@@ -377,6 +397,11 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 		}
 	};
 
+	const abort = async (): Promise<Awaited<ReturnType<AgentHarness["abort"]>>> => {
+		acceptUiMessages = false;
+		return await harness.abort();
+	};
+
 	return {
 		harness,
 		profile,
@@ -388,7 +413,7 @@ export function createAizenRuntime(options: CreateAizenRuntimeOptions): AizenRun
 		compact: compactSession,
 		abortRetry: () => retryAbortController?.abort(),
 		abortCompaction: () => harness.abortCompaction(),
-		abort: () => harness.abort(),
+		abort,
 		waitForIdle: () => harness.waitForIdle(),
 		clearQueuedMessages: () => harness.clearQueuedMessages(),
 		isCompacting: () => activeCompaction !== undefined,
