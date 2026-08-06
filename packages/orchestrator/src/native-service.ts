@@ -12,7 +12,7 @@ import type { MaestroServiceHealth } from "./types.ts";
 const WINDOWS_TASK_NAME = "Recode Maestro";
 const LINUX_UNIT_NAME = "recode-maestro.service";
 const COMMAND_TIMEOUT_MS = 15_000;
-const SERVICE_READY_TIMEOUT_MS = 15_000;
+const SERVICE_READY_TIMEOUT_MS = 60_000;
 const SERVICE_READY_POLL_MS = 100;
 
 export type NativeServicePlatform = "linux" | "win32";

@@ -264,10 +264,20 @@ export class RpcProcessInstance {
 		for (const listener of this.exitListeners) listener(error);
 	}
 
+	private writeBestEffort(data: string): void {
+		const stdin = this.process.stdin;
+		if (!stdin || stdin.destroyed || this.exited || this.disposing) return;
+		try {
+			stdin.write(data, () => undefined);
+		} catch {
+			// The child may exit between the state check and the write.
+		}
+	}
+
 	private requestBestEffortAbort(command: RpcCommand["type"], commandId: string): void {
 		if (!CANCELLABLE_COMMANDS.has(command) || this.exited || this.disposing) return;
 		const id = `orchestrator_abort_${commandId}_${randomUUID()}`;
-		this.process.stdin?.write(`${JSON.stringify({ id, type: "abort" })}\n`);
+		this.writeBestEffort(`${JSON.stringify({ id, type: "abort" })}\n`);
 	}
 
 	send(command: RpcCommand, options: RpcSendOptions = {}): Promise<RpcResponse> {
@@ -347,7 +357,7 @@ export class RpcProcessInstance {
 	}
 
 	handleUiResponse(response: RpcExtensionUIResponse): void {
-		if (!this.exited && !this.disposing) this.process.stdin?.write(`${JSON.stringify(response)}\n`);
+		this.writeBestEffort(`${JSON.stringify(response)}\n`);
 	}
 
 	setUiRequestHandler(handler?: (request: RpcExtensionUIRequest) => void): void {

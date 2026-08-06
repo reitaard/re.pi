@@ -641,7 +641,30 @@ export function getSessionsDir(): string {
 	return join(getAgentDir(), "sessions");
 }
 
-/** Get path to debug log file */
+/** Get path to the manually generated debug snapshot. */
 export function getDebugLogPath(): string {
 	return join(getAgentDir(), `${APP_NAME}-debug.log`);
+}
+
+/** Get path to the persistent interactive TUI diagnostics JSONL file. */
+export function getTuiDiagnosticsLogPath(): string {
+	return join(getAgentDir(), `${APP_NAME}-tui-diagnostics.jsonl`);
+}
+
+/** Get the slow-render threshold used by interactive TUI diagnostics. */
+export function getTuiSlowRenderThresholdMs(): number {
+	const configured = Number(process.env.PI_TUI_SLOW_RENDER_MS);
+	return Number.isFinite(configured) && configured >= 0 ? configured : 100;
+}
+
+/** Get the directory containing complete per-session ANSI TUI captures. */
+export function getTuiRawLogDirectory(): string {
+	return join(getAgentDir(), `${APP_NAME}-tui-logs`);
+}
+
+/** Get a unique complete ANSI TUI capture path for the current process. */
+export function getTuiRawLogPath(): string {
+	const now = new Date();
+	const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}-${String(now.getMinutes()).padStart(2, "0")}-${String(now.getSeconds()).padStart(2, "0")}`;
+	return join(getTuiRawLogDirectory(), `tui-${timestamp}-${process.pid}.ansi.log`);
 }

@@ -454,11 +454,21 @@ interface MyTheme {
 
 ## Debug logging
 
-Set `PI_TUI_WRITE_LOG` to capture the raw ANSI stream written to stdout.
+Interactive Recode writes bounded JSONL diagnostics to `<agent-dir>/recode-tui-diagnostics.jsonl` and a complete per-session ANSI capture under `<agent-dir>/recode-tui-logs/`. These files are created lazily on first output. The ANSI capture includes visible conversation and tool output, so protect or delete it as sensitive data. The structured file records:
+
+- uncaught exceptions and unhandled promise rejections, including the stack and terminal/session metadata;
+- render-width invariant failures;
+- renders slower than 100ms (override with `PI_TUI_SLOW_RENDER_MS=250`, or use `0` to record every render).
+
+The structured log does not include session messages or rendered lines. `recode doctor --json` reports both structured events and available ANSI capture files without reading or printing their contents. `/debug` remains a manual full snapshot written to `<agent-dir>/recode-debug.log` and overwrites its previous snapshot.
+
+`PI_TUI_WRITE_LOG` overrides the automatic ANSI capture path. Set it to a file or directory to capture a separate raw stream; parent directories are created automatically.
 
 ```bash
 PI_TUI_WRITE_LOG=/tmp/tui-ansi.log npx tsx packages/tui/test/chat-simple.ts
 ```
+
+For detailed differential-render snapshots, set `PI_TUI_DEBUG=1`; files go under `<agent-dir>/tui` or the directory in `PI_TUI_DEBUG_DIR`. `PI_DEBUG_REDRAW=1` appends full-redraw reasons to `<agent-dir>/pi-debug.log`.
 
 ## Performance
 

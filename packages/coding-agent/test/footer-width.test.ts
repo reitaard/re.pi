@@ -143,7 +143,9 @@ describe("FooterComponent width handling", () => {
 			getExtensionStatuses: () => new Map([["extension", "extension-ready"]]),
 		});
 
-		const statusLine = stripAnsi(footer.render(120)[2]);
+		const renderedStatusLine = footer.render(120)[2];
+		const statusLine = stripAnsi(renderedStatusLine);
+		expect(renderedStatusLine).toContain(theme.fg("borderMuted", "MAESTRO"));
 		expect(statusLine).toContain("MAESTRO ◆ 2 live / 1 input");
 		expect(statusLine).toContain("extension-ready");
 	});
@@ -174,6 +176,25 @@ describe("FooterComponent width handling", () => {
 
 		const statusLine = stripAnsi(footer.render(120)[2]);
 		expect(statusLine).toBe("Kioku (記憶): project  MCP: 1/1");
+	});
+
+	it("colors pricing with the true green success status", () => {
+		const footer = new FooterComponent(
+			createSession({
+				sessionName: "",
+				usage: {
+					input: 100,
+					output: 10,
+					cacheRead: 0,
+					cacheWrite: 0,
+					cost: { total: 3.088 },
+				},
+			}),
+			createFooterData(1),
+		);
+
+		const statsLine = footer.render(120)[1];
+		expect(statsLine).toContain(theme.fg("toolSuccessStatus", "$3.088"));
 	});
 
 	it("shows the latest cache hit rate when cache usage is present", () => {

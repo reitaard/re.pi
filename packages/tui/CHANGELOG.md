@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added bounded persistent TUI diagnostics for slow renders and render-width invariant failures, plus portable detailed render-debug paths and complete terminal-write capture options.
+
+### Fixed
+
+- Fixed `PI_TUI_WRITE_LOG` to create parent directories and capture all `ProcessTerminal` output helpers instead of only differential-render writes.
+
 ## [0.81.4] - 2026-07-22
 
 ## [0.80.6] - 2026-07-09

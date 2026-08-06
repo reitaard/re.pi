@@ -25,6 +25,9 @@
 
 ### Fixed
 
+- Extended the native Maestro readiness deadline to 60 seconds so cold Windows service startup cannot report a false failure while the service is still booting.
+- Prevented detached native-service stdout/stderr pipes from turning harmless `EPIPE` output failures into Maestro crashes.
+- Guarded best-effort RPC writes against child-pipe `EPIPE` races during cancellation, UI responses, and child shutdown.
 - Resolved the coding-agent RPC entry through its ESM export so Node-based child startup works.
 - Spawned compiled Maestro sessions through the Recode companion executable instead of the obsolete upstream Pi filename.
 - Retained cancelled, failed, and recovered terminal instance records instead of deleting them during shutdown.

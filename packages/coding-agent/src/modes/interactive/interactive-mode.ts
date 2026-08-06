@@ -47,6 +47,7 @@ import {
 	TruncatedText,
 	TUI,
 	visibleWidth,
+	writeTuiDiagnostic,
 } from "@reitaard/repi-tui";
 import chalk from "chalk";
 import { spawn, spawnSync } from "child_process";
@@ -59,6 +60,9 @@ import {
 	getDebugLogPath,
 	getDocsPath,
 	getShareViewerUrl,
+	getTuiDiagnosticsLogPath,
+	getTuiRawLogPath,
+	getTuiSlowRenderThresholdMs,
 	PACKAGE_NAME,
 	VERSION,
 } from "../../config.ts";
@@ -656,7 +660,14 @@ export class InteractiveMode {
 			await this.rebindCurrentSession({ renderBeforeBind: true });
 		});
 		this.version = VERSION;
-		this.ui = new TUI(new RecodeProcessTerminal(), this.settingsManager.getShowHardwareCursor());
+		this.ui = new TUI(
+			new RecodeProcessTerminal({ writeLogPath: process.env.PI_TUI_WRITE_LOG || getTuiRawLogPath() }),
+			this.settingsManager.getShowHardwareCursor(),
+			{
+				logPath: getTuiDiagnosticsLogPath(),
+				slowRenderThresholdMs: getTuiSlowRenderThresholdMs(),
+			},
+		);
 		this.ui.setClearOnShrink(this.settingsManager.getClearOnShrink());
 		this.headerContainer = new Container();
 		this.loadedResourcesContainer = new Container();
@@ -4027,7 +4038,24 @@ export class InteractiveMode {
 	 * call ui.stop() to restore cooked mode, the cursor, and disable bracketed
 	 * paste / Kitty / modifyOtherKeys sequences.
 	 */
-	private uncaughtCrash(error: Error): never {
+	private uncaughtCrash(
+		error: Error,
+		source: "uncaughtException" | "unhandledRejection" = "uncaughtException",
+	): never {
+		try {
+			writeTuiDiagnostic(getTuiDiagnosticsLogPath(), "crash", {
+				source,
+				pid: process.pid,
+				message: error.message,
+				stack: error.stack ?? "",
+				terminalColumns: this.ui.terminal.columns,
+				terminalRows: this.ui.terminal.rows,
+				sessionFile: this.sessionManager.getSessionFile() ?? "in-memory",
+				cwd: this.sessionManager.getCwd(),
+			});
+		} catch {
+			// Crash reporting must not interfere with terminal restoration.
+		}
 		if (this.isShuttingDown) {
 			process.exit(1);
 		}
@@ -4041,7 +4069,7 @@ export class InteractiveMode {
 		try {
 			this.ui.stop();
 		} catch {}
-		console.error("pi exiting due to uncaughtException:");
+		console.error(`pi exiting due to ${source}:`);
 		console.error(error);
 		process.exit(1);
 	}
@@ -4092,6 +4120,24 @@ export class InteractiveMode {
 		const uncaughtExceptionHandler = (error: Error) => this.uncaughtCrash(error);
 		process.prependListener("uncaughtException", uncaughtExceptionHandler);
 		this.signalCleanupHandlers.push(() => process.off("uncaughtException", uncaughtExceptionHandler));
+
+		const unhandledRejectionHandler = (reason: unknown) => {
+			let error: Error;
+			if (reason instanceof Error) {
+				error = reason;
+			} else {
+				let message: string;
+				try {
+					message = typeof reason === "string" ? reason : JSON.stringify(reason);
+				} catch {
+					message = String(reason);
+				}
+				error = new Error(message || "Unhandled promise rejection");
+			}
+			this.uncaughtCrash(error, "unhandledRejection");
+		};
+		process.prependListener("unhandledRejection", unhandledRejectionHandler);
+		this.signalCleanupHandlers.push(() => process.off("unhandledRejection", unhandledRejectionHandler));
 	}
 
 	private unregisterSignalHandlers(): void {
@@ -6556,7 +6602,11 @@ export class InteractiveMode {
 
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(
-			new Text(`${theme.fg("accent", "✓ Debug log written")}\n${theme.fg("muted", debugLogPath)}`, 1, 1),
+			new Text(
+				`${theme.fg("accent", "✓ Debug log written")}\n${theme.fg("muted", debugLogPath)}\n${theme.fg("dim", `Persistent TUI diagnostics: ${getTuiDiagnosticsLogPath()}`)}`,
+				1,
+				1,
+			),
 		);
 		this.ui.requestRender();
 	}

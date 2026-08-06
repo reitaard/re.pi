@@ -93,6 +93,25 @@ export interface Terminal {
 	setProgress(active: boolean): void;
 }
 
+export interface ProcessTerminalOptions {
+	/** Capture every terminal write to this file. Parent directories are created lazily. */
+	writeLogPath?: string;
+}
+
+function resolveWriteLogPath(configuredPath: string): string {
+	if (!configuredPath) return "";
+	try {
+		if (fs.statSync(configuredPath).isDirectory()) {
+			const now = new Date();
+			const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}-${String(now.getMinutes()).padStart(2, "0")}-${String(now.getSeconds()).padStart(2, "0")}`;
+			return path.join(configuredPath, `tui-${timestamp}-${process.pid}.log`);
+		}
+	} catch {
+		// Not an existing directory; use the configured value as a file path.
+	}
+	return configuredPath;
+}
+
 /**
  * Real terminal using process.stdin/stdout
  */
@@ -108,20 +127,12 @@ export class ProcessTerminal implements Terminal {
 	private stdinBuffer?: StdinBuffer;
 	private stdinDataHandler?: (data: string) => void;
 	private progressInterval?: ReturnType<typeof setInterval>;
-	private writeLogPath = (() => {
-		const env = process.env.PI_TUI_WRITE_LOG || "";
-		if (!env) return "";
-		try {
-			if (fs.statSync(env).isDirectory()) {
-				const now = new Date();
-				const ts = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}-${String(now.getMinutes()).padStart(2, "0")}-${String(now.getSeconds()).padStart(2, "0")}`;
-				return path.join(env, `tui-${ts}-${process.pid}.log`);
-			}
-		} catch {
-			// Not an existing directory - use as-is (file path)
-		}
-		return env;
-	})();
+	private readonly writeLogPath: string;
+	private writeLogInitialized = false;
+
+	constructor(options: ProcessTerminalOptions = {}) {
+		this.writeLogPath = resolveWriteLogPath(options.writeLogPath ?? process.env.PI_TUI_WRITE_LOG ?? "");
+	}
 
 	get kittyProtocolActive(): boolean {
 		return this._kittyProtocolActive;
@@ -144,7 +155,7 @@ export class ProcessTerminal implements Terminal {
 		process.stdin.resume();
 
 		// Enable bracketed paste mode - terminal will wrap pastes in \x1b[200~ ... \x1b[201~
-		process.stdout.write("\x1b[?2004h");
+		this.write("\x1b[?2004h");
 
 		// Set up resize handler immediately
 		process.stdout.on("resize", this.resizeHandler);
@@ -222,7 +233,7 @@ export class ProcessTerminal implements Terminal {
 		process.stdin.on("data", this.stdinDataHandler!);
 		this.keyboardProtocolPushed = true;
 		this.clearKeyboardProtocolNegotiationBuffer();
-		process.stdout.write(KITTY_KEYBOARD_PROTOCOL_QUERY);
+		this.write(KITTY_KEYBOARD_PROTOCOL_QUERY);
 	}
 
 	private handleKeyboardProtocolNegotiationSequence(
@@ -319,13 +330,13 @@ export class ProcessTerminal implements Terminal {
 
 	private enableModifyOtherKeys(): void {
 		if (this._kittyProtocolActive || this._modifyOtherKeysActive) return;
-		process.stdout.write("\x1b[>4;2m");
+		this.write("\x1b[>4;2m");
 		this._modifyOtherKeysActive = true;
 	}
 
 	private disableModifyOtherKeys(): void {
 		if (!this._modifyOtherKeysActive) return;
-		process.stdout.write("\x1b[>4;0m");
+		this.write("\x1b[>4;0m");
 		this._modifyOtherKeysActive = false;
 	}
 
@@ -371,7 +382,7 @@ export class ProcessTerminal implements Terminal {
 		if (shouldDisableKittyProtocol) {
 			// Disable Kitty keyboard protocol first so any late key releases
 			// do not generate new Kitty escape sequences.
-			process.stdout.write("\x1b[<u");
+			this.write("\x1b[<u");
 			this.keyboardProtocolPushed = false;
 			this._kittyProtocolActive = false;
 			setKittyProtocolActive(false);
@@ -405,18 +416,18 @@ export class ProcessTerminal implements Terminal {
 
 	stop(): void {
 		if (this.clearProgressInterval()) {
-			process.stdout.write(TERMINAL_PROGRESS_CLEAR_SEQUENCE);
+			this.write(TERMINAL_PROGRESS_CLEAR_SEQUENCE);
 		}
 
 		// Disable bracketed paste mode
-		process.stdout.write("\x1b[?2004l");
+		this.write("\x1b[?2004l");
 
 		const shouldDisableKittyProtocol = this.keyboardProtocolPushed || this._kittyProtocolActive;
 		this.clearKeyboardProtocolNegotiationBuffer();
 
 		// Disable Kitty keyboard protocol if not already done by drainInput()
 		if (shouldDisableKittyProtocol) {
-			process.stdout.write("\x1b[<u");
+			this.write("\x1b[<u");
 			this.keyboardProtocolPushed = false;
 			this._kittyProtocolActive = false;
 			setKittyProtocolActive(false);
@@ -453,12 +464,22 @@ export class ProcessTerminal implements Terminal {
 
 	write(data: string): void {
 		process.stdout.write(data);
-		if (this.writeLogPath) {
+		if (!this.writeLogPath) return;
+
+		if (!this.writeLogInitialized) {
+			this.writeLogInitialized = true;
 			try {
-				fs.appendFileSync(this.writeLogPath, data, { encoding: "utf8" });
+				fs.mkdirSync(path.dirname(this.writeLogPath), { recursive: true });
 			} catch {
 				// Ignore logging errors
+				return;
 			}
+		}
+
+		try {
+			fs.appendFileSync(this.writeLogPath, data, { encoding: "utf8" });
+		} catch {
+			// Ignore logging errors
 		}
 	}
 
@@ -473,52 +494,52 @@ export class ProcessTerminal implements Terminal {
 	moveBy(lines: number): void {
 		if (lines > 0) {
 			// Move down
-			process.stdout.write(`\x1b[${lines}B`);
+			this.write(`\x1b[${lines}B`);
 		} else if (lines < 0) {
 			// Move up
-			process.stdout.write(`\x1b[${-lines}A`);
+			this.write(`\x1b[${-lines}A`);
 		}
 		// lines === 0: no movement
 	}
 
 	hideCursor(): void {
-		process.stdout.write("\x1b[?25l");
+		this.write("\x1b[?25l");
 	}
 
 	showCursor(): void {
-		process.stdout.write("\x1b[?25h");
+		this.write("\x1b[?25h");
 	}
 
 	clearLine(): void {
-		process.stdout.write("\x1b[K");
+		this.write("\x1b[K");
 	}
 
 	clearFromCursor(): void {
-		process.stdout.write("\x1b[J");
+		this.write("\x1b[J");
 	}
 
 	clearScreen(): void {
-		process.stdout.write("\x1b[2J\x1b[H"); // Clear screen and move to home (1,1)
+		this.write("\x1b[2J\x1b[H"); // Clear screen and move to home (1,1)
 	}
 
 	setTitle(title: string): void {
 		// OSC 0;title BEL - set terminal window title
-		process.stdout.write(`\x1b]0;${title}\x07`);
+		this.write(`\x1b]0;${title}\x07`);
 	}
 
 	setProgress(active: boolean): void {
 		if (active) {
 			// OSC 9;4;3 - indeterminate progress
-			process.stdout.write(TERMINAL_PROGRESS_ACTIVE_SEQUENCE);
+			this.write(TERMINAL_PROGRESS_ACTIVE_SEQUENCE);
 			if (!this.progressInterval) {
 				this.progressInterval = setInterval(() => {
-					process.stdout.write(TERMINAL_PROGRESS_ACTIVE_SEQUENCE);
+					this.write(TERMINAL_PROGRESS_ACTIVE_SEQUENCE);
 				}, TERMINAL_PROGRESS_KEEPALIVE_MS);
 			}
 		} else {
 			this.clearProgressInterval();
 			// OSC 9;4;0 - clear progress
-			process.stdout.write(TERMINAL_PROGRESS_CLEAR_SEQUENCE);
+			this.write(TERMINAL_PROGRESS_CLEAR_SEQUENCE);
 		}
 	}
 

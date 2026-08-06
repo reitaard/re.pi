@@ -173,7 +173,7 @@ export class FooterComponent implements Component {
 		const usingSubscription = state.model ? this.session.modelRegistry.isUsingOAuth(state.model) : false;
 		if (totalCost || usingSubscription) {
 			const costStr = `$${totalCost.toFixed(3)}${usingSubscription ? " (sub)" : ""}`;
-			statsParts.push(costStr);
+			statsParts.push(theme.fg("toolSuccessStatus", costStr));
 		}
 
 		// Suggest compaction before a small local model reaches its less reliable long-context range.
@@ -267,7 +267,12 @@ export class FooterComponent implements Component {
 					const priorityB = FOOTER_STATUS_PRIORITIES.get(b) ?? Number.MAX_SAFE_INTEGER;
 					return priorityA - priorityB || a.localeCompare(b);
 				}),
-			].map(([key, text]) => formatFooterStatus(key, text));
+			].map(([key, text]) => {
+				const formatted = formatFooterStatus(key, text);
+				return key === "maestro" && formatted.startsWith("MAESTRO")
+					? theme.fg("borderMuted", "MAESTRO") + formatted.slice("MAESTRO".length)
+					: formatted;
+			});
 			const statusLine = sortedStatuses.join("  ");
 			lines.push(truncateToWidth(statusLine, width, theme.fg("footer", "...")));
 		}

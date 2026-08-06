@@ -1,9 +1,11 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
 	classifyCurrentInstallation,
 	getAgentDir,
 	getPackageDir,
+	getTuiDiagnosticsLogPath,
+	getTuiRawLogDirectory,
 	type InstallationClassification,
 	VERSION,
 } from "./config.ts";
@@ -75,6 +77,21 @@ interface MemorySnapshot {
 	canonicalMemoryPresent: boolean;
 }
 
+interface TuiDiagnosticsSnapshot {
+	diagnosticsPath: string;
+	diagnosticsPresent: boolean;
+	diagnosticsBytes: number;
+	eventCount: number;
+	invalidEventCount: number;
+	crashCount: number;
+	unhandledRejectionCount: number;
+	overflowCount: number;
+	slowRenderCount: number;
+	rawLogDirectory: string;
+	rawCaptureFiles: number;
+	rawCaptureBytes: number;
+}
+
 export interface DoctorSnapshot {
 	version: string;
 	packageSourceCommit?: string;
@@ -87,6 +104,7 @@ export interface DoctorSnapshot {
 	maestroError?: boolean;
 	integrations: IntegrationSnapshot;
 	memory: MemorySnapshot;
+	tuiDiagnostics?: TuiDiagnosticsSnapshot;
 }
 
 interface ReleaseManifestShape {
@@ -215,6 +233,87 @@ function readFileSize(path: string): number {
 	}
 }
 
+function readTuiDiagnosticsSnapshot(): TuiDiagnosticsSnapshot {
+	const diagnosticsPath = getTuiDiagnosticsLogPath();
+	const rawLogDirectory = getTuiRawLogDirectory();
+	let eventCount = 0;
+	let invalidEventCount = 0;
+	let crashCount = 0;
+	let unhandledRejectionCount = 0;
+	let overflowCount = 0;
+	let slowRenderCount = 0;
+	if (existsSync(diagnosticsPath)) {
+		try {
+			for (const line of readFileSync(diagnosticsPath, "utf8").split("\n")) {
+				if (!line.trim()) continue;
+				try {
+					const event = JSON.parse(line) as Record<string, unknown>;
+					if (typeof event.kind !== "string") {
+						invalidEventCount++;
+						continue;
+					}
+					eventCount++;
+					switch (event.kind) {
+						case "crash":
+							crashCount++;
+							if (event.source === "unhandledRejection") unhandledRejectionCount++;
+							break;
+						case "render-overflow":
+							overflowCount++;
+							break;
+						case "slow-render":
+							slowRenderCount++;
+							break;
+					}
+				} catch {
+					invalidEventCount++;
+				}
+			}
+		} catch {
+			invalidEventCount++;
+		}
+	}
+
+	let rawCaptureFiles = 0;
+	let rawCaptureBytes = 0;
+	const rawLocations = new Set<string>([rawLogDirectory]);
+	const configuredRawLog = process.env.PI_TUI_WRITE_LOG;
+	if (configuredRawLog) rawLocations.add(configuredRawLog);
+	for (const location of rawLocations) {
+		try {
+			const locationStat = statSync(location);
+			if (locationStat.isFile()) {
+				rawCaptureFiles++;
+				rawCaptureBytes += locationStat.size;
+				continue;
+			}
+			if (!locationStat.isDirectory()) continue;
+			for (const entry of readdirSync(location, { withFileTypes: true })) {
+				if (!entry.isFile() || !entry.name.startsWith("tui-")) continue;
+				const entryPath = join(location, entry.name);
+				rawCaptureFiles++;
+				rawCaptureBytes += readFileSize(entryPath);
+			}
+		} catch {
+			// A missing or inaccessible capture location is reported by its zero counts.
+		}
+	}
+	return {
+		diagnosticsPath,
+		diagnosticsPresent: existsSync(diagnosticsPath),
+		diagnosticsBytes: readFileSize(diagnosticsPath),
+		eventCount,
+		invalidEventCount,
+		crashCount,
+		unhandledRejectionCount,
+		overflowCount,
+		slowRenderCount,
+		rawLogDirectory,
+		rawCaptureFiles,
+		rawCaptureBytes,
+	};
+}
+
 export async function collectDoctorSnapshot(cwd = process.cwd()): Promise<DoctorSnapshot> {
 	const packageDir = getPackageDir();
 	const agentDir = getAgentDir();
@@ -261,6 +360,7 @@ export async function collectDoctorSnapshot(cwd = process.cwd()): Promise<Doctor
 			indexBytes: readFileSize(memoryIndexPath),
 			canonicalMemoryPresent: existsSync(join(cwd, ".pi", "memory", "MEMORY.md")),
 		},
+		tuiDiagnostics: readTuiDiagnosticsSnapshot(),
 	};
 }
 
@@ -461,6 +561,19 @@ export function createDoctorReport(snapshot: DoctorSnapshot, now = new Date()): 
 				? "Service is unavailable."
 				: `Service is ${snapshot.maestro?.state ?? "unknown"}.`,
 			next: "Run `recode maestro service start`, then rerun `recode doctor`.",
+		});
+	}
+	if (snapshot.tuiDiagnostics) {
+		const tui = snapshot.tuiDiagnostics;
+		const hasRenderFailure = tui.crashCount > 0 || tui.overflowCount > 0;
+		runtimeChecks.push({
+			id: "tui-diagnostics",
+			label: "TUI diagnostics",
+			status: hasRenderFailure ? "warn" : tui.diagnosticsPresent || tui.rawCaptureFiles > 0 ? "pass" : "info",
+			summary: hasRenderFailure
+				? `${tui.crashCount} crash event(s), ${tui.overflowCount} render overflow(s), and ${tui.slowRenderCount} slow render(s) recorded.`
+				: `${tui.slowRenderCount} slow render(s) recorded; ${tui.rawCaptureFiles} complete ANSI capture file(s) available (${tui.rawCaptureBytes} bytes).`,
+			next: hasRenderFailure ? `Inspect ${tui.diagnosticsPath} and ${tui.rawLogDirectory}.` : undefined,
 		});
 	}
 	runtimeChecks.push({
