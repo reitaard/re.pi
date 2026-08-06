@@ -18,6 +18,14 @@ import type {
 const HEALTH_HEARTBEAT_MS = 5_000;
 const SERVICE_DRAIN_DEADLINE_MS = 8_000;
 
+function writeServiceOutput(stream: NodeJS.WriteStream, message: string): void {
+	try {
+		if (!stream.destroyed) stream.write(`${message}\n`, () => undefined);
+	} catch {
+		// Native service stdout/stderr may be detached or closed by its host.
+	}
+}
+
 function removeFilesystemSocket(): void {
 	const endpoint = getSocketPath();
 	if (isFilesystemSocketPath(endpoint) && existsSync(endpoint)) unlinkSync(endpoint);
@@ -40,6 +48,9 @@ export async function serveMaestro(options: { supervisionMode?: MaestroSupervisi
 		throw new Error("systemd supervision is unavailable on Windows");
 	}
 
+	const ignoreOutputError = (): void => undefined;
+	process.stdout.on("error", ignoreOutputError);
+	process.stderr.on("error", ignoreOutputError);
 	mkdirSync(getOrchestratorDir(), { recursive: true, mode: 0o700 });
 	const ownership = acquireServiceOwnership({ supervisionMode });
 	let adapterState: MaestroAdapterState = isRadiusEnabled() ? "initializing" : "disabled";
@@ -186,8 +197,11 @@ export async function serveMaestro(options: { supervisionMode?: MaestroSupervisi
 			try {
 				const machine = await radiusPresence.start();
 				adapterState = "ready";
-				console.log(`radius integration enabled: ${getSocketPath()} -> ${getRadiusOrchestratorBaseUrl()}`);
-				if (machine) console.log(`radius machine id: ${machine.id}`);
+				writeServiceOutput(
+					process.stdout,
+					`radius integration enabled: ${getSocketPath()} -> ${getRadiusOrchestratorBaseUrl()}`,
+				);
+				if (machine) writeServiceOutput(process.stdout, `radius machine id: ${machine.id}`);
 			} catch (error) {
 				adapterState = "degraded";
 				health.diagnostic = `Radius adapter degraded: ${error instanceof Error ? error.message : String(error)}`;
@@ -201,7 +215,7 @@ export async function serveMaestro(options: { supervisionMode?: MaestroSupervisi
 		});
 		heartbeat = setInterval(() => refreshHealth(), HEALTH_HEARTBEAT_MS);
 		heartbeat.unref();
-		console.log(`Maestro listening on ${getSocketPath()} (${supervisionMode})`);
+		writeServiceOutput(process.stdout, `Maestro listening on ${getSocketPath()} (${supervisionMode})`);
 	} catch (error) {
 		await shutdown("process-crash", 1, error instanceof Error ? error.message : String(error));
 		throw error;
@@ -215,7 +229,7 @@ export async function serveMaestro(options: { supervisionMode?: MaestroSupervisi
 		void shutdown("process-crash", 1, `Unexpected ${signal} terminated the natively supervised service`);
 	};
 	const onFatal = (error: unknown): void => {
-		console.error(error);
+		writeServiceOutput(process.stderr, error instanceof Error ? (error.stack ?? error.message) : String(error));
 		void shutdown("process-crash", 1, error instanceof Error ? error.message : String(error));
 	};
 	process.once("SIGINT", onSignal);
@@ -234,4 +248,6 @@ export async function serveMaestro(options: { supervisionMode?: MaestroSupervisi
 	process.removeListener("SIGTERM", onSignal);
 	process.removeListener("uncaughtException", onFatal);
 	process.removeListener("unhandledRejection", onFatal);
+	process.stdout.removeListener("error", ignoreOutputError);
+	process.stderr.removeListener("error", ignoreOutputError);
 }

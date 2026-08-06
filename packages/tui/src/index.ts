@@ -27,6 +27,8 @@ export { type SettingItem, SettingsList, type SettingsListTheme } from "./compon
 export { Spacer } from "./components/spacer.ts";
 export { Text } from "./components/text.ts";
 export { TruncatedText } from "./components/truncated-text.ts";
+// Diagnostics
+export { type TuiDiagnosticFields, type TuiDiagnosticValue, writeTuiDiagnostic } from "./diagnostics.ts";
 // Editor component interface (for custom editors)
 export type { EditorComponent } from "./editor-component.ts";
 // Fuzzy matching
@@ -60,7 +62,7 @@ export {
 // Input buffering for batch splitting
 export { StdinBuffer, type StdinBufferEventMap, type StdinBufferOptions } from "./stdin-buffer.ts";
 // Terminal interface and implementations
-export { ProcessTerminal, type Terminal } from "./terminal.ts";
+export { ProcessTerminal, type ProcessTerminalOptions, type Terminal } from "./terminal.ts";
 // Terminal colors
 export {
 	parseOsc11BackgroundColor,
@@ -109,6 +111,7 @@ export {
 	type OverlayUnfocusOptions,
 	type SizeValue,
 	TUI,
+	type TUIDiagnosticsOptions,
 } from "./tui.ts";
 // Utilities
 export { sliceByColumn, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "./utils.ts";

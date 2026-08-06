@@ -141,4 +141,31 @@ describe("Recode Doctor", () => {
 		assert.equal(checks.find((entry) => entry.id === "maestro")?.status, "warn");
 		assert.match(checks.find((entry) => entry.id === "maestro")?.next ?? "", /service start/);
 	});
+
+	test("surfaces retained TUI crash evidence and raw capture availability", () => {
+		const report = createDoctorReport(
+			createSnapshot({
+				tuiDiagnostics: {
+					diagnosticsPath: "diagnostics.jsonl",
+					diagnosticsPresent: true,
+					diagnosticsBytes: 512,
+					eventCount: 3,
+					invalidEventCount: 0,
+					crashCount: 1,
+					unhandledRejectionCount: 0,
+					overflowCount: 1,
+					slowRenderCount: 1,
+					rawLogDirectory: "tui-logs",
+					rawCaptureFiles: 1,
+					rawCaptureBytes: 2048,
+				},
+			}),
+		);
+		const check = report.sections
+			.flatMap((section) => section.checks)
+			.find((entry) => entry.id === "tui-diagnostics");
+		assert.equal(check?.status, "warn");
+		assert.match(check?.summary ?? "", /crash event/);
+		assert.match(check?.next ?? "", /diagnostics\.jsonl/);
+	});
 });

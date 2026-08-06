@@ -6,6 +6,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { performance } from "node:perf_hooks";
+import { writeTuiDiagnostic } from "./diagnostics.ts";
 import { isKeyRelease, matchesKey } from "./keys.ts";
 import type { Terminal } from "./terminal.ts";
 import {
@@ -164,6 +165,22 @@ function isTermuxSession(): boolean {
 	return Boolean(process.env.TERMUX_VERSION);
 }
 
+function getTuiAgentDir(): string {
+	return process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), ".pi", "agent");
+}
+
+function getTuiDebugDirectory(): string {
+	return process.env.PI_TUI_DEBUG_DIR || path.join(getTuiAgentDir(), "tui");
+}
+
+function resolveSlowRenderThreshold(configured: number | undefined): number {
+	if (configured !== undefined && Number.isFinite(configured) && configured >= 0) {
+		return configured;
+	}
+	const fromEnvironment = Number(process.env.PI_TUI_SLOW_RENDER_MS);
+	return Number.isFinite(fromEnvironment) && fromEnvironment >= 0 ? fromEnvironment : 100;
+}
+
 /**
  * Options for overlay positioning and sizing.
  * Values can be absolute numbers or percentage strings (e.g., "50%").
@@ -204,6 +221,14 @@ export interface OverlayOptions {
 	visible?: (termWidth: number, termHeight: number) => boolean;
 	/** If true, don't capture keyboard focus when shown */
 	nonCapturing?: boolean;
+}
+
+/** Optional persistent diagnostics for slow renders and render invariants. */
+export interface TUIDiagnosticsOptions {
+	/** JSONL path for bounded diagnostic events. */
+	logPath?: string;
+	/** Minimum render duration to record. Defaults to 100ms. */
+	slowRenderThresholdMs?: number;
 }
 
 /** Options for {@link OverlayHandle.unfocus}. */
@@ -315,6 +340,8 @@ export class TUI extends Container {
 	private previousViewportTop = 0; // Track previous viewport top for resize-aware cursor moves
 	private fullRedrawCount = 0;
 	private stopped = false;
+	private readonly diagnosticsLogPath: string | undefined;
+	private readonly slowRenderThresholdMs: number;
 	private pendingOsc11BackgroundReplies = 0;
 	private pendingOsc11BackgroundQueries: PendingOsc11BackgroundQuery[] = [];
 	private terminalColorSchemeListeners = new Set<(scheme: TerminalColorScheme) => void>();
@@ -325,9 +352,11 @@ export class TUI extends Container {
 	private overlayStack: OverlayStackEntry[] = [];
 	private overlayFocusRestore: OverlayFocusRestoreState = { status: "inactive" };
 
-	constructor(terminal: Terminal, showHardwareCursor?: boolean) {
+	constructor(terminal: Terminal, showHardwareCursor?: boolean, diagnostics?: TUIDiagnosticsOptions) {
 		super();
 		this.terminal = terminal;
+		this.diagnosticsLogPath = diagnostics?.logPath ?? process.env.PI_TUI_DIAGNOSTICS_LOG;
+		this.slowRenderThresholdMs = resolveSlowRenderThreshold(diagnostics?.slowRenderThresholdMs);
 		if (showHardwareCursor !== undefined) {
 			this.showHardwareCursor = showHardwareCursor;
 		}
@@ -1251,8 +1280,29 @@ export class TUI extends Container {
 		return null;
 	}
 
+	private recordSlowRender(
+		renderStartedAt: number,
+		mode: "full" | "differential" | "unchanged" | "deletion",
+		width: number,
+		height: number,
+		lineCount: number,
+	): void {
+		if (!this.diagnosticsLogPath) return;
+		const durationMs = performance.now() - renderStartedAt;
+		if (durationMs < this.slowRenderThresholdMs) return;
+		writeTuiDiagnostic(this.diagnosticsLogPath, "slow-render", {
+			durationMs: Math.round(durationMs * 100) / 100,
+			mode,
+			width,
+			height,
+			lineCount,
+			fullRedrawCount: this.fullRedrawCount,
+		});
+	}
+
 	private doRender(): void {
 		if (this.stopped) return;
+		const renderStartedAt = performance.now();
 		const width = this.terminal.columns;
 		const height = this.terminal.rows;
 		const widthChanged = this.previousWidth !== 0 && this.previousWidth !== width;
@@ -1322,14 +1372,20 @@ export class TUI extends Container {
 			this.previousKittyImageIds = this.collectKittyImageIds(newLines);
 			this.previousWidth = width;
 			this.previousHeight = height;
+			this.recordSlowRender(renderStartedAt, "full", width, height, newLines.length);
 		};
 
 		const debugRedraw = process.env.PI_DEBUG_REDRAW === "1";
 		const logRedraw = (reason: string): void => {
 			if (!debugRedraw) return;
-			const logPath = path.join(os.homedir(), ".pi", "agent", "pi-debug.log");
+			const logPath = path.join(getTuiAgentDir(), "pi-debug.log");
 			const msg = `[${new Date().toISOString()}] fullRender: ${reason} (prev=${this.previousLines.length}, new=${newLines.length}, height=${height})\n`;
-			fs.appendFileSync(logPath, msg);
+			try {
+				fs.mkdirSync(path.dirname(logPath), { recursive: true });
+				fs.appendFileSync(logPath, msg);
+			} catch {
+				// Debug logging must never break rendering.
+			}
 		};
 
 		// First render - just output everything without clearing (assumes clean screen)
@@ -1398,6 +1454,7 @@ export class TUI extends Container {
 			this.positionHardwareCursor(cursorPos, newLines.length);
 			this.previousViewportTop = prevViewportTop;
 			this.previousHeight = height;
+			this.recordSlowRender(renderStartedAt, "unchanged", width, height, newLines.length);
 			return;
 		}
 
@@ -1447,6 +1504,7 @@ export class TUI extends Container {
 			this.previousWidth = width;
 			this.previousHeight = height;
 			this.previousViewportTop = prevViewportTop;
+			this.recordSlowRender(renderStartedAt, "deletion", width, height, newLines.length);
 			return;
 		}
 
@@ -1519,7 +1577,7 @@ export class TUI extends Container {
 			buffer += "\x1b[2K"; // Clear current line
 			if (!isImage && visibleWidth(line) > width) {
 				// Log all lines to crash file for debugging
-				const crashLogPath = path.join(os.homedir(), ".pi", "agent", "pi-crash.log");
+				const crashLogPath = path.join(getTuiAgentDir(), "pi-crash.log");
 				const crashData = [
 					`Crash at ${new Date().toISOString()}`,
 					`Terminal width: ${width}`,
@@ -1529,8 +1587,19 @@ export class TUI extends Container {
 					...newLines.map((l, idx) => `[${idx}] (w=${visibleWidth(l)}) ${l}`),
 					"",
 				].join("\n");
-				fs.mkdirSync(path.dirname(crashLogPath), { recursive: true });
-				fs.writeFileSync(crashLogPath, crashData);
+				try {
+					fs.mkdirSync(path.dirname(crashLogPath), { recursive: true });
+					fs.writeFileSync(crashLogPath, crashData);
+				} catch {
+					// The structured event below is the best-effort fallback.
+				}
+				writeTuiDiagnostic(this.diagnosticsLogPath, "render-overflow", {
+					lineIndex: i,
+					lineWidth: visibleWidth(line),
+					terminalWidth: width,
+					terminalHeight: height,
+					lineCount: newLines.length,
+				});
 
 				// Clean up terminal state before throwing
 				this.stop();
@@ -1570,8 +1639,7 @@ export class TUI extends Container {
 		buffer += "\x1b[?2026l"; // End synchronized output
 
 		if (process.env.PI_TUI_DEBUG === "1") {
-			const debugDir = "/tmp/tui";
-			fs.mkdirSync(debugDir, { recursive: true });
+			const debugDir = getTuiDebugDirectory();
 			const debugPath = path.join(debugDir, `render-${Date.now()}-${Math.random().toString(36).slice(2)}.log`);
 			const debugData = [
 				`firstChanged: ${firstChanged}`,
@@ -1595,7 +1663,12 @@ export class TUI extends Container {
 				"=== buffer ===",
 				JSON.stringify(buffer),
 			].join("\n");
-			fs.writeFileSync(debugPath, debugData);
+			try {
+				fs.mkdirSync(debugDir, { recursive: true });
+				fs.writeFileSync(debugPath, debugData);
+			} catch {
+				// Detailed debug logging must never break rendering.
+			}
 		}
 
 		// Write entire buffer at once
@@ -1617,6 +1690,7 @@ export class TUI extends Container {
 		this.previousKittyImageIds = this.collectKittyImageIds(newLines);
 		this.previousWidth = width;
 		this.previousHeight = height;
+		this.recordSlowRender(renderStartedAt, "differential", width, height, newLines.length);
 	}
 
 	/**
