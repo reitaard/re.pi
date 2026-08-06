@@ -1,6 +1,6 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	RecodeGateway,
@@ -12,7 +12,10 @@ import { RecodeGatewayStore } from "../src/core/recode-gateway-store.ts";
 import {
 	normalizeTelegramText,
 	parseTelegramConversationId,
+	renderTelegramHtml,
 	telegramConversationId,
+	telegramTopicSessionsDirectory,
+	telegramTopicWorkspaceDirectory,
 } from "../src/recode-telegram-gateway.ts";
 
 const temporaryRoots: string[] = [];
@@ -29,6 +32,9 @@ function delivery(log: string[]): RecodeGatewayDelivery {
 	return {
 		begin: async () => {
 			log.push("begin");
+		},
+		progress: async (text) => {
+			log.push(`progress:${text}`);
 		},
 		update: async (text) => {
 			log.push(`update:${text}`);
@@ -50,6 +56,31 @@ describe("RecodeGateway", () => {
 		expect(normalizeTelegramText("@recode_bot inspect this", "recode_bot")).toBe("inspect this");
 	});
 
+	it("uses stable topic identifiers for topic session directories", () => {
+		expect(telegramTopicSessionsDirectory("/root/telegram", -100123, 42)).toBe(
+			join(resolve("/root/telegram"), "Topics", "sessions", "-100123-42"),
+		);
+		expect(telegramTopicWorkspaceDirectory("/root/telegram", -100123, 42)).toBe(
+			join(resolve("/root/telegram"), "Topics", "workspaces", "-100123-42"),
+		);
+	});
+
+	it("renders common Markdown as Telegram HTML with monospace code", () => {
+		expect(
+			renderTelegramHtml(
+				"## Status\n- **CPU:** `6.07%`\n- [Dashboard](https://example.test/?a=1&b=2)\n\n```sh\ndocker ps\n```",
+			),
+		).toBe(
+			'<b>Status</b>\n• <b>CPU:</b> <code>6.07%</code>\n• <a href="https://example.test/?a=1&amp;b=2">Dashboard</a>\n\n<pre><code class="language-sh">docker ps</code></pre>',
+		);
+	});
+
+	it("escapes raw HTML and closes incomplete code fences for Telegram", () => {
+		expect(renderTelegramHtml("<unsafe> & `value`\n```\nconst x = 1;")).toBe(
+			"&lt;unsafe&gt; &amp; <code>value</code>\n<pre><code>const x = 1;</code></pre>",
+		);
+	});
+
 	it("persists routes and accepted jobs while deduplicating Telegram updates", async () => {
 		const root = await mkdtemp(join(tmpdir(), "recode-gateway-"));
 		temporaryRoots.push(root);
@@ -59,6 +90,11 @@ describe("RecodeGateway", () => {
 
 		store.setSessionId("telegram:-100:topic:7", "topic-session");
 		expect(store.getSessionId("telegram:-100:topic:7")).toBe("topic-session");
+		expect(store.isTopicConnected("telegram:-100:topic:7")).toBe(false);
+		store.connectTopic("telegram:-100:topic:7");
+		expect(store.isTopicConnected("telegram:-100:topic:7")).toBe(true);
+		store.disconnectTopic("telegram:-100:topic:7");
+		expect(store.isTopicConnected("telegram:-100:topic:7")).toBe(false);
 		const accepted = store.accept(message);
 		expect(accepted?.status).toBe("accepted");
 		expect(store.accept(message)).toBeUndefined();
@@ -139,6 +175,9 @@ describe("RecodeGateway", () => {
 
 		expect(await gateway.reset(message)).toBe(true);
 		expect(runtime.close).toHaveBeenCalledOnce();
+		expect(sessions.get("telegram:7")).toBe("session-2");
+
+		expect(await gateway.reload(message)).toBe(true);
 		expect(sessions.get("telegram:7")).toBe("session-2");
 	});
 });

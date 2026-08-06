@@ -48,14 +48,22 @@ The same values can be stored in `~/.pi/agent/telegram.json`:
 
 Keep this file private. Messages from every user except `allowedUserId` are ignored.
 
-Groups are fail-closed. A group must be listed in `allowedGroupIds`, the sender must still be `allowedUserId`, and the message must mention the bot or reply to one of its messages. Each forum topic receives an independent route and Aizen session. `/new` rotates only the current DM, group, or topic session.
+Groups are fail-closed. A group must be listed in `allowedGroupIds`, and the sender must still be `allowedUserId`. Forum topics are opt-in: run `/connect` inside a topic before its ordinary messages can reach Aizen. Connected topics receive independent sessions in `<workingDirectory>/Topics/sessions/<group-id>-<topic-id>/` and independent working directories in `<workingDirectory>/Topics/workspaces/<group-id>-<topic-id>/`; place topic-local `AGENTS.md` and `.pi/skills/` resources in the workspace. The stable numeric identifiers prevent topic renames from breaking session routing. Direct messages remain active without `/connect`. `/new` rotates only the current DM or connected topic session.
 
 ## Commands
 
 - `/start` shows connection readiness.
-- `/new` starts a new Recode session.
+- `/connect` enables the current forum topic and creates a session if it has none; reconnecting resumes its prior session.
+- `/connect new` enables the current forum topic with a new session.
+- `/disconnect` disables the current forum topic without deleting its session.
+- `/new` starts a new Recode session in the current DM or connected forum topic.
+- `/reload` reloads the current route's runtime without changing its session, picking up changed project instructions, skills, and MCP configuration for the next turn.
 - `/status` reports whether Aizen is running and how many turns are queued.
 - `/stop` aborts the active turn and clears the queue.
+
+### Attachments
+
+The gateway accepts authorized Telegram photos and documents up to the cloud Bot API's 20 MB download limit. Photos are stored under `uploads/` in the active workspace and attached to the agent's prompt as validated image data. Documents are stored in the same directory and supplied as untrusted local paths; the gateway does not execute, unpack, or parse them automatically. Captions become the accompanying prompt. Topic attachments stay under `<workingDirectory>/Topics/workspaces/<group-id>-<topic-id>/uploads/`; direct-chat attachments use `<workingDirectory>/uploads/`.
 
 Normal messages are processed sequentially. Messages received while Aizen is running are queued instead of steering or interrupting the active turn. Streaming assistant text updates one Telegram preview message, and long final replies are split without losing content.
 

@@ -57,6 +57,11 @@ export class RecodeGatewayStore implements RecodeGatewaySessionStore {
 				session_id TEXT NOT NULL,
 				updated_at INTEGER NOT NULL
 			);
+			CREATE TABLE IF NOT EXISTS recode_gateway_topic_connections (
+				route TEXT PRIMARY KEY,
+				connected_at INTEGER NOT NULL,
+				updated_at INTEGER NOT NULL
+			);
 			CREATE TABLE IF NOT EXISTS recode_gateway_jobs (
 				id TEXT PRIMARY KEY,
 				channel TEXT NOT NULL,
@@ -95,6 +100,25 @@ export class RecodeGatewayStore implements RecodeGatewaySessionStore {
 				ON CONFLICT(route) DO UPDATE SET session_id = excluded.session_id, updated_at = excluded.updated_at
 			`)
 			.run(route, sessionId, Date.now());
+	}
+
+	isTopicConnected(route: string): boolean {
+		return !!this.db().prepare("SELECT 1 FROM recode_gateway_topic_connections WHERE route = ?").get(route);
+	}
+
+	connectTopic(route: string): void {
+		const now = Date.now();
+		this.db()
+			.prepare(`
+				INSERT INTO recode_gateway_topic_connections (route, connected_at, updated_at)
+				VALUES (?, ?, ?)
+				ON CONFLICT(route) DO UPDATE SET updated_at = excluded.updated_at
+			`)
+			.run(route, now, now);
+	}
+
+	disconnectTopic(route: string): void {
+		this.db().prepare("DELETE FROM recode_gateway_topic_connections WHERE route = ?").run(route);
 	}
 
 	accept(message: RecodeGatewayInboundMessage): RecodeGatewayJob | undefined {

@@ -1,19 +1,28 @@
+import type { ImageContent } from "@reitaard/repi-ai";
+
 export interface RecodeGatewayInboundMessage {
 	channel: string;
 	conversationId: string;
 	messageId: string;
 	text: string;
+	images?: ImageContent[];
 }
 
 export interface RecodeGatewayDelivery {
 	begin(): Promise<void>;
+	progress(text: string): Promise<void>;
 	update(text: string): Promise<void>;
 	complete(text: string): Promise<void>;
 	fail(message: string): Promise<void>;
 }
 
 export interface RecodeGatewayRuntime {
-	run(prompt: string, onText: (text: string) => void): Promise<void>;
+	run(
+		prompt: string,
+		onText: (text: string) => void,
+		images?: ImageContent[],
+		onActivity?: (text: string) => void,
+	): Promise<void>;
 	abort(): Promise<void>;
 	close(): Promise<void>;
 }
@@ -126,6 +135,16 @@ export class RecodeGateway {
 		return true;
 	}
 
+	/** Restart one route's runtime so project resources are loaded again without rotating its session. */
+	async reload(message: RecodeGatewayInboundMessage): Promise<boolean> {
+		if (this.running) return false;
+		const route = this.routeFor(message);
+		const runtime = this.runtimes.get(route);
+		if (runtime) await runtime.close();
+		this.runtimes.delete(route);
+		return true;
+	}
+
 	async close(): Promise<void> {
 		this.closeRequested = true;
 		this.abortVersion += 1;
@@ -173,10 +192,17 @@ export class RecodeGateway {
 					}
 					let finalText = "";
 					let deliveryUpdates = Promise.resolve();
-					await runtime.run(turn.message.text, (text) => {
-						finalText = text;
-						deliveryUpdates = deliveryUpdates.then(() => turn.delivery.update(text));
-					});
+					await runtime.run(
+						turn.message.text,
+						(text) => {
+							finalText = text;
+							deliveryUpdates = deliveryUpdates.then(() => turn.delivery.update(text));
+						},
+						turn.message.images,
+						(text) => {
+							deliveryUpdates = deliveryUpdates.then(() => turn.delivery.progress(text));
+						},
+					);
 					await deliveryUpdates;
 					if (turnAbortVersion !== this.abortVersion) throw new RecodeGatewayTurnAborted();
 					await turn.delivery.complete(finalText || "Completed without a text response.");
