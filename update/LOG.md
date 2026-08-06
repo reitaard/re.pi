@@ -1,5 +1,12 @@
 # Update Work Log
 
+## 2026-08-06 — Recode build and release runbook
+
+- Added `docs/RECODE_BUILD_RELEASE.md` as the detailed procedure for development builds, small-model smoke tests, isolated release candidates, version bumps, GitHub assets, npm boundaries, rollback, and failure recovery.
+- Added the project skill `.agents/skills/rebuild/SKILL.md` for bounded small-model execution and linked the runbook from `README.md` and `OPERATIONS.md`.
+- Recorded the current release block: do not run the release/tag/publish path until reviewed npm trusted publishing and an idempotent publish workflow exist. Local certification remains allowed; GitHub workflow runtime checks remain a separate manual gate.
+- No version bump, tag, publication, installation, remote mutation, or code validation run was performed for this documentation-only change.
+
 ## 2026-08-03 — Recode 0.82.1 checkpoint and GitHub assets
 
 - Committed the protected upstream integration at `e6b2b5db9`, then closed configured-runtime blockers for disabled extension discovery, stale compaction model settings, keyless Open Provider authentication, release identity, and full-history CI ancestry through exact release commit `c035bc2fc06d0282ddf0b97210e575a22cd007a2`.

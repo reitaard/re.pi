@@ -58,6 +58,8 @@ npm run check        # Lint, format, and type check
 ./pi-test.sh         # Run pi from sources (can be run from any directory)
 ```
 
+For Recode-specific small-model smoke tests, release candidates, version bumps, GitHub releases, and failure recovery, see [the build and release runbook](docs/RECODE_BUILD_RELEASE.md).
+
 ## Supply-chain hardening
 
 We treat npm dependency changes as reviewed code changes.

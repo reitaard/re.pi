@@ -75,7 +75,7 @@ A locked npm temporary old-package directory is not installation failure when ve
 
 ## Release goal
 
-The target is one reproducible release that supports:
+The step-by-step build, small-model certification, versioning, GitHub release, and recovery procedure is [the Recode build/release runbook](docs/RECODE_BUILD_RELEASE.md). The target is one reproducible release that supports:
 
 - npm installation on supported Node platforms,
 - Windows x64/arm64 binaries,
