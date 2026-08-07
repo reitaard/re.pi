@@ -41,6 +41,13 @@ Strict validation passed after the final enrichment changes:
 - Telegram lyrics message **503** used LRCLIB lyrics, expandable HTML formatting, `[1994 · 11/11]`, and the Spotify link.
 - `Cleanup Fast job` and `Cleanup Fast lyrics job` both succeeded; the VPS job directory was removed.
 - Chat route final test **79675** also succeeded with audio message **495** and lyrics message **496**.
+- Real Telegram Chat message execution **79704** correctly parsed `Tell me something about the song purple rain` but stopped at `Route Fast input`; the Chat-message output was not connected to the Chat admission path, so no reply node ran.
+- The subsequent `hey` execution **79708** stopped at the same unconnected Chat-message output.
+- Temporary Webhook diagnostic execution **79728** added the missing route only for testing, completed Spotify lookup, sent Telegram message **508** through credential `spotipy`, and completed Redis cleanup. The temporary Webhook, payload, route connection, and reply override were removed afterward; the Telegram Trigger was restored and republished.
+
+## Known active issue
+
+Static validation still reports 0 errors, but the active graph is missing the permanent connection from `Route Fast input` output 2 (`Chat message`) to `Build Redis Chat admission`. Add that connection before treating normal Telegram Chat mode as fixed, then rerun a real Telegram message test with reply-to behavior enabled.
 
 The `/fast` confirmation probe **79693** used a fabricated Telegram message id and failed only because Telegram could not reply to that nonexistent message. The actual search and selected-download tests completed successfully.
 

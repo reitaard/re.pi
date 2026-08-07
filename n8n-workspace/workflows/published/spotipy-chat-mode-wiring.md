@@ -1,7 +1,7 @@
 # Spotipy Chat Mode Wiring
 
 - Revision date: 2026-08-07
-- Status: published and active
+- Status: published and active; permanent Chat route connection pending
 - Workflow: `Spotipy Fast Mode` (`HYRePy4buI9l4SEk`)
 - Purpose: Maintain the `/chat` branch with grounded Spotify facts and candidate selection while preserving the existing Fast download flow.
 
@@ -36,6 +36,9 @@
 - `Spotipy Fast Mode` is active with 83 enabled nodes, 91 valid connections, and 132 validated expressions; strict validation reports 0 errors.
 - The active graph contains the `/chat` route, grounded Spotify prefetch and exact-track lookup, candidate callbacks, LM Studio agent, 15-message chatId-keyed memory, bounded Spotify tool, Redis serialization, Telegram reply paths, Fast downloads, LRCLIB-first lyrics, fallback lyrics dispatch, rich HTML captions, and independent cleanup paths.
 - The existing Fast branch remains enabled and connected.
+- Runtime executions **79704** and **79708** showed that normal Chat messages reach `Route Fast input` but its output 2 (`Chat message`) is not connected to `Build Redis Chat admission`.
+- Temporary Webhook diagnostic execution **79728** added that connection only for testing, successfully used the `spotipy` credential to send Telegram message **508**, and completed Redis cleanup. The temporary Webhook, payload node, route connection, and reply override were removed; the Telegram Trigger was restored and republished.
+- The permanent Chat-message connection remains the required follow-up before normal Telegram Chat mode is considered fixed.
 - Final active workflow record is the deployed `HYRePy4buI9l4SEk` revision validated on 2026-08-07.
 - Controlled webhook tests succeeded for mode switching, Spotify lookup, concise HTML reply delivery, candidate buttons, Redis completion, audio delivery, lyrics enrichment, and cleanup (including final Chat execution `79675`).
 - The final Chat selection used a synthetic callback update through the webhook, but Telegram audio and lyrics delivery, metadata, LRCLIB lookup, Redis completion, and remote cleanup all completed successfully. A real client button tap remains optional additional evidence.

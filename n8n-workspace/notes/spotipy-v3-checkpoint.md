@@ -1,6 +1,6 @@
 # Spotipy workflow implementation checkpoint
 
-**Status:** current implementation complete; the original v3 plan is superseded
+**Status:** Fast implementation complete; Chat route wiring defect remains
 **Revision date:** 2026-08-07
 
 ## Active workflow
@@ -31,6 +31,15 @@ The active workflow is now the single maintained Telegram music path. Fast and C
 - **Execution 79694:** Fast Spotify resolution for `Glory Box`; ten YouTube choices returned with cached Spotify metadata.
 - **Execution 79695:** selected Fast download succeeded. Telegram audio message **502** contained `Glory Box`, performer `Portishead`, duration `308`, and `Portishead - Glory Box.m4a`. Telegram lyrics message **503** contained LRCLIB lyrics, `[1994 · 11/11]`, expandable formatting, and the Spotify link. Both cleanup nodes succeeded and the VPS job directory was removed.
 - **Execution 79675:** final Chat selection succeeded. Audio message **495** and lyrics message **496** were delivered with matching metadata and LRCLIB lyrics; Redis state and the remote job directory were cleared.
+- **Execution 79704:** the real message `Tell me something about the song purple rain` parsed as Chat input but stopped at `Route Fast input` because the Chat-message output was disconnected.
+- **Execution 79708:** the real `hey` message stopped at the same disconnected output.
+- **Execution 79728:** a temporary Webhook and temporary Chat-route connection reached the full Chat path, sent Telegram message **508** through `spotipy`, and completed Redis cleanup. All temporary nodes, wiring, and reply override were removed; the Telegram Trigger was restored and republished.
+
+## Remaining work
+
+- Permanently connect `Route Fast input` output 2 (`Chat message`) to `Build Redis Chat admission`.
+- Rerun the exact Telegram Chat question with the normal reply-to setting after that connection is permanent.
+- Keep the temporary Webhook diagnostic out of the active workflow.
 
 The synthetic `/fast` toggle probe **79693** failed only because its fabricated source Telegram message id did not exist and the confirmation node attempted to reply to it. This is a test-fixture limitation, not a production-path failure.
 
