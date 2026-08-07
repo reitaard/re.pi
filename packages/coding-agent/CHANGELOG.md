@@ -32,7 +32,7 @@
 
 ### Changed
 
-- Styled the Maestro footer label with the LSP violet (`borderMuted`) and rendered usage pricing with the darker true-green success status color.
+- Styled the full Maestro footer status with the LSP violet (`borderMuted`), replaced its diamond separator with `:`, and rendered usage pricing with the darker true-green success status color.
 - Defaulted MCP UI viewing to suppressed mode in Recode while preserving explicit `MCP_UI_VIEWER` overrides such as `browser` and `glimpse`.
 - Gave post-edit and post-write LSP diagnostics a 1.2-second inline budget, a shared 12-second completion deadline, and a structured severity-aware result card.
 - Minified standalone Recode and Maestro bundles while preserving function names, reducing binary size and command startup overhead without degrading diagnostic stack traces.

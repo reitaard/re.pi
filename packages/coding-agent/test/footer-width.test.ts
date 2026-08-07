@@ -145,8 +145,8 @@ describe("FooterComponent width handling", () => {
 
 		const renderedStatusLine = footer.render(120)[2];
 		const statusLine = stripAnsi(renderedStatusLine);
-		expect(renderedStatusLine).toContain(theme.fg("borderMuted", "MAESTRO"));
-		expect(statusLine).toContain("MAESTRO ◆ 2 live / 1 input");
+		expect(renderedStatusLine).toContain(theme.fg("borderMuted", "MAESTRO: 2 live / 1 input"));
+		expect(statusLine).toContain("MAESTRO: 2 live / 1 input");
 		expect(statusLine).toContain("extension-ready");
 	});
 

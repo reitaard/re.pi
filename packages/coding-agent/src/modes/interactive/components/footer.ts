@@ -269,9 +269,10 @@ export class FooterComponent implements Component {
 				}),
 			].map(([key, text]) => {
 				const formatted = formatFooterStatus(key, text);
-				return key === "maestro" && formatted.startsWith("MAESTRO")
-					? theme.fg("borderMuted", "MAESTRO") + formatted.slice("MAESTRO".length)
-					: formatted;
+				if (key === "maestro" && formatted.startsWith("MAESTRO")) {
+					return theme.fg("borderMuted", formatted.replace(" ◆ ", ": "));
+				}
+				return formatted;
 			});
 			const statusLine = sortedStatuses.join("  ");
 			lines.push(truncateToWidth(statusLine, width, theme.fg("footer", "...")));
