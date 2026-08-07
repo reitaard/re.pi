@@ -19,6 +19,22 @@ function createTempDir(): string {
 	return tempDir;
 }
 
+const fileSymlinksSupported = (() => {
+	if (process.platform !== "win32") return true;
+	const probeDir = mkdtempSync(join(tmpdir(), "pi-file-symlink-probe-"));
+	try {
+		const target = join(probeDir, "target");
+		const link = join(probeDir, "link");
+		writeFileSync(target, "probe");
+		symlinkSync(target, link);
+		return true;
+	} catch {
+		return false;
+	} finally {
+		rmSync(probeDir, { recursive: true, force: true });
+	}
+})();
+
 describe("canonicalizePath", () => {
 	it("returns the real path for a regular file", () => {
 		const dir = createTempDir();
@@ -27,7 +43,7 @@ describe("canonicalizePath", () => {
 		expect(canonicalizePath(file)).toBe(realpathSync(file));
 	});
 
-	it.skipIf(process.platform === "win32")("resolves symlinks to their targets", () => {
+	it.skipIf(!fileSymlinksSupported)("resolves symlinks to their targets", () => {
 		const dir = createTempDir();
 		const target = join(dir, "target.txt");
 		const link = join(dir, "link.txt");
@@ -51,7 +67,7 @@ describe("canonicalizePath", () => {
 		expect(canonicalizePath(nonexistent)).toBe(nonexistent);
 	});
 
-	it.skipIf(process.platform === "win32")("falls back to the raw path for a dangling symlink", () => {
+	it.skipIf(!fileSymlinksSupported)("falls back to the raw path for a dangling symlink", () => {
 		const dir = createTempDir();
 		const target = join(dir, "target.txt");
 		const link = join(dir, "link.txt");

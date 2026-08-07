@@ -17,6 +17,22 @@ const resolveFdPath = (): string | null => {
 	return firstLine ? firstLine.trim() : null;
 };
 
+const fileSymlinksSupported = (() => {
+	if (process.platform !== "win32") return true;
+	const probeDir = mkdtempSync(join(tmpdir(), "pi-file-symlink-probe-"));
+	try {
+		const target = join(probeDir, "target");
+		const link = join(probeDir, "link");
+		writeFileSync(target, "probe");
+		symlinkSync(target, link);
+		return true;
+	} catch {
+		return false;
+	} finally {
+		rmSync(probeDir, { recursive: true, force: true });
+	}
+})();
+
 type FolderStructure = {
 	dirs?: string[];
 	files?: Record<string, string>;
@@ -340,7 +356,7 @@ describe("CombinedAutocompleteProvider", () => {
 			assert.ok(values.includes("@symlinked_dir/"));
 		});
 
-		test("returns symlinked files without requiring type l", { skip: process.platform === "win32" }, async () => {
+		test("returns symlinked files without requiring type l", { skip: !fileSymlinksSupported }, async () => {
 			setupFolder(baseDir, {
 				files: {
 					"original.txt": "content",

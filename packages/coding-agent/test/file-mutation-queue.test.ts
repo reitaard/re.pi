@@ -1,3 +1,4 @@
+import { symlinkSync as createFileSymlink, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { access, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,6 +22,22 @@ function createDeferred(): { promise: Promise<void>; resolve: () => void } {
 async function resolvesWithin(promise: Promise<unknown>, ms: number): Promise<boolean> {
 	return Promise.race([promise.then(() => true), delay(ms).then(() => false)]);
 }
+
+const fileSymlinksSupported = (() => {
+	if (process.platform !== "win32") return true;
+	const probeDir = mkdtempSync(join(tmpdir(), "pi-file-symlink-probe-"));
+	try {
+		const target = join(probeDir, "target");
+		const link = join(probeDir, "link");
+		writeFileSync(target, "probe");
+		createFileSymlink(target, link);
+		return true;
+	} catch {
+		return false;
+	} finally {
+		rmSync(probeDir, { recursive: true, force: true });
+	}
+})();
 
 const tempDirs: string[] = [];
 
@@ -74,7 +91,7 @@ describe("withFileMutationQueue", () => {
 		expect(order.indexOf("b:start")).toBeLessThan(order.indexOf("a:end"));
 	});
 
-	it.skipIf(process.platform === "win32")("uses the same queue for symlink aliases", async () => {
+	it.skipIf(!fileSymlinksSupported)("uses the same queue for symlink aliases", async () => {
 		const dir = await createTempDir();
 		const targetPath = join(dir, "target.txt");
 		const symlinkPath = join(dir, "alias.txt");
