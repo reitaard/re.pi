@@ -1,0 +1,75 @@
+{
+  "name": "Spotipy download webhook probe",
+  "workflowId": "aPffZXf2zrk4Ak7M",
+  "status": "validated",
+  "active": false,
+  "nodes": [
+    {
+      "id": "probe-webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 0],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "spotipy-download-probe",
+        "responseMode": "lastNode"
+      }
+    },
+    {
+      "id": "prepare-probe-request",
+      "name": "Prepare probe request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const body = $json.body ?? $json;\nconst spotifyUrl = String(body.spotifyUrl ?? body.query ?? '').trim();\n\nif (!/^https:\\/\\/open\\.spotify\\.com\\/(?:intl-[^/]+\\/)?track\\/[A-Za-z0-9]+(?:\\?[^\\s]*)?$/i.test(spotifyUrl)) {\n  throw new Error('spotifyUrl must be a Spotify track URL');\n}\n\nconst jobId = `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;\nconst payload = {\n  jobId,\n  operation: 'download',\n  queries: [spotifyUrl],\n  spotifyUrl,\n  format: 'mp3',\n  delivery: 'none',\n  options: {\n    audioProviders: [],\n    lyricsProviders: ['genius', 'musixmatch', 'azlyrics', 'synced'],\n    overwrite: 'force',\n    restrict: 'strict',\n    threads: 4,\n    maxRetries: 3,\n    maxFilenameLength: 180,\n  },\n};\n\nreturn {\n  json: {\n    jobId,\n    payloadB64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64'),\n  },\n};"
+      }
+    },
+    {
+      "id": "dispatch-probe",
+      "name": "Run spotDL probe",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [480, 0],
+      "parameters": {
+        "authentication": "privateKey",
+        "resource": "command",
+        "operation": "execute",
+        "command": "=sudo /usr/local/sbin/spotdl-dispatch '{{ $json.payloadB64 }}' || true",
+        "cwd": "/"
+      },
+      "credentials": {
+        "sshPrivateKey": {
+          "name": "vps-spotdl"
+        }
+      }
+    },
+    {
+      "id": "summarize-probe",
+      "name": "Summarize probe result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 0],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const raw = String($json.stdout ?? '').trim();\nlet result;\n\ntry {\n  result = JSON.parse(raw);\n} catch {\n  throw new Error(String($json.stderr ?? raw ?? 'Runner returned invalid JSON').slice(0, 1000));\n}\n\nconst tracks = Array.isArray(result.tracks) ? result.tracks : [];\nconst files = Array.isArray(result.files) ? result.files : [];\n\nreturn {\n  json: {\n    status: String(result.status ?? 'failed'),\n    jobId: String(result.jobId ?? ''),\n    exitCode: Number(result.exitCode ?? 1),\n    fileCount: files.length,\n    track: tracks[0] ? {\n      title: String(tracks[0].title ?? ''),\n      artist: String(tracks[0].artist ?? ''),\n      lyricsAvailable: Boolean(String(tracks[0].lyrics ?? '').trim()),\n    } : null,\n    error: result.error ? String(result.error).slice(0, 500) : null,\n  },\n};"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Prepare probe request", "type": "main", "index": 0}]]
+    },
+    "Prepare probe request": {
+      "main": [[{"node": "Run spotDL probe", "type": "main", "index": 0}]]
+    },
+    "Run spotDL probe": {
+      "main": [[{"node": "Summarize probe result", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

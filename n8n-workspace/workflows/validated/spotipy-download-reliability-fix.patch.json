@@ -1,0 +1,50 @@
+{
+  "workflowId": "8Sviq9pjDE3GFdnF",
+  "workflowName": "Spotipy Music Companion v3",
+  "revisionDate": "2026-08-05",
+  "status": "validated",
+  "n8nValidation": {
+    "enabledNodes": 27,
+    "validConnections": 30,
+    "expressions": 39,
+    "errors": 0,
+    "warnings": 0
+  },
+  "changes": [
+    {
+      "area": "Normalize music request",
+      "change": "Add resolveDirectTrack intent and direct Spotify track ID extraction."
+    },
+    {
+      "area": "Route request",
+      "change": "Add a direct-track branch."
+    },
+    {
+      "area": "Get direct Spotify track",
+      "change": "Use the official Spotify OAuth credential to retrieve direct track metadata."
+    },
+    {
+      "area": "Resolve Spotify download",
+      "change": "Pass metadataQuery containing artist and title to the VPS runner."
+    },
+    {
+      "area": "Telegram progress UX",
+      "change": "Send a temporary stage-based status reply for download intents, update it after dispatch, and delete it after success or failure; percentages are omitted until the runner exposes live progress; the audio remains a fresh message."
+    },
+    {
+      "area": "VPS runner",
+      "change": "Use spotDL text metadata lookup when metadataQuery is present, avoiding SpotipyFree client-token lookup while retaining metadata and lyrics."
+    },
+    {
+      "area": "VPS YouTube worker",
+      "change": "Replace stale hardcoded Redis IP with the retakt-redis service name in the compose environment and healthcheck."
+    }
+  ],
+  "verification": {
+    "telegramMessageId": 330,
+    "telegramChatId": "5759927190",
+    "oneTimeWebhookExecution": "79429",
+    "runnerDryRun": "passed",
+    "containerHealth": ["retakt-spotdl-worker: healthy", "retakt-yt-worker: healthy"]
+  }
+}

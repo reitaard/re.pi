@@ -1,0 +1,48 @@
+{
+  "workflowId": "8Sviq9pjDE3GFdnF",
+  "workflowName": "Spotipy Music Companion v3",
+  "status": "validated-and-deployed",
+  "revision": "2026-08-05",
+  "intent": "Deliver each downloaded audio track as one Telegram message with an expandable, timestamp-free lyric caption; remove start, completion, and separate lyric messages.",
+  "operations": [
+    {
+      "type": "updateNode",
+      "nodeName": "Prepare audio deliveries",
+      "updates": {
+        "parameters.jsCode": "See sibling Markdown artifact for the complete caption formatter."
+      }
+    },
+    {
+      "type": "rewireConnection",
+      "source": "Route request",
+      "from": "Send download started",
+      "to": "Run spotDL dispatch",
+      "case": 2
+    },
+    {
+      "type": "rewireConnection",
+      "source": "Send audio",
+      "from": "Prepare automatic rich lyrics",
+      "to": "Aggregate delivered audio"
+    },
+    {
+      "type": "removeNode",
+      "nodeName": "Send download started"
+    },
+    {
+      "type": "removeNode",
+      "nodeName": "Send completion"
+    },
+    {
+      "type": "removeNode",
+      "nodeName": "Prepare automatic rich lyrics"
+    },
+    {
+      "type": "removeNode",
+      "nodeName": "Send automatic rich lyrics"
+    },
+    {
+      "type": "cleanStaleConnections"
+    }
+  ]
+}
