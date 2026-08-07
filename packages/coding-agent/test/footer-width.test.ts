@@ -160,8 +160,22 @@ describe("FooterComponent width handling", () => {
 				]),
 		});
 
-		const statusLine = stripAnsi(footer.render(120)[2]);
+		const renderedStatusLine = footer.render(120)[2];
+		const statusLine = stripAnsi(renderedStatusLine);
 		expect(statusLine).toBe("Kioku (記憶): project  MCP: 0/1");
+		expect(renderedStatusLine).toContain(theme.fg("warning", "MCP: 0/1"));
+	});
+
+	it("uses the core warning color while any MCP server is connecting", () => {
+		const footer = new FooterComponent(createSession({ sessionName: "" }), {
+			...createFooterData(1),
+			getExtensionStatuses: () =>
+				new Map([["mcp", "\u001b[38;5;214mMCP: connecting to community-server...\u001b[39m"]]),
+		});
+
+		const renderedStatusLine = footer.render(120)[2];
+		expect(renderedStatusLine).toContain(theme.fg("warning", "MCP: connecting to community-server..."));
+		expect(stripAnsi(renderedStatusLine)).toContain("MCP: connecting to community-server...");
 	});
 
 	it("normalizes the MCP adapter default to compact status", () => {

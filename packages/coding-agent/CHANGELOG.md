@@ -50,6 +50,7 @@
 - Debounced repeated MCP UI intents, blocked UI-triggered turns after Escape cancellation until a new manual prompt, and bounded queued-message rendering so event floods cannot make Recode unresponsive.
 - Normalized placeholder arguments for `get_search_content` so finder calls remain compatible with strict third-party pagination validation.
 - Enforced the compact, icon-free MCP footer status and kept Kioku before MCP even when MCP configuration is absent.
+- Rendered MCP footer status with the core Tokyo Night warning color instead of extension-provided ANSI colors.
 - Kept direct worker-chat steering inside the active worker conversation, serialized queued turns, and kept cancellation from falling through to Aizen.
 - Kept input submitted during long-running worker or extension commands visible in the queued-message area instead of making it disappear until the command completes.
 - Preserved AgentHarness tool-result and branch-summary usage in persisted session statistics.

@@ -16,7 +16,8 @@ Portable instructions for working with the Creator on Recode + n8n. This file is
 
 ## Environment
 
-- n8n/VPS public address: `https://n8.retakt.cc`
+- n8n public address: `https://n8.retakt.cc`
+- VPS SSH address: `root@157.173.127.84` (use this, not the obsolete VPS IP)
 - Active workflow: `Spotipy Fast Mode`
 - Active workflow ID: `HYRePy4buI9l4SEk`
 - Spotify data sub-workflow: `Spotipy Music Data Tool v1` (`2nRzAS4MCCB8uKMw`)

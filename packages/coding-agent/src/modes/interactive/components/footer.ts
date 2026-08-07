@@ -47,7 +47,8 @@ function formatFooterStatus(key: string, text: string): string {
 		}
 	}
 
-	return sanitized === visible ? formatted : sanitized.replace(visible, formatted);
+	// MCP extensions may provide ANSI colors, but the core footer owns this status color.
+	return theme.fg("warning", formatted);
 }
 
 /**
