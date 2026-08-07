@@ -1,0 +1,123 @@
+{
+  "name": "Spotipy one-time Odoriko delivery",
+  "status": "draft",
+  "revisionDate": "2026-08-05",
+  "purpose": "One-time controlled webhook test that downloads Vaundy - Odoriko through the spotDL VPS and sends exactly one Telegram audio message to the Creator's chat.",
+  "requiredCredentials": ["vps-spotdl (SSH private key)", "spotipy (Telegram API)"],
+  "validation": {"workflow": "passed", "manualExecution": "passed", "executionId": "79429", "remoteJobId": "79429-1785949101653", "deployed": "one-time only; deleted after successful delivery"},
+  "nodes": [
+    {
+      "id": "odoriko-webhook",
+      "name": "Odoriko test webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 0],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "spotipy-odoriko-send-once",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "odoriko-payload",
+      "name": "Build Odoriko payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const chatId = '5759927190';\nconst messageId = 0;\nconst executionId = String($execution.id ?? Date.now());\nconst timestamp = Date.now();\nconst metadataQuery = 'Vaundy - Odoriko';\nconst payload = {\n  jobId: `${executionId}-${timestamp}`,\n  chatId,\n  requestId: `one-time-${executionId}-${timestamp}`,\n  operation: 'download',\n  queries: [metadataQuery],\n  metadataQuery,\n  spotifyUrl: null,\n  format: 'mp3',\n  delivery: 'individual',\n  options: {\n    audioProviders: [],\n    lyricsProviders: ['genius', 'musixmatch', 'azlyrics', 'synced'],\n    overwrite: 'skip',\n    restrict: 'strict',\n    threads: 4,\n    maxRetries: 3,\n    maxFilenameLength: 180,\n    preload: false,\n    printErrors: true,\n    sponsorBlock: false,\n    playlistNumbering: false,\n    playlistRetainTrackCover: false,\n    scanForSongs: false,\n    fetchAlbums: false,\n    addUnavailable: false,\n    generateLrc: false,\n    forceUpdateMetadata: false,\n    syncWithoutDeleting: false,\n    redownload: false,\n    skipAlbumArt: false,\n    skipExplicit: false,\n    onlyVerifiedResults: false,\n    dontFilterResults: false,\n    ytmData: false,\n    createSkipFile: false,\n    respectSkipFile: false,\n    syncRemoveLrc: false,\n  },\n};\n\nreturn {\n  chatId,\n  messageId,\n  payloadB64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64'),\n};"
+      }
+    },
+    {
+      "id": "odoriko-dispatch",
+      "name": "Run Odoriko spotDL dispatch",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [480, 0],
+      "parameters": {
+        "authentication": "privateKey",
+        "resource": "command",
+        "operation": "execute",
+        "command": "=sudo /usr/local/sbin/spotdl-dispatch '{{ $json.payloadB64 }}' || true",
+        "cwd": "/"
+      },
+      "credentials": {"sshPrivateKey": {"id": "8VMMJ6p9e3vXXkzu", "name": "vps-spotdl"}}
+    },
+    {
+      "id": "odoriko-parse",
+      "name": "Parse Odoriko result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 0],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const raw = String($json.stdout ?? '').trim();\nlet result;\ntry {\n  result = JSON.parse(raw);\n} catch {\n  throw new Error(String($json.stderr ?? '').trim() || raw || 'The downloader returned invalid JSON');\n}\n\nif (!Array.isArray(result.files) || result.files.length === 0 || !result.jobDirectory) {\n  throw new Error(String(result.error ?? result.message ?? 'Odoriko produced no audio file'));\n}\n\nconst track = result.tracks?.[0] ?? {};\nreturn {\n  chatId: '5759927190',\n  jobDirectory: String(result.jobDirectory),\n  remotePath: String(result.files[0]),\n  fileName: String(track.fileName ?? result.files[0].split('/').pop() ?? 'Odoriko.mp3'),\n  title: String(track.title ?? 'Odoriko'),\n  artist: String(track.artist ?? 'Vaundy'),\n  album: String(track.album ?? ''),\n  duration: Number(track.duration) || 0,\n  lyrics: String(track.lyrics ?? ''),\n};"
+      }
+    },
+    {
+      "id": "odoriko-download",
+      "name": "Download Odoriko audio",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [960, 0],
+      "parameters": {
+        "authentication": "privateKey",
+        "resource": "file",
+        "operation": "download",
+        "path": "={{ $json.remotePath }}",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "credentials": {"sshPrivateKey": {"id": "8VMMJ6p9e3vXXkzu", "name": "vps-spotdl"}}
+    },
+    {
+      "id": "odoriko-send",
+      "name": "Send Odoriko audio",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1200, 0],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendAudio",
+        "chatId": "={{ $json.chatId }}",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {
+          "caption": "={{ '<code>' + $json.title + '</code> — <b>' + $json.artist + '</b>' + ($json.album ? '\\n<b><i>' + $json.album + '</i></b>' : '') + ($json.lyrics ? '\\n<blockquote expandable>' + $json.lyrics.replace(/\\r/g, '').replace(/\\[(?:\\d{1,2}:)?\\d{1,2}:\\d{2}(?:[.:]\\d{1,3})?\\]\\s*/g, '').slice(0, 850) + '</blockquote>' : '') }}",
+          "duration": "={{ $json.duration }}",
+          "fileName": "={{ $json.fileName }}",
+          "parse_mode": "HTML",
+          "performer": "={{ $json.artist }}",
+          "title": "={{ $json.title }}"
+        }
+      },
+      "credentials": {"telegramApi": {"id": "8NUCuE7c3O4KAjHc", "name": "spotipy"}}
+    },
+    {
+      "id": "odoriko-cleanup",
+      "name": "Cleanup Odoriko job",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [1440, 0],
+      "parameters": {
+        "authentication": "privateKey",
+        "resource": "command",
+        "operation": "execute",
+        "command": "=sudo -n /usr/local/sbin/spotdl-cleanup '{{ $json.jobDirectory }}'",
+        "cwd": "/"
+      },
+      "credentials": {"sshPrivateKey": {"id": "8VMMJ6p9e3vXXkzu", "name": "vps-spotdl"}}
+    }
+  ],
+  "connections": {
+    "Odoriko test webhook": {"main": [[{"node": "Build Odoriko payload", "type": "main", "index": 0}]]},
+    "Build Odoriko payload": {"main": [[{"node": "Run Odoriko spotDL dispatch", "type": "main", "index": 0}]]},
+    "Run Odoriko spotDL dispatch": {"main": [[{"node": "Parse Odoriko result", "type": "main", "index": 0}]]},
+    "Parse Odoriko result": {"main": [[{"node": "Download Odoriko audio", "type": "main", "index": 0}]]},
+    "Download Odoriko audio": {"main": [[{"node": "Send Odoriko audio", "type": "main", "index": 0}]]},
+    "Send Odoriko audio": {"main": [[{"node": "Cleanup Odoriko job", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"}
+}

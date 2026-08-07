@@ -1,0 +1,79 @@
+{
+  "workflowId": "8Sviq9pjDE3GFdnF",
+  "workflowName": "Spotipy Music Companion v3",
+  "baseVersionId": "43a5971a-dcfd-4d71-b50c-be5f880af1ae",
+  "revisionDate": "2026-08-05",
+  "status": "validated-and-deployed",
+  "intent": "Automatically reply to each delivered audio message with the existing rich lyric presentation when spotDL returned lyrics. Preserve /lyrics for a later, separate feature.",
+  "operations": [
+    {
+      "type": "patchNodeField",
+      "nodeName": "Prepare audio deliveries",
+      "fieldPath": "parameters.jsCode",
+      "patches": [
+        {
+          "find": "  const spotifyUrl = String(track.spotifyUrl ?? '');\n  const caption",
+          "replace": "  const spotifyUrl = String(track.spotifyUrl ?? '');\n  const lyricsSynced = /^\\s*\\[(?:\\d{1,2}:)?\\d{1,2}:\\d{2}(?:[.:]\\d{1,3})?\\]/m.test(lyrics);\n  const caption"
+        },
+        {
+          "find": "  return { chatId: envelope.chatId, remotePath, fileName, title, artist, duration, caption };",
+          "replace": "  return {\n    chatId: envelope.chatId,\n    remotePath,\n    fileName,\n    title,\n    artist,\n    duration,\n    lyrics,\n    lyricsSynced,\n    caption,\n  };"
+        }
+      ]
+    },
+    {
+      "type": "addNode",
+      "node": {
+        "id": "prepare-auto-rich-lyrics",
+        "name": "Prepare automatic rich lyrics",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [960, 272],
+        "onError": "continueRegularOutput",
+        "parameters": {
+          "jsCode": "const audioResponses = $input.all();\nconst preparedTracks = $('Prepare audio deliveries').all();\n\nfunction escapeRichHtml(value) {\n  return String(value ?? '')\n    .replaceAll('&', '&amp;')\n    .replaceAll('<', '&lt;')\n    .replaceAll('>', '&gt;')\n    .replaceAll('\\\"', '&quot;')\n    .replaceAll(\"'\", '&apos;');\n}\n\nfunction formatLyricLine(line) {\n  const escaped = escapeRichHtml(line);\n\n  return escaped.replace(\n    /^(\\[(?:\\d{1,2}:)?\\d{1,2}:\\d{2}(?:[.:]\\d{1,3})?\\])/,\n    '<b>$1</b>',\n  );\n}\n\nfunction splitLyrics(rawLyrics) {\n  const lyrics = String(rawLyrics ?? '')\n    .replace(/\\r/g, '')\n    .trim();\n\n  if (!lyrics) {\n    return [];\n  }\n\n  const maximumFormattedLength = 26000;\n  const chunks = [];\n  let current = '';\n\n  function formattedLength(value) {\n    return value\n      .split('\\n')\n      .map(formatLyricLine)\n      .join('<br>')\n      .length;\n  }\n\n  function pushCurrent() {\n    if (current.trim()) {\n      chunks.push(current.trim());\n      current = '';\n    }\n  }\n\n  for (const line of lyrics.split('\\n')) {\n    const candidate = current ? `${current}\\n${line}` : line;\n\n    if (formattedLength(candidate) <= maximumFormattedLength) {\n      current = candidate;\n      continue;\n    }\n\n    pushCurrent();\n\n    if (formattedLength(line) <= maximumFormattedLength) {\n      current = line;\n      continue;\n    }\n\n    for (const word of line.split(/\\s+/)) {\n      const wordCandidate = current ? `${current} ${word}` : word;\n\n      if (formattedLength(wordCandidate) <= maximumFormattedLength) {\n        current = wordCandidate;\n      } else {\n        pushCurrent();\n        current = word;\n      }\n    }\n  }\n\n  pushCurrent();\n  return chunks;\n}\n\nfunction encodePayload(payload) {\n  return Buffer\n    .from(JSON.stringify(payload), 'utf8')\n    .toString('base64');\n}\n\nconst output = [];\n\nfor (let index = 0; index < audioResponses.length; index += 1) {\n  const response = audioResponses[index]?.json ?? {};\n  const prepared = preparedTracks[index]?.json ?? {};\n  const audioMessageId =\n    response?.result?.message_id ??\n    response?.message_id ??\n    null;\n  const chunks = splitLyrics(prepared.lyrics);\n\n  if (!chunks.length || !audioMessageId) {\n    output.push({\n      json: {\n        jobDirectory: prepared.jobDirectory ?? '',\n        richPayloadB64: '',\n      },\n    });\n    continue;\n  }\n\n  chunks.forEach((chunk, chunkIndex) => {\n    const title = escapeRichHtml(prepared.title || 'Unknown track');\n    const artist = prepared.artist\n      ? `<p><i>${escapeRichHtml(prepared.artist)}</i></p>`\n      : '';\n    const part = chunks.length > 1\n      ? ` · Part ${chunkIndex + 1}/${chunks.length}`\n      : '';\n    const formattedLyrics = chunk\n      .split('\\n')\n      .map(formatLyricLine)\n      .join('<br>');\n    const summary = prepared.lyricsSynced\n      ? `Synced lyrics${part}`\n      : `Lyrics${part}`;\n    const html = [\n      `<h3>🎼 ${title}</h3>`,\n      artist,\n      '<details>',\n      `<summary>${escapeRichHtml(summary)}</summary>`,\n      `<blockquote>${formattedLyrics}</blockquote>`,\n      '</details>',\n      `<footer>Spotipy · ${escapeRichHtml(summary)}</footer>`,\n    ]\n      .filter(Boolean)\n      .join('');\n\n    output.push({\n      json: {\n        jobDirectory: prepared.jobDirectory ?? '',\n        richPayloadB64: encodePayload({\n          chatId: String(prepared.chatId),\n          html,\n          replyToMessageId: audioMessageId,\n        }),\n      },\n    });\n  });\n}\n\nreturn output;"
+        }
+      }
+    },
+    {
+      "type": "addNode",
+      "node": {
+        "id": "send-auto-rich-lyrics",
+        "name": "Send automatic rich lyrics",
+        "type": "n8n-nodes-base.ssh",
+        "typeVersion": 1,
+        "position": [1184, 272],
+        "onError": "continueRegularOutput",
+        "parameters": {
+          "authentication": "privateKey",
+          "resource": "command",
+          "operation": "execute",
+          "command": "=if [ -n '{{ $json.richPayloadB64 }}' ]; then sudo /usr/local/sbin/spotipy-send-rich '{{ $json.richPayloadB64 }}'; else printf 'lyrics-skipped\\n'; fi",
+          "cwd": "/"
+        },
+        "credentials": {
+          "sshPrivateKey": {
+            "id": "8VMMJ6p9e3vXXkzu",
+            "name": "vps-spotdl"
+          }
+        }
+      }
+    },
+    {
+      "type": "rewireConnection",
+      "source": "Send audio",
+      "from": "Aggregate delivered audio",
+      "to": "Prepare automatic rich lyrics"
+    },
+    {
+      "type": "addConnection",
+      "source": "Prepare automatic rich lyrics",
+      "target": "Send automatic rich lyrics"
+    },
+    {
+      "type": "addConnection",
+      "source": "Send automatic rich lyrics",
+      "target": "Aggregate delivered audio"
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "workflowId": "8Sviq9pjDE3GFdnF",
+  "workflowName": "Spotipy Music Companion v3",
+  "revisionDate": "2026-08-05",
+  "status": "validated-and-deployed",
+  "intent": "Resolve free-text /song requests through Spotify before dispatch so metadata and lyrics are retained.",
+  "operations": [
+    {
+      "type": "patchNodeField",
+      "nodeName": "Normalize music request",
+      "fieldPath": "parameters.jsCode",
+      "summary": "Route /song and /spotify requests without Spotify URLs to resolveDownload."
+    },
+    {
+      "type": "updateNode",
+      "nodeName": "Route request",
+      "summary": "Add the Resolve download switch output while retaining rules mode and extra fallback."
+    },
+    {
+      "type": "addNode",
+      "nodeName": "Search Spotify for download",
+      "summary": "Search Spotify tracks for free-text download requests."
+    },
+    {
+      "type": "addNode",
+      "nodeName": "Resolve Spotify download",
+      "summary": "Select the first verified Spotify result and rewrite the dispatch payload URL."
+    },
+    {
+      "type": "addNode",
+      "nodeName": "Spotify match found?",
+      "summary": "Dispatch resolved tracks or send the existing failure reply when no result exists."
+    },
+    {
+      "type": "patchNodeField",
+      "nodeName": "Run spotDL dispatch",
+      "fieldPath": "parameters.command",
+      "summary": "Prefer the resolved payload while preserving the direct-download payload."
+    },
+    {
+      "type": "patchNodeField",
+      "nodeName": "Prepare audio deliveries",
+      "fieldPath": "parameters.jsCode",
+      "summary": "Add metadata-based Facts inside the existing expandable caption without using an LLM."
+    }
+  ]
+}

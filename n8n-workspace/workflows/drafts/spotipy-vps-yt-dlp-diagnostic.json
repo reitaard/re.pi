@@ -1,0 +1,49 @@
+{
+  "name": "Spotipy VPS yt-dlp diagnostic (read-only)",
+  "status": "draft",
+  "revisionDate": "2026-08-05",
+  "purpose": "Read-only inspection of the VPS spotDL/yt-dlp wrapper and cookie-rotation configuration. It does not download media, alter cookies, restart services, or modify VPS files.",
+  "requiredCredentials": ["vps-spotdl (SSH private key)"],
+  "validation": {
+    "workflow": "passed",
+    "manualExecution": "passed"
+  },
+  "nodes": [
+    {
+      "id": "diagnostic-webhook",
+      "name": "Diagnostic webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 0],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "spotipy-vps-diagnostic-read-only",
+        "responseMode": "lastNode"
+      }
+    },
+    {
+      "id": "vps-read-only-diagnostics",
+      "name": "VPS read-only diagnostics",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [240, 0],
+      "parameters": {
+        "authentication": "privateKey",
+        "resource": "command",
+        "operation": "execute",
+        "command": "Read-only command; the live draft workflow currently contains the exact diagnostic command.",
+        "options": {}
+      },
+      "credentials": {
+        "sshPrivateKey": {
+          "name": "vps-spotdl"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Diagnostic webhook": {
+      "main": [[{"node": "VPS read-only diagnostics", "type": "main", "index": 0}]]
+    }
+  }
+}

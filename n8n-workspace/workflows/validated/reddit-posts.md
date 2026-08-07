@@ -1,12 +1,12 @@
 # reddit-posts
 
-- **Status:** published, active (`634a6cc8-cb67-4622-8688-7bddbf5f7fdc`)
+- **Status:** published, active (`53532db0-b305-4b07-bad3-12c9d0982f1b`)
 - **Revision date:** 2026-08-04
 - **Instance workflow ID:** `xrBvjuvnojsvrTTF`
 
 ## Purpose
 
-Run an hourly Reddit intelligence scan. The workflow reads enabled subreddit sources, fetches new posts only, ignores comments, removes already-seen posts, uses the configured local model to keep only actionable intelligence, stores useful results, and sends a concise Telegram digest.
+Run a Reddit intelligence scan every 30 minutes. The workflow reads enabled subreddit sources, fetches new posts only, ignores comments, removes already-seen posts, uses Qwen 3.5 4B with deterministic post-quality guards to keep actionable intelligence, stores useful results, and sends a formatted Telegram digest.
 
 ## Source configuration
 
@@ -25,7 +25,7 @@ Configured sources currently include:
 
 ## Schedule and behavior
 
-- Schedule: every hour at minute 0
+- Schedule: every 30 minutes, UTC
 - Sort: `new`
 - Timeframe: `hour`
 - Apify comment mode: `none`
@@ -34,11 +34,13 @@ Configured sources currently include:
 - CrackWatch release override: a `voices38` post with release metadata such as NFO, platform, size, version, or similar is retained as a release even when the local model misclassifies it
 - AI relevance threshold: `relevance_score >= 0.70`
 - Digest limit: five highest-scoring useful posts
-- Telegram formatting: plain text with labeled fields and separators; no emoji
+- Telegram formatting: HTML-safe bold headings, italic summaries, monospace metadata, clickable title/subreddit/source links, labeled fields, and separators; no emoji
+- Telegram digest and error delivery failures stop the workflow instead of being masked
+- Qwen 3.5 4B output is normalized to the allowed categories and obvious advice, opinion, speculation, placeholder, and low-information posts are rejected deterministically after model evaluation
 - No Telegram message is sent when there are no new useful posts
 - Apify and AI failures use a separate Telegram error route
 
-Posts are recorded as seen before AI analysis so overlapping hourly runs cannot process the same post repeatedly.
+Posts are recorded as seen before AI analysis so overlapping runs cannot process the same post repeatedly.
 
 ## Stored results
 
@@ -54,15 +56,21 @@ Credential values are not included in this artifact.
 
 ## Validation
 
-- Runtime validation on 2026-08-04: 0 errors, 0 warnings before this revision.
-- Published revision on 2026-08-04: added deterministic CrackWatch release handling, corrected the ignored-post expression syntax, and replaced the Telegram body with labeled plain-text sections and separators.
+- Strict runtime validation on 2026-08-04: 0 errors, 4 advisory warnings.
+- Historical Gemma evaluation on executions `79312` and `79313`: 18/18 model responses were returned and parsed, but the 4B model showed a relevance bias. Several ordinary questions, opinions, speculation, and low-information posts were incorrectly marked useful; it also emitted non-schema labels such as `benchmarks` and `model_update`, and misstated an 8% RTX 5090 result as an 8% P40 result when the post reported 4% on the P40.
+- The previously configured `qwen3.5-4b-claude-4.6-opus-reasoning-distilled-v2` returned `404 model not found` in execution `79318`; the exact model ID from the LM Studio list is `qwen3.5:4b`.
+- Exact-model availability test: execution `79320` completed successfully in 60.981 seconds and returned `QWEN35_4B_ONLINE` through the active Cue webhook.
+- Isolated benchmark workflow `N5OkesrJsi8n02BC` tested the same representative post: `qwen3.5:4b` returned valid JSON and the correct relevant decision in execution `79326` (119.582 seconds); Gemma returned an empty response and invalid schema in execution `79327` (244.618 seconds). This is an initial screen, not a final quality ranking.
+- Historical `qwen3:8b` execution `79287` completed the model node but produced empty AI-agent output. Other listed models still require the same controlled test.
+- Production status: `reddit-posts` now uses `qwen3.5:4b` through `LM studio`. Runtime validation passed with 0 errors and 1 existing expression warning. The isolated benchmark remains inactive.
+- Published revision on 2026-08-04: added a stricter classifier prompt, deterministic low-signal guards, category normalization, exact-number instructions, HTML-formatted Telegram output, clickable title/subreddit/source links, and ellipsis-based truncation below Telegram's message limit.
+- Controlled execution `79314` completed successfully, fetched 25 Reddit posts, and found no new unseen posts; the Telegram node was not reached because deduplication returned zero items.
 - Local parser smoke test: `Crimson.Desert-voices38` is promoted to `relevant: true`, `category: release`, and `relevance_score: 0.9` when the model returns an irrelevant decision.
 - Validated topology: 23 nodes, 22 connections, one schedule trigger.
 - The live source table contains two enabled rows: `LocalLLaMA` and `CrackWatch`.
-- No production execution was run after this revision; the published workflow remains active for the next hourly schedule.
 
 ## Limitations
 
 - The workflow depends on Apify, LM Studio, Telegram, and the named n8n credentials.
-- A post marked seen before a model failure will not be analyzed again on a later hourly scan. The previously missed `Crimson.Desert-voices38` post is already marked seen and will not be resent automatically.
+- A post marked seen before a model failure will not be analyzed again on a later 30-minute scan. The previously missed `Crimson.Desert-voices38` post is already marked seen and will not be resent automatically.
 - Source configuration is stored remotely in n8n Data Tables rather than a local workspace file.

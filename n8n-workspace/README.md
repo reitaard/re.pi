@@ -23,7 +23,13 @@ Set these variables in the Recode process environment:
 - `N8N_API_URL` — n8n base URL, without `/api/v1`
 - `N8N_API_KEY` — n8n API key for the community server's management tools
 
-The values are never stored in this workspace.
+The values are never stored in this workspace. To update the official MCP token securely on Windows, run:
+
+```powershell
+.\set-n8n-mcp-token.ps1
+```
+
+The script prompts without echoing the token, stores it as a Windows User environment variable, and updates the current PowerShell session. Restart Recode after running it.
 
 Start new Recode sessions from this directory when the task is n8n-only. All workflow artifacts should remain inside this directory.
 

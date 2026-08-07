@@ -1,0 +1,343 @@
+{
+  "name": "Spotipy webhook test - Acid Ghost caption edit",
+  "nodes": [
+    {
+      "id": "odoriko-webhook",
+      "name": "Acid Ghost test webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "spotipy-odoriko-send-once",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "16c69feb-4220-4ab0-b4a5-2859b22f8c87"
+    },
+    {
+      "id": "odoriko-payload",
+      "name": "Build Acid Ghost payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const chatId = '5759927190';\nconst executionId = String($execution.id ?? Date.now());\nconst timestamp = Date.now();\nconst payload = {\n  jobId: executionId + '-' + timestamp,\n  chatId,\n  requestId: 'acid-ghost-test-' + executionId + '-' + timestamp,\n  operation: 'download',\n  queries: ['Acid Ghost - Epilogue'],\n  metadataQuery: 'Acid Ghost - Epilogue',\n  spotifyUrl: 'https://open.spotify.com/track/7ChiNLVsA0UYz7iHoZdLKA',\n  format: 'm4a',\n  delivery: 'individual',\n  options: {\n    audioProviders: [],\n    lyricsProviders: ['musixmatch', 'genius', 'synced', 'azlyrics'],\n    overwrite: 'skip', restrict: 'strict', threads: 4, maxRetries: 2,\n    skipAlbumArt: true, generateLrc: false, preload: false,\n  },\n};\nreturn { chatId, payloadB64: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64') };"
+      }
+    },
+    {
+      "id": "odoriko-dispatch",
+      "name": "Run Acid Ghost spotDL dispatch",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "authentication": "privateKey",
+        "resource": "command",
+        "operation": "execute",
+        "command": "=sudo /usr/local/sbin/spotdl-dispatch '{{ $json.payloadB64 }}' || true",
+        "cwd": "/"
+      },
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "8VMMJ6p9e3vXXkzu",
+          "name": "vps-spotdl"
+        }
+      }
+    },
+    {
+      "id": "odoriko-parse",
+      "name": "Parse Acid Ghost result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const raw = String($json.stdout ?? '').trim();\nlet result;\ntry { result = JSON.parse(raw); } catch { throw new Error(String($json.stderr ?? '').trim() || raw || 'The downloader returned invalid JSON'); }\nif (!Array.isArray(result.files) || result.files.length !== 1 || !result.jobDirectory) throw new Error(String(result.error ?? result.message ?? 'Epilogue produced no audio file'));\nconst track = result.tracks?.[0] ?? {};\nreturn {\n  chatId: '5759927190', jobDirectory: String(result.jobDirectory), remotePath: String(result.files[0]),\n  fileName: String(track.fileName ?? 'Acid_Ghost-Epilogue.m4a'), title: String(track.title ?? 'Epilogue'),\n  artist: String(track.artist ?? 'Acid Ghost'), album: String(track.album ?? \"It's Just Music\"),\n  year: String(track.year ?? '2024'), trackNumber: Number(track.trackNumber) || 1,\n  trackCount: Number(track.trackCount) || 9, publisher: String(track.publisher ?? 'Acid Ghost Inc.'),\n  spotifyUrl: String(track.spotifyUrl ?? 'https://open.spotify.com/track/7ChiNLVsA0UYz7iHoZdLKA'),\n  duration: Number(track.duration) || 0,\n};"
+      }
+    },
+    {
+      "id": "odoriko-download",
+      "name": "Download Acid Ghost audio",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "authentication": "privateKey",
+        "resource": "file",
+        "operation": "download",
+        "path": "={{ $json.remotePath }}",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "8VMMJ6p9e3vXXkzu",
+          "name": "vps-spotdl"
+        }
+      }
+    },
+    {
+      "id": "odoriko-send",
+      "name": "Send Acid Ghost audio",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendAudio",
+        "chatId": "={{ $json.chatId }}",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {
+          "caption": "={{ '<code>' + $json.title + '</code>' }}",
+          "duration": "={{ $json.duration }}",
+          "fileName": "={{ $json.fileName }}",
+          "parse_mode": "HTML",
+          "performer": "={{ $json.artist }}",
+          "title": "={{ $json.title }}"
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "8NUCuE7c3O4KAjHc",
+          "name": "spotipy"
+        }
+      },
+      "webhookId": "fdd557ba-d129-49ab-bdcf-9d9276e4d2b1"
+    },
+    {
+      "id": "odoriko-cleanup",
+      "name": "Cleanup Acid Ghost job",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        0
+      ],
+      "parameters": {
+        "authentication": "privateKey",
+        "resource": "command",
+        "operation": "execute",
+        "command": "=sudo -n /usr/local/sbin/spotdl-cleanup '{{ $('Parse Acid Ghost result').first().json.jobDirectory }}'",
+        "cwd": "/"
+      },
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "8VMMJ6p9e3vXXkzu",
+          "name": "vps-spotdl"
+        }
+      }
+    },
+    {
+      "id": "acid-ghost-lrclib",
+      "name": "Build Acid Ghost LRCLIB payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const track = $('Parse Acid Ghost result').first().json;\nreturn { payloadB64: Buffer.from(JSON.stringify(track), 'utf8').toString('base64') };"
+      }
+    },
+    {
+      "id": "acid-ghost-caption",
+      "name": "Build Acid Ghost caption",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "let lookup;\ntry { lookup = JSON.parse(String($json.stdout ?? '').trim()); } catch { lookup = {}; }\nconst base = $('Parse Acid Ghost result').first().json;\nconst track = { ...base, lyrics: String(lookup.lyrics ?? '') };\nconst CAPTION_LIMIT = 1024;\nconst escapeHtml = (value) => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');\nconst escapeAttribute = (value) => escapeHtml(value).replaceAll('\"', '&quot;').replaceAll(\"'\", '&apos;');\nconst lyrics = String(track.lyrics ?? '').replace(/\\r/g, '').replace(/\\[(?:\\d{1,2}:)?\\d{1,2}:\\d{2}(?:[.:]\\d{1,3})?\\]\\s*/g, '').trim();\nconst header = '<code>' + escapeHtml(track.title) + '</code> — <b>' + escapeHtml(track.artist) + '</b>\\n<b><i>' + escapeHtml(track.album) + '</i></b>\\n<i>[' + escapeHtml(track.year) + ' · ' + track.trackNumber + '/' + track.trackCount + ' · ' + escapeHtml(track.publisher) + ']</i>';\nconst footer = '<a href=\"' + escapeAttribute(track.spotifyUrl) + '\">Spotify</a>';\nconst available = Math.max(0, CAPTION_LIMIT - header.replace(/<[^>]+>/g, '').length - footer.length - 4);\nconst clipped = lyrics.length > available ? lyrics.slice(0, Math.max(0, available - 2)).trimEnd() + '…' : lyrics;\nreturn { ...track, caption: header + (clipped ? '\\n<blockquote expandable>' + escapeHtml(clipped) + '</blockquote>' : '') + '\\n' + footer };"
+      }
+    },
+    {
+      "id": "acid-ghost-edit-caption",
+      "name": "Edit Acid Ghost audio caption",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2160,
+        0
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "editMessageCaption",
+        "messageType": "message",
+        "chatId": "={{ $json.chatId }}",
+        "messageId": "={{ $('Send Acid Ghost audio').first().json.result?.message_id }}",
+        "additionalFields": {},
+        "text": "={{ $json.caption }}"
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "8NUCuE7c3O4KAjHc",
+          "name": "spotipy"
+        }
+      }
+    },
+    {
+      "id": "acid-ghost-lrclib-ssh",
+      "name": "Run Acid Ghost LRCLIB lookup",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        1680,
+        0
+      ],
+      "parameters": {
+        "authentication": "privateKey",
+        "resource": "command",
+        "operation": "execute",
+        "command": "=sudo -n /usr/local/sbin/lrclib-lookup '{{ $json.payloadB64 }}' || true",
+        "cwd": "/"
+      },
+      "credentials": {
+        "sshPrivateKey": {
+          "id": "8VMMJ6p9e3vXXkzu",
+          "name": "vps-spotdl"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Acid Ghost test webhook": {
+      "main": [
+        [
+          {
+            "node": "Build Acid Ghost payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Acid Ghost payload": {
+      "main": [
+        [
+          {
+            "node": "Run Acid Ghost spotDL dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Acid Ghost spotDL dispatch": {
+      "main": [
+        [
+          {
+            "node": "Parse Acid Ghost result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Acid Ghost result": {
+      "main": [
+        [
+          {
+            "node": "Download Acid Ghost audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Acid Ghost audio": {
+      "main": [
+        [
+          {
+            "node": "Send Acid Ghost audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Acid Ghost audio": {
+      "main": [
+        [
+          {
+            "node": "Build Acid Ghost LRCLIB payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Acid Ghost caption": {
+      "main": [
+        [
+          {
+            "node": "Edit Acid Ghost audio caption",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Acid Ghost audio caption": {
+      "main": [
+        [
+          {
+            "node": "Cleanup Acid Ghost job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Acid Ghost LRCLIB payload": {
+      "main": [
+        [
+          {
+            "node": "Run Acid Ghost LRCLIB lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Acid Ghost LRCLIB lookup": {
+      "main": [
+        [
+          {
+            "node": "Build Acid Ghost caption",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

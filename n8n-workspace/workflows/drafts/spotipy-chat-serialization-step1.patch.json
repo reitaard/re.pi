@@ -1,0 +1,18 @@
+{
+  "workflowId": "HYRePy4buI9l4SEk",
+  "status": "redis-serialization-gate-passed",
+  "revisionDate": "2026-08-06",
+  "purpose": "Redis-backed Chat-mode serialization. Preserve Fast mode and add Telegram update deduplication, one active Chat LLM run per chat, one pending/latest message slot, priority cancel routing, and completion-driven pending processing.",
+  "validation": {
+    "partialUpdateDryRun": "passed",
+    "workflowValidation": "62 enabled nodes, 66 valid connections, 85 expressions, zero invalid connections; one known pre-existing schema error for custom editMessageCaption remains",
+    "knownError": "Custom instance Telegram editMessageCaption is rejected by the community schema but remains intentionally preserved for runtime behavior",
+    "productionWebhook": "passed; execution 79573 delivered /chat confirmation",
+    "chatDelivery": "passed; execution 79574 completed a Chat turn and delivered a Telegram reply",
+    "redisSmoke": "passed; execution 79585 acquired and released the Redis lock and delivered a Chat reply",
+    "serialization": "passed; execution 79601 received Redis admission busy and queued the latest message while 79600 completed the first reply and processed the pending message through the dedicated chain",
+    "cancel": "passed; execution 79611 atomically marked cancellation and delivered the cancel response while 79608 released the lock without processing the queued message",
+    "redisCleanup": "passed; per-chat lock, pending, and cancel keys were absent after both regression tests"
+  },
+  "next": "Begin Phase 1 Spotify facts and candidate selection; keep Chat downloads disabled until that phase passes"
+}
