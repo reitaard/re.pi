@@ -1,5 +1,6 @@
 import type { ChildProcessByStdio } from "node:child_process";
-import type { Readable } from "node:stream";
+import { EventEmitter } from "node:events";
+import { PassThrough, type Readable } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
 import { spawnProcess, waitForChildProcess } from "../../../src/utils/child-process.ts";
 
@@ -17,11 +18,54 @@ import { spawnProcess, waitForChildProcess } from "../../../src/utils/child-proc
  * reading while a genuinely idle held-open handle still releases after the
  * grace elapses. Both behaviours are covered below.
  */
-describe.skipIf(process.platform === "win32")("issue #5303 bash output truncation past exit", () => {
+function createSyntheticWindowsProcess(
+	headOutput: string,
+	delayedOutput: string | undefined,
+): ChildProcessByStdio<null, Readable, Readable> {
+	const child = new EventEmitter() as ChildProcessByStdio<null, Readable, Readable>;
+	const stdout = new PassThrough();
+	const stderr = new PassThrough();
+	Object.assign(child, { pid: undefined, stdout, stderr });
+
+	setTimeout(() => {
+		stdout.write(headOutput);
+		child.emit("exit", 0);
+		if (delayedOutput) {
+			let tick = 1;
+			const timer = setInterval(() => {
+				stdout.write(tick === 6 ? delayedOutput : `TICK${tick}\\n`);
+				if (tick === 6) {
+					clearInterval(timer);
+					stdout.end();
+					stderr.end();
+					child.emit("close", 0);
+				}
+				tick += 1;
+			}, 50);
+		}
+	}, 0);
+	return child;
+}
+
+function spawnRegressionProcess(
+	command: string,
+	headOutput: string,
+	delayedOutput?: string,
+): ChildProcessByStdio<null, Readable, Readable> {
+	if (process.platform === "win32") {
+		return createSyntheticWindowsProcess(headOutput, delayedOutput);
+	}
+	return spawnProcess("/bin/sh", ["-c", command], {
+		stdio: ["ignore", "pipe", "pipe"],
+		detached: true,
+	}) as ChildProcessByStdio<null, Readable, Readable>;
+}
+
+describe("issue #5303 bash output truncation past exit", () => {
 	let child: ChildProcessByStdio<null, Readable, Readable> | undefined;
 
 	afterEach(() => {
-		if (child?.pid) {
+		if (child?.pid && process.platform !== "win32") {
 			try {
 				process.kill(-child.pid, "SIGKILL");
 			} catch {
@@ -35,10 +79,7 @@ describe.skipIf(process.platform === "win32")("issue #5303 bash output truncatio
 		// The shell exits immediately, but a backgrounded subshell keeps the stdout
 		// pipe open and emits ticks every 50ms, the last well past the 100ms grace.
 		const command = 'printf "HEAD\\n"; ( for i in 1 2 3 4 5 6; do sleep 0.05; printf "TICK$i\\n"; done ) &';
-		child = spawnProcess("/bin/sh", ["-c", command], {
-			stdio: ["ignore", "pipe", "pipe"],
-			detached: true,
-		}) as ChildProcessByStdio<null, Readable, Readable>;
+		child = spawnRegressionProcess(command, "HEAD\\n", "TICK6\\n");
 
 		let output = "";
 		child.stdout.on("data", (chunk: Buffer) => {
@@ -57,10 +98,7 @@ describe.skipIf(process.platform === "win32")("issue #5303 bash output truncatio
 		// keeps it open for a long time without writing. `close` never fires, so we
 		// must still release via the idle grace rather than hang on the open handle.
 		const command = 'printf "DONE\\n"; ( sleep 30 ) &';
-		child = spawnProcess("/bin/sh", ["-c", command], {
-			stdio: ["ignore", "pipe", "pipe"],
-			detached: true,
-		}) as ChildProcessByStdio<null, Readable, Readable>;
+		child = spawnRegressionProcess(command, "DONE\\n");
 
 		let output = "";
 		child.stdout.on("data", (chunk: Buffer) => {

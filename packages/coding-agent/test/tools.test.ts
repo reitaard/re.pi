@@ -1,3 +1,4 @@
+import { spawnSync } from "child_process";
 import { applyPatch } from "diff";
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
@@ -23,6 +24,24 @@ const bashTool = createBashTool(process.cwd());
 const grepTool = createGrepTool(process.cwd());
 const findTool = createFindTool(process.cwd());
 const lsTool = createLsTool(process.cwd());
+
+function setWindowsFileAccess(filePath: string, right: "R" | "W"): void {
+	const account = spawnSync("whoami.exe", [], { encoding: "utf8" }).stdout.trim();
+	if (!account) {
+		throw new Error("Unable to resolve the current Windows account for ACL test");
+	}
+	const result = spawnSync("icacls.exe", [filePath, "/deny", `${account}:(${right})`], {
+		encoding: "utf8",
+		stdio: ["ignore", "pipe", "pipe"],
+	});
+	if (result.status !== 0) {
+		throw new Error(`Unable to deny ${right} access for ACL test: ${result.stderr.trim()}`);
+	}
+}
+
+function resetWindowsFileAccess(filePath: string): void {
+	spawnSync("icacls.exe", [filePath, "/reset"], { stdio: "ignore" });
+}
 
 // Helper to extract text from content blocks
 function getTextOutput(result: any): string {
@@ -421,17 +440,29 @@ describe("Coding Agent Tools", () => {
 			expect(readFileSync(testFile, "utf-8")).toBe(originalContent);
 		});
 
-		it.skipIf(process.platform === "win32")("should include EACCES for read-only files", async () => {
+		it("should include the permission error code for read-only files", async () => {
 			const testFile = join(testDir, "edit-readonly.txt");
 			writeFileSync(testFile, "hello\n");
-			chmodSync(testFile, 0o444);
+			if (process.platform === "win32") {
+				setWindowsFileAccess(testFile, "W");
+			} else {
+				chmodSync(testFile, 0o444);
+			}
 
-			await expect(
-				editTool.execute("test-call-14", {
-					path: testFile,
-					edits: [{ oldText: "hello", newText: "world" }],
-				}),
-			).rejects.toThrow(`Could not edit file: ${testFile}. Error code: EACCES.`);
+			try {
+				await expect(
+					editTool.execute("test-call-14", {
+						path: testFile,
+						edits: [{ oldText: "hello", newText: "world" }],
+					}),
+				).rejects.toThrow(
+					process.platform === "win32"
+						? /(?:EACCES|EPERM)/
+						: `Could not edit file: ${testFile}. Error code: EACCES.`,
+				);
+			} finally {
+				if (process.platform === "win32") resetWindowsFileAccess(testFile);
+			}
 		});
 
 		it("should include the original error message for unknown edit access errors", async () => {
@@ -460,18 +491,29 @@ describe("Coding Agent Tools", () => {
 			expect(result).toEqual({ error: `Could not edit file: ${missingFile}. Error code: ENOENT.` });
 		});
 
-		it.skipIf(process.platform === "win32")(
-			"should include EACCES in diff preview for unreadable files",
-			async () => {
-				const unreadableFile = join(testDir, "unreadable-preview.txt");
-				writeFileSync(unreadableFile, "hello\n");
+		it("should include the permission error in diff preview for unreadable files", async () => {
+			const unreadableFile = join(testDir, "unreadable-preview.txt");
+			writeFileSync(unreadableFile, "hello\n");
+			if (process.platform === "win32") {
+				setWindowsFileAccess(unreadableFile, "R");
+			} else {
 				chmodSync(unreadableFile, 0o222);
+			}
 
+			try {
 				const result = await computeEditsDiff(unreadableFile, [{ oldText: "hello", newText: "world" }], testDir);
 
-				expect(result).toEqual({ error: `Could not edit file: ${unreadableFile}. Error code: EACCES.` });
-			},
-		);
+				if (process.platform === "win32") {
+					if (!("error" in result)) throw new Error("Expected a permission error result");
+					expect(result.error).toContain(unreadableFile);
+					expect(result.error).toMatch(/(?:EACCES|EPERM)/);
+				} else {
+					expect(result).toEqual({ error: `Could not edit file: ${unreadableFile}. Error code: EACCES.` });
+				}
+			} finally {
+				if (process.platform === "win32") resetWindowsFileAccess(unreadableFile);
+			}
+		});
 	});
 
 	describe("bash tool", () => {
