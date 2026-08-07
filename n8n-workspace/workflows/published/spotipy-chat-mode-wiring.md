@@ -1,46 +1,57 @@
 # Spotipy Chat Mode Wiring
 
 - Revision date: 2026-08-07
-- Status: published and active; permanent Chat route connection pending
+- Status: published and active
+- Active version: `b16004ec-aefe-470f-ad40-ea4618754ba0`
 - Workflow: `Spotipy Fast Mode` (`HYRePy4buI9l4SEk`)
-- Purpose: Maintain the `/chat` branch with grounded Spotify facts and candidate selection while preserving the existing Fast download flow.
+- Purpose: Grounded Chat facts with candidate selection while reusing the validated Fast download path.
 
-## Scope
+## Routing
 
 - `/chat` enables per-Telegram-chat Chat mode.
-- Chat messages perform a read-only Spotify catalog lookup through `Spotipy Music Data Tool v1` (`2nRzAS4MCCB8uKMw`) before the agent runs.
-- Natural Chat requests are reduced to a concrete Spotify subject when possible (for example, `Suggest a Radiohead track...` searches `Radiohead`).
-- Track-like searches return up to five grounded Spotify candidates as Telegram inline buttons; no track is treated as selected until the user taps one.
-- A selected `chatselect:<SpotifyID>` callback performs an exact read-only Spotify track lookup before the agent runs.
-- Telegram message, caption, command, and callback parsing is normalized and preserves callback metadata for routing and replies.
-- The normalized lookup evidence is injected into the AI Agent system context.
-- Contextual follow-ups use the 15-message conversation memory as primary context and discard unrelated fresh catalog results.
-- The existing `qwen3:8b` LM Studio model and Simple Memory node are reused.
-- Memory is keyed by Telegram `chatId` and limited to 15 messages.
-- Replies use Telegram HTML formatting, short 1–4-line responses, bounded links, and disabled link previews.
-- Chat output sanitizes common Markdown bold/italic/code markers into safe Telegram HTML before delivery.
-- The agent may use the connected Spotify search tool for an additional lookup when the prefetch evidence is insufficient.
-- Redis-backed per-chat admission serializes normal messages and selection callbacks, with a bounded latest pending message, cancellation, and update deduplication.
-- Chat mode has no download, playback, lyrics, or other expanded tools.
-- `/fast` disables Chat mode and restores the existing Fast branch.
+- `Route Fast input` output 2 (`Chat message`) connects to `Build Redis Chat admission`.
+- Chat messages perform a read-only Spotify lookup before the agent runs.
+- Track-like searches return up to five Spotify candidates as `chatselect:<SpotifyID>` buttons.
+- A selected Spotify track is verified exactly and produces a grounded facts reply.
+- `Route Chat download search` prevents ordinary Chat replies from entering the download path.
+- Selected-track replies enter `Send Chat loading songs` and `Build Chat YouTube search request`.
+- The existing Fast `Search ten YouTube results`, `Format Fast results`, and `Send Fast results` nodes return `chatfast:<YouTubeID>:<SpotifyID>` buttons.
+- `chatfast` callbacks enter the existing Fast `quick` download path, including transfer, audio delivery, LRCLIB/fallback lyrics, metadata, and cleanup.
+- `Route Fast Chat completion` releases the Chat Redis lock after the shared Fast chain completes.
+- `/fast` disables Chat mode and restores the normal Fast branch.
 
-## Required credentials
+## Grounding and serialization
 
-- Existing Telegram credential: `spotipy`
-- Existing Spotify credential is used only by the read-only data sub-workflow: `laxya`
-- Existing OpenAI-compatible model credential: `LM studio`
+- The normalized Spotify evidence is injected into the AI Agent system context.
+- Exact-track facts are limited to catalog evidence.
+- Chat memory is keyed by Telegram `chatId` and limited to 15 messages.
+- Redis admission serializes normal messages and Spotify candidate callbacks.
+- Chat download lock state is carried to the later `chatfast` callback through workflow static data with bounded expiry.
+- Update deduplication and pending-message handling remain enabled.
 
-## Validation
+## Credentials
 
-- The Spotify data sub-workflow passed strict validation with zero errors and was published first.
-- `Spotipy Fast Mode` is active with 83 enabled nodes, 91 valid connections, and 132 validated expressions; strict validation reports 0 errors.
-- The active graph contains the `/chat` route, grounded Spotify prefetch and exact-track lookup, candidate callbacks, LM Studio agent, 15-message chatId-keyed memory, bounded Spotify tool, Redis serialization, Telegram reply paths, Fast downloads, LRCLIB-first lyrics, fallback lyrics dispatch, rich HTML captions, and independent cleanup paths.
-- The existing Fast branch remains enabled and connected.
-- Runtime executions **79704** and **79708** showed that normal Chat messages reach `Route Fast input` but its output 2 (`Chat message`) is not connected to `Build Redis Chat admission`.
-- Temporary Webhook diagnostic execution **79728** added that connection only for testing, successfully used the `spotipy` credential to send Telegram message **508**, and completed Redis cleanup. The temporary Webhook, payload node, route connection, and reply override were removed; the Telegram Trigger was restored and republished.
-- The permanent Chat-message connection remains the required follow-up before normal Telegram Chat mode is considered fixed.
-- Final active workflow record is the deployed `HYRePy4buI9l4SEk` revision validated on 2026-08-07.
-- Controlled webhook tests succeeded for mode switching, Spotify lookup, concise HTML reply delivery, candidate buttons, Redis completion, audio delivery, lyrics enrichment, and cleanup (including final Chat execution `79675`).
-- The final Chat selection used a synthetic callback update through the webhook, but Telegram audio and lyrics delivery, metadata, LRCLIB lookup, Redis completion, and remote cleanup all completed successfully. A real client button tap remains optional additional evidence.
-- The Spotify data sub-workflow passed an independent pin-data test (`79504`) and returned normalized evidence.
-- The community validator still reports the pre-existing custom `editMessageCaption` operation as unsupported by its stock schema; n8n runtime publication succeeded with the instance's custom Telegram node support.
+- Telegram: `spotipy`
+- Spotify data workflow credential: `laxya`
+- OpenAI-compatible model credential: `LM studio`
+- VPS SSH credential: `vps-spotdl`
+
+Only credential names are recorded here. No secret values are stored.
+
+## Validation and evidence
+
+Strict validation of the final active workflow reports:
+
+- 71 enabled nodes
+- 79 valid connections
+- 117 validated expressions
+- 0 errors
+
+Live evidence:
+
+- Execution **79748**: ordinary Chat reply completed through Redis without starting YouTube search.
+- Execution **79751**: Spotify candidate selection sent grounded facts and returned ten Fast-compatible YouTube choices.
+- Execution **79753**: `chatfast` selection downloaded and delivered a 9.01 MB M4A as Telegram audio message **521**, delivered LRCLIB-enriched lyrics as message **522**, and completed remote and Redis cleanup.
+- Temporary webhook nodes used during isolation testing were removed before the final publish.
+
+The obsolete direct Spotify Chat-download nodes are not part of the active graph. The Chat download feature remains enabled through the shared Fast route.

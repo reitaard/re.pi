@@ -1,57 +1,40 @@
 # Spotipy workflow implementation checkpoint
 
-**Status:** Fast implementation complete; Chat route wiring defect remains
+**Status:** Fast and Chat routes active; Chat downloads reuse the validated Fast route
 **Revision date:** 2026-08-07
 
 ## Active workflow
 
 - **Name:** `Spotipy Fast Mode`
 - **n8n workflow ID:** `HYRePy4buI9l4SEk`
+- **Active version:** `b16004ec-aefe-470f-ad40-ea4618754ba0`
 - **Active:** yes
-- **Nodes:** 83 enabled
-- **Strict validation:** 0 errors, 91 valid connections, 132 expressions validated
+- **Nodes:** 71 enabled
+- **Strict validation:** 0 errors, 79 valid connections, 117 expressions validated
 
-The active workflow is now the single maintained Telegram music path. Fast and Chat routes share the proven VPS download/enrichment pattern while retaining their distinct request and selection behavior.
+## Implemented behavior
 
-## Completed implementation
-
-- Fast and Chat routes deliver M4A audio.
-- Spotify title, artist, album, release year, track position, duration, and link are retained where available.
 - Fast text requests resolve through Spotify before YouTube source selection.
-- LRCLIB is queried first for lyrics.
-- The spotDL `quickLyrics` fallback is retained for LRCLIB misses.
-- Lyrics timestamps are removed and long lyrics are bounded inside Telegram-safe expandable HTML.
-- Audio and lyric cleanup are separate so one cleanup failure does not prevent the other path.
-- Unsupported Telegram caption-edit operations were replaced with reliable rich-message sends.
-- Fast selection payloads use unique numeric timestamp job ids with a per-execution sequence suffix.
+- Chat messages reach the Chat admission path from `Route Fast input` output 2.
+- Chat track-like requests return Spotify candidate buttons and exact-track grounded facts.
+- Selected Chat tracks use the Fast YouTube source-search and `chatfast` callback route.
+- Chat downloads reuse Fast `quick` download, M4A transfer, Telegram audio delivery, metadata, LRCLIB-first lyrics, fallback lyrics, and independent cleanup.
+- Ordinary Chat replies are conditionally separated from the Chat download search path and complete Redis normally.
+- Numeric timestamp job IDs use a per-execution sequence suffix.
 - No credential values or secret exports are stored in workflow artifacts.
+- The old direct Spotify Chat-download chain was removed after it reproduced `No audio files were produced`.
 
 ## Final live evidence
 
-- **Execution 79694:** Fast Spotify resolution for `Glory Box`; ten YouTube choices returned with cached Spotify metadata.
-- **Execution 79695:** selected Fast download succeeded. Telegram audio message **502** contained `Glory Box`, performer `Portishead`, duration `308`, and `Portishead - Glory Box.m4a`. Telegram lyrics message **503** contained LRCLIB lyrics, `[1994 · 11/11]`, expandable formatting, and the Spotify link. Both cleanup nodes succeeded and the VPS job directory was removed.
-- **Execution 79675:** final Chat selection succeeded. Audio message **495** and lyrics message **496** were delivered with matching metadata and LRCLIB lyrics; Redis state and the remote job directory were cleared.
-- **Execution 79704:** the real message `Tell me something about the song purple rain` parsed as Chat input but stopped at `Route Fast input` because the Chat-message output was disconnected.
-- **Execution 79708:** the real `hey` message stopped at the same disconnected output.
-- **Execution 79728:** a temporary Webhook and temporary Chat-route connection reached the full Chat path, sent Telegram message **508** through `spotipy`, and completed Redis cleanup. All temporary nodes, wiring, and reply override were removed; the Telegram Trigger was restored and republished.
+- **Execution 79748:** ordinary Chat lookup and grounded reply completed with Redis cleanup; no YouTube search was started.
+- **Execution 79751:** selected Spotify candidate sent grounded facts and returned ten YouTube `chatfast` choices.
+- **Execution 79753:** selected `8SbUC-UaAxE` downloaded successfully through Fast `quick`; Telegram audio message **521** contained a 9.01 MB `Guns N' Roses - November Rain.m4a`, and lyrics message **522** contained metadata, expandable LRCLIB lyrics, and the Spotify link. Fast job cleanup and Chat Redis completion succeeded.
+- Temporary webhook executions were used for isolation only. The temporary webhook and payload nodes were removed before final publication.
 
 ## Remaining work
 
-- Permanently connect `Route Fast input` output 2 (`Chat message`) to `Build Redis Chat admission`.
-- Rerun the exact Telegram Chat question with the normal reply-to setting after that connection is permanent.
-- Keep the temporary Webhook diagnostic out of the active workflow.
-
-The synthetic `/fast` toggle probe **79693** failed only because its fabricated source Telegram message id did not exist and the confirmation node attempted to reply to it. This is a test-fixture limitation, not a production-path failure.
+No workflow-routing work remains for this change. Repository artifact synchronization, secret checks, explicit staging, commit, and Topic 58 workspace copying remain separate maintenance steps.
 
 ## Legacy workflow status
 
-`Spotipy Music Companion v3` (`8Sviq9pjDE3GFdnF`) is inactive and preserved for rollback. The obsolete async submit/delivery and legacy downloader workflows remain preserved inactive where applicable.
-
-## Remaining work
-
-No remaining technical validation is required for the current optimization. Future work is optional and Creator-directed:
-
-- Add or redesign a dedicated `/lyrics` command.
-- Run a real button tap from Telegram client UI if a non-synthetic callback proof is desired.
-- Add more fallback-language/provider test cases.
-- Remove or archive legacy workflows only with explicit approval.
+`Spotipy Music Companion v3` (`8Sviq9pjDE3GFdnF`) is inactive and preserved for rollback. Legacy downloader workflows remain preserved inactive where applicable.
