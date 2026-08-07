@@ -44,6 +44,7 @@ plans/
 .pi/hf-sessions/
 .pi/hf-sessions-backup/
 /.pi/memory/
+n8n-workspace/.pi/memory/
 collect.sh
 CONTRIBUTING.md
 SECURITY.md
