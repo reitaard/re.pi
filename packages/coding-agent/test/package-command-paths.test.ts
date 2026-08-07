@@ -561,7 +561,7 @@ else fs.writeFileSync(${JSON.stringify(recordPath)},JSON.stringify(args));
 	});
 
 	it("refuses to replace Recode with a foreign package from the update service", async () => {
-		const activePackageName = "@reitaard/repi-coding-agent";
+		const activePackageName = "@mariozechner/pi-coding-agent";
 		vi.stubGlobal(
 			"fetch",
 			vi.fn(async () => Response.json({ packageName: activePackageName, version: getNewerPatchVersion() })),
@@ -635,7 +635,7 @@ else fs.writeFileSync(${JSON.stringify(recordPath)},JSON.stringify(args));
 	});
 
 	it("does not let --force bypass Recode package identity checks", async () => {
-		const activePackageName = "@reitaard/repi-coding-agent";
+		const activePackageName = "@mariozechner/pi-coding-agent";
 		vi.stubGlobal(
 			"fetch",
 			vi.fn(async () => Response.json({ packageName: activePackageName, version: getNewerPatchVersion() })),

@@ -3,6 +3,7 @@ import { Container, Text } from "@reitaard/repi-tui";
 import { describe, expect, it, vi } from "vitest";
 import type { AgentSessionEvent } from "../../../src/core/agent-session.ts";
 import type { ExtensionUIContext } from "../../../src/core/extensions/index.ts";
+import { LifecycleReadiness } from "../../../src/core/lifecycle-readiness.ts";
 import { InteractiveMode } from "../../../src/modes/interactive/interactive-mode.ts";
 import { initTheme, type Theme, theme } from "../../../src/modes/interactive/theme/theme.ts";
 import { createHarness } from "../harness.ts";
@@ -78,6 +79,7 @@ type LoadedResourcesContext = {
 
 type RebindContext = {
 	options: { aizenRuntime?: boolean };
+	runtimeHost: { readiness: LifecycleReadiness };
 	unsubscribe?: () => void;
 	stopRemoteSessionMonitoring: () => void;
 	applyRuntimeSettings: () => void;
@@ -301,6 +303,7 @@ describe("regression #5943: session_start transient UI", () => {
 		try {
 			const context: RebindContext = {
 				options: {},
+				runtimeHost: { readiness: new LifecycleReadiness() },
 				stopRemoteSessionMonitoring: () => {},
 				applyRuntimeSettings: () => events.push("apply"),
 				renderCurrentSessionState: () => events.push("render"),
@@ -345,6 +348,7 @@ describe("regression #5943: session_start transient UI", () => {
 		try {
 			const context: RebindContext = {
 				options: {},
+				runtimeHost: { readiness: new LifecycleReadiness() },
 				stopRemoteSessionMonitoring: () => {},
 				applyRuntimeSettings: () => {},
 				renderCurrentSessionState: () => events.push("render"),
@@ -400,6 +404,7 @@ describe("regression #5943: session_start transient UI", () => {
 		try {
 			const context: RebindContext = {
 				options: {},
+				runtimeHost: { readiness: new LifecycleReadiness() },
 				stopRemoteSessionMonitoring: () => {},
 				applyRuntimeSettings: () => {},
 				renderCurrentSessionState: () => events.push("render"),

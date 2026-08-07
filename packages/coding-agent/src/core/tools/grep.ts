@@ -160,9 +160,11 @@ export function createGrepToolDefinition(
 					return;
 				}
 				let settled = false;
+				let onAbort: (() => void) | undefined;
 				const settle = (fn: () => void) => {
 					if (!settled) {
 						settled = true;
+						if (onAbort) signal?.removeEventListener("abort", onAbort);
 						fn();
 					}
 				};
@@ -170,12 +172,20 @@ export function createGrepToolDefinition(
 				(async () => {
 					try {
 						const rgPath = await ensureTool("rg", true);
+						if (signal?.aborted) {
+							settle(() => reject(new Error("Operation aborted")));
+							return;
+						}
 						if (!rgPath) {
 							settle(() => reject(new Error("ripgrep (rg) is not available and could not be downloaded")));
 							return;
 						}
 
 						const searchPath = resolveToCwd(searchDir || ".", cwd);
+						if (signal?.aborted) {
+							settle(() => reject(new Error("Operation aborted")));
+							return;
+						}
 						const ops = customOps ?? defaultGrepOperations;
 						let isDirectory: boolean;
 						try {
@@ -190,7 +200,7 @@ export function createGrepToolDefinition(
 						const formatPath = (filePath: string): string => {
 							if (isDirectory) {
 								const relative = path.relative(searchPath, filePath);
-								if (relative && !relative.startsWith("..")) {
+								if (relative && relative !== ".." && !relative.startsWith(`..${path.sep}`)) {
 									return relative.replace(/\\/g, "/");
 								}
 							}
@@ -218,6 +228,10 @@ export function createGrepToolDefinition(
 						if (glob) args.push("--glob", glob);
 						args.push("--", pattern, searchPath);
 
+						if (signal?.aborted) {
+							settle(() => reject(new Error("Operation aborted")));
+							return;
+						}
 						const child = spawn(rgPath, args, { stdio: ["ignore", "pipe", "pipe"] });
 						const rl = createInterface({ input: child.stdout });
 						let stderr = "";
@@ -230,7 +244,6 @@ export function createGrepToolDefinition(
 
 						const cleanup = () => {
 							rl.close();
-							signal?.removeEventListener("abort", onAbort);
 						};
 						const stopChild = (dueToLimit = false) => {
 							if (!child.killed) {
@@ -238,7 +251,7 @@ export function createGrepToolDefinition(
 								child.kill();
 							}
 						};
-						const onAbort = () => {
+						onAbort = () => {
 							aborted = true;
 							stopChild();
 						};
@@ -315,6 +328,10 @@ export function createGrepToolDefinition(
 
 							// Format matches after streaming finishes so custom readFile() backends can be async.
 							for (const match of matches) {
+								if (aborted || signal?.aborted) {
+									settle(() => reject(new Error("Operation aborted")));
+									return;
+								}
 								if (contextValue === 0 && match.lineText !== undefined) {
 									const relativePath = formatPath(match.filePath);
 									const sanitized = match.lineText
@@ -326,10 +343,18 @@ export function createGrepToolDefinition(
 									outputLines.push(`${relativePath}:${match.lineNumber}: ${truncatedText}`);
 								} else {
 									const block = await formatBlock(match.filePath, match.lineNumber);
+									if (aborted || signal?.aborted) {
+										settle(() => reject(new Error("Operation aborted")));
+										return;
+									}
 									outputLines.push(...block);
 								}
 							}
 
+							if (aborted || signal?.aborted) {
+								settle(() => reject(new Error("Operation aborted")));
+								return;
+							}
 							const rawOutput = outputLines.join("\n");
 							// Apply byte truncation. There is no line limit here because the match limit already capped rows.
 							const truncation = truncateHead(rawOutput, { maxLines: Number.MAX_SAFE_INTEGER });

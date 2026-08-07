@@ -14,6 +14,9 @@ type SubmitContext = {
 		prompt: (text: string, options?: unknown) => Promise<void>;
 	};
 	flushPendingBashComponents: () => void;
+	isExtensionCommand: (text: string) => boolean;
+	updatePendingMessagesDisplay: () => void;
+	ui: { requestRender: (force?: boolean) => void };
 	onInputCallback?: (text: string) => void;
 	pendingUserInputs: string[];
 };
@@ -21,6 +24,8 @@ type SubmitContext = {
 type InputContext = {
 	onInputCallback?: (text: string) => void;
 	pendingUserInputs: string[];
+	updatePendingMessagesDisplay: () => void;
+	ui: { requestRender: (force?: boolean) => void };
 };
 
 type InteractiveModePrivate = {
@@ -44,6 +49,9 @@ function createSubmitContext(): SubmitContext {
 			prompt: vi.fn(async () => {}),
 		},
 		flushPendingBashComponents: vi.fn(),
+		isExtensionCommand: () => false,
+		updatePendingMessagesDisplay: vi.fn(),
+		ui: { requestRender: vi.fn() },
 		pendingUserInputs: [],
 	};
 }
@@ -63,6 +71,8 @@ describe("InteractiveMode startup input", () => {
 	it("returns queued startup input before installing a new input callback", async () => {
 		const context: InputContext = {
 			pendingUserInputs: ["queued prompt"],
+			updatePendingMessagesDisplay: vi.fn(),
+			ui: { requestRender: vi.fn() },
 		};
 
 		await expect(interactiveModePrototype.getUserInput.call(context)).resolves.toBe("queued prompt");

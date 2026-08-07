@@ -15,10 +15,10 @@ function createInteractiveContext(options: {
 }) {
 	let selector: ScopedModelsSelectorComponent | undefined;
 	const setScopedModels = vi.fn();
-	const getAvailable = vi.fn().mockResolvedValue(options.allModels);
+	const getAvailable = vi.fn().mockReturnValue(options.allModels);
 	const context = {
 		session: {
-			modelRuntime: {
+			modelRegistry: {
 				refresh: vi.fn(),
 				getAvailable,
 			},

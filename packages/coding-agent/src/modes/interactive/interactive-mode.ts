@@ -5050,28 +5050,35 @@ export class InteractiveMode {
 		this.session.modelRegistry.refresh();
 		const allModels = this.session.modelRegistry.getAvailable();
 
-		if (allModels.length === 0) {
-			this.showStatus("No models available");
-			return;
-		}
-
-		// Check if session has scoped models (from previous session-only changes or CLI --models)
+		// Check if the session has scoped models (from previous session-only changes or CLI --models).
 		const sessionScopedModels = this.session.scopedModels;
 		const hasSessionScope = sessionScopedModels.length > 0;
 
-		// Build enabled model IDs from session state or settings
+		// Build enabled model IDs from session state or settings. Keep concrete settings IDs that
+		// no longer resolve so the selector can remove stale entries after logout.
 		let currentEnabledIds: string[] | null = null;
 
 		if (hasSessionScope) {
-			// Use current session's scoped models
 			currentEnabledIds = sessionScopedModels.map((scoped) => `${scoped.model.provider}/${scoped.model.id}`);
 		} else {
-			// Fall back to settings
 			const patterns = this.settingsManager.getEnabledModels();
 			if (patterns !== undefined && patterns.length > 0) {
 				const scopedModels = await resolveModelScope(patterns, this.session.modelRegistry);
-				currentEnabledIds = scopedModels.map((scoped) => `${scoped.model.provider}/${scoped.model.id}`);
+				const resolvedIds = scopedModels.map((scoped) => `${scoped.model.provider}/${scoped.model.id}`);
+				const unresolvedConcreteIds = patterns.filter(
+					(pattern) =>
+						!pattern.includes("*") &&
+						!pattern.includes("?") &&
+						!pattern.includes("[") &&
+						!resolvedIds.includes(pattern),
+				);
+				currentEnabledIds = [...resolvedIds, ...unresolvedConcreteIds];
 			}
+		}
+
+		if (allModels.length === 0 && (!currentEnabledIds || currentEnabledIds.length === 0)) {
+			this.showStatus("No models available");
+			return;
 		}
 
 		// Helper to update session's scoped models (session-only, no persist)

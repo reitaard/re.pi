@@ -2,6 +2,7 @@ import { createInterface } from "node:readline";
 import type { AgentTool } from "@reitaard/repi-agent-core";
 import { Text } from "@reitaard/repi-tui";
 import { spawn } from "child_process";
+import { minimatch } from "minimatch";
 import path from "path";
 import { type Static, Type } from "typebox";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
@@ -14,7 +15,7 @@ import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 import { DEFAULT_MAX_BYTES, formatSize, type TruncationResult, truncateHead } from "./truncate.ts";
 
 function toPosixPath(value: string): string {
-	return value.split(path.sep).join("/");
+	return value.replace(/\\/g, "/");
 }
 
 const findSchema = Type.Object({
@@ -240,16 +241,12 @@ export function createFindToolDefinition(
 						if (!insideGitRepo) args.push("--no-require-git");
 						args.push("--max-results", String(effectiveLimit));
 
-						// fd --glob matches against the basename unless --full-path is set; in --full-path
-						// mode it matches against the absolute candidate path, so a path-containing
-						// pattern like 'src/**/*.spec.ts' needs a leading '**/' to match anything.
-						let effectivePattern = pattern;
-						if (pattern.includes("/")) {
-							args.push("--full-path");
-							if (!pattern.startsWith("/") && !pattern.startsWith("**/") && pattern !== "**") {
-								effectivePattern = `**/${pattern}`;
-							}
-						}
+						// fd matches only basenames by default. For path-containing patterns, use the
+						// basename as a broad candidate filter, then apply the complete pattern to
+						// normalized relative paths so Windows path separators do not affect matching.
+						const normalizedPattern = pattern.replace(/[\\/]+/g, "/");
+						const pathPattern = normalizedPattern.includes("/") ? normalizedPattern : undefined;
+						const effectivePattern = pathPattern ? path.posix.basename(pathPattern) || "*" : normalizedPattern;
 						args.push("--", effectivePattern, searchPath);
 
 						const child = spawn(fdPath, args, { stdio: ["ignore", "pipe", "pipe"] });
@@ -309,14 +306,28 @@ export function createFindToolDefinition(
 								const line = rawLine.replace(/\r$/, "").trim();
 								if (!line) continue;
 								const hadTrailingSlash = line.endsWith("/") || line.endsWith("\\");
-								let relativePath = line;
-								if (line.startsWith(searchPath)) {
-									relativePath = line.slice(searchPath.length + 1);
-								} else {
-									relativePath = path.relative(searchPath, line);
+								const candidatePath = path.isAbsolute(line) ? line : path.resolve(searchPath, line);
+								const relative = path.relative(searchPath, candidatePath);
+								const isOutside =
+									relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
+								let relativePath = isOutside ? candidatePath : relative;
+								if (!relativePath) relativePath = path.basename(candidatePath);
+								const normalizedRelativePath = toPosixPath(relativePath);
+								if (
+									pathPattern &&
+									!minimatch(
+										path.isAbsolute(pattern) ? toPosixPath(candidatePath) : normalizedRelativePath,
+										pathPattern,
+										{ dot: true, nocase: process.platform === "win32" },
+									)
+								) {
+									continue;
 								}
-								if (hadTrailingSlash && !relativePath.endsWith("/")) relativePath += "/";
-								relativized.push(toPosixPath(relativePath));
+								if (hadTrailingSlash && !normalizedRelativePath.endsWith("/")) {
+									relativized.push(`${normalizedRelativePath}/`);
+								} else {
+									relativized.push(normalizedRelativePath);
+								}
 							}
 
 							const resultLimitReached = relativized.length >= effectiveLimit;

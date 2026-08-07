@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { AgentSessionRuntime } from "../../../src/core/agent-session-runtime.ts";
+import { LifecycleReadiness } from "../../../src/core/lifecycle-readiness.ts";
 import { runRpcMode } from "../../../src/modes/rpc/rpc-mode.ts";
 import { createHarness, type Harness } from "../harness.ts";
 
@@ -70,8 +71,11 @@ function parseOutputLines(): Array<Record<string, unknown>> {
 }
 
 function createRuntimeHost(harness: Harness): AgentSessionRuntime {
+	const readiness = new LifecycleReadiness();
+	readiness.beginSession(harness.session.model !== undefined);
 	return {
 		session: harness.session,
+		readiness,
 		newSession: vi.fn(async () => ({ cancelled: true })),
 		switchSession: vi.fn(async () => ({ cancelled: true })),
 		fork: vi.fn(async () => ({ cancelled: true, selectedText: "" })),

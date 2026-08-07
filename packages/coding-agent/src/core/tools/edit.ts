@@ -337,12 +337,14 @@ export function createEditToolDefinition(
 
 				const finalContent = bom + restoreLineEndings(newContent, originalEnding);
 				await ops.writeFile(absolutePath, finalContent);
+				throwIfAborted();
 				const diagnostics = await runLspWritethroughAfterMutation(
 					lspWritethrough,
 					absolutePath,
 					finalContent,
 					signal,
 				);
+				throwIfAborted();
 
 				const diffResult = generateDiffString(baseContent, newContent);
 				const patch = generateUnifiedPatch(path, baseContent, newContent);

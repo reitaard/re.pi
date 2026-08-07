@@ -52,7 +52,7 @@ describe("version checks", () => {
 		vi.stubGlobal("fetch", fetchMock);
 
 		await expect(
-			checkForNewPiVersion("0.81.4", "@reitaard/repi-coding-agent", { endpoint: testUpdateEndpoint }),
+			checkForNewPiVersion("0.81.4", "@mariozechner/pi-coding-agent", { endpoint: testUpdateEndpoint }),
 		).resolves.toBeUndefined();
 		await expect(
 			checkForNewPiVersion("0.81.4", "@reitaard/repi-coding-agent", { endpoint: testUpdateEndpoint }),

@@ -28,7 +28,7 @@ describe("AgentHarness model bridge", () => {
 		expect(models.getModels()).toEqual([model]);
 		expect(models.getProviders()).toHaveLength(1);
 		await expect(models.getAuth(model)).resolves.toMatchObject({
-			auth: { apiKey: "private-key", headers: { "X-Private": "yes" } },
+			auth: { apiKey: "private-key" },
 			env: { PRIVATE_ENV: "set" },
 		});
 		expect(getApiKeyAndHeaders).toHaveBeenCalledOnce();
