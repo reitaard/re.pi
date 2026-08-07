@@ -1,4 +1,4 @@
-import { accessSync, constants, existsSync, readFileSync, realpathSync } from "fs";
+import { accessSync, constants, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "fs";
 import { homedir } from "os";
 import { basename, dirname, join, resolve, sep, win32 } from "path";
 import { fileURLToPath } from "url";
@@ -342,12 +342,22 @@ function getEntrypointPackageDir(): string | undefined {
 
 function isSelfUpdatePathWritable(): boolean {
 	const packageDir = getPackageDir();
+	const probes: string[] = [];
 	try {
 		accessSync(packageDir, constants.W_OK);
 		accessSync(dirname(packageDir), constants.W_OK);
+		if (process.platform === "win32") {
+			for (const directory of [packageDir, dirname(packageDir)]) {
+				probes.push(mkdtempSync(join(directory, ".repi-write-test-")));
+			}
+		}
 		return true;
 	} catch {
 		return false;
+	} finally {
+		for (const probe of probes) {
+			rmSync(probe, { recursive: true, force: true });
+		}
 	}
 }
 

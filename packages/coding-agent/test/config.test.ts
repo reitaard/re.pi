@@ -1,3 +1,4 @@
+import { spawnSync } from "child_process";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { delimiter, join } from "path";
@@ -14,6 +15,7 @@ const originalPath = process.env.PATH;
 const originalPiPackageDir = process.env.PI_PACKAGE_DIR;
 const originalArgv1 = process.argv[1];
 let tempDir: string | undefined;
+let aclDeniedPath: string | undefined;
 
 function setExecPath(value: string): void {
 	Object.defineProperty(process, "execPath", {
@@ -41,12 +43,32 @@ afterEach(() => {
 	} else {
 		process.argv[1] = originalArgv1;
 	}
+	if (aclDeniedPath) {
+		spawnSync("icacls.exe", [aclDeniedPath, "/reset"], { stdio: "ignore" });
+		aclDeniedPath = undefined;
+	}
 	if (tempDir) {
 		chmodSync(tempDir, 0o700);
 		rmSync(tempDir, { recursive: true, force: true });
 		tempDir = undefined;
 	}
 });
+
+function denyWindowsWriteAccess(path: string): void {
+	const account =
+		process.env.USERDOMAIN && process.env.USERNAME
+			? `${process.env.USERDOMAIN}\\${process.env.USERNAME}`
+			: spawnSync("whoami.exe", [], { encoding: "utf8" }).stdout.trim();
+	if (!account) throw new Error("Unable to resolve the current Windows account for ACL test");
+	const result = spawnSync("icacls.exe", [path, "/deny", `${account}:(F)`], {
+		encoding: "utf8",
+		stdio: ["ignore", "pipe", "pipe"],
+	});
+	if (result.status !== 0) {
+		throw new Error(`Unable to deny write access for ACL test: ${result.stderr.trim()}`);
+	}
+	aclDeniedPath = path;
+}
 
 function createNpmPrefixInstall(
 	template = "pi-prefix-",
@@ -432,9 +454,13 @@ describe("detectInstallMethod", () => {
 		});
 	});
 
-	test.skipIf(process.platform === "win32")("does not self-update when npm install path is not writable", () => {
+	test("does not self-update when npm install path is not writable", () => {
 		const { packageDir } = createNpmPrefixInstall();
-		chmodSync(packageDir, 0o500);
+		if (process.platform === "win32") {
+			denyWindowsWriteAccess(packageDir);
+		} else {
+			chmodSync(packageDir, 0o500);
+		}
 
 		expect(getSelfUpdateCommand("@reitaard/repi-coding-agent")).toBeUndefined();
 		expect(getSelfUpdateUnavailableInstruction("@reitaard/repi-coding-agent")).toContain(
