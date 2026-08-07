@@ -240,7 +240,6 @@ export function createWriteToolDefinition(
 				await ops.writeFile(absolutePath, content);
 				throwIfAborted();
 				const diagnostics = await runLspWritethroughAfterMutation(lspWritethrough, absolutePath, content, signal);
-				throwIfAborted();
 
 				return {
 					content: [

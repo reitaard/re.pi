@@ -344,7 +344,6 @@ export function createEditToolDefinition(
 					finalContent,
 					signal,
 				);
-				throwIfAborted();
 
 				const diffResult = generateDiffString(baseContent, newContent);
 				const patch = generateUnifiedPatch(path, baseContent, newContent);
