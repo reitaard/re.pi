@@ -1,10 +1,11 @@
 import { join, resolve } from "node:path";
-import { Text, type TUI, visibleWidth } from "@reitaard/repi-tui";
+import { getCapabilities, setCapabilities, Text, type TUI } from "@reitaard/repi-tui";
 import { Type } from "typebox";
 import { beforeAll, describe, expect, test } from "vitest";
 import { getReadmePath } from "../src/config.ts";
 import type { ToolDefinition } from "../src/core/extensions/types.ts";
 import { type BashOperations, createBashToolDefinition } from "../src/core/tools/bash.ts";
+import { createEditToolDefinition } from "../src/core/tools/edit.ts";
 import { createReadTool, createReadToolDefinition } from "../src/core/tools/read.ts";
 import { createWriteToolDefinition } from "../src/core/tools/write.ts";
 import { ToolExecutionComponent } from "../src/modes/interactive/components/tool-execution.ts";
@@ -28,6 +29,48 @@ function createFakeTui(): TUI {
 	return {
 		requestRender: () => {},
 	} as unknown as TUI;
+}
+
+type SurfaceBg = "toolPendingBg" | "toolSuccessBg" | "toolErrorBg";
+type StatusColor = "toolPendingStatus" | "toolRunningStatus" | "toolSuccessStatus" | "toolErrorStatus";
+
+function expectToolSurface(component: ToolExecutionComponent, background: SurfaceBg, status: StatusColor): void {
+	const rendered = component.render(120).join("\n");
+	expect(rendered).toContain(theme.getBgAnsi(background));
+	expect(rendered).toContain(theme.getFgAnsi(status));
+	expect(
+		stripAnsi(rendered)
+			.split("\n")
+			.some((line) => line.startsWith("▎")),
+	).toBe(true);
+}
+
+function expectToolLifecycle(component: ToolExecutionComponent): void {
+	expectToolSurface(component, "toolPendingBg", "toolPendingStatus");
+
+	component.markExecutionStarted();
+	expectToolSurface(component, "toolPendingBg", "toolRunningStatus");
+
+	component.updateResult({ content: [{ type: "text", text: "partial" }], details: {}, isError: false }, true);
+	expectToolSurface(component, "toolPendingBg", "toolRunningStatus");
+
+	component.updateResult({ content: [{ type: "text", text: "done" }], details: {}, isError: false }, false);
+	expectToolSurface(component, "toolSuccessBg", "toolSuccessStatus");
+
+	component.updateResult({ content: [{ type: "text", text: "failed" }], details: {}, isError: true }, false);
+	expectToolSurface(component, "toolErrorBg", "toolErrorStatus");
+}
+
+function withColorMode(trueColor: boolean, callback: () => void): void {
+	const previousCapabilities = getCapabilities();
+	setCapabilities({ ...previousCapabilities, trueColor });
+	initTheme("dark");
+	try {
+		callback();
+	} finally {
+		setCapabilities(previousCapabilities);
+		initTheme("dark");
+	}
 }
 
 describe("ToolExecutionComponent parity", () => {
@@ -119,59 +162,65 @@ describe("ToolExecutionComponent parity", () => {
 		expect(rendered).not.toContain("Preparing...");
 	});
 
-	test("renders every tool state with the shared dim-violet background", () => {
-		const component = new ToolExecutionComponent(
-			"custom_tool",
-			"tool-dark-surface",
-			{},
-			{},
-			createBaseToolDefinition(),
-			createFakeTui(),
-			process.cwd(),
-		);
-		const pendingLines = component.render(120);
-		expect(pendingLines.join("\n")).toContain(theme.getBgAnsi("toolPendingBg"));
-		expect(pendingLines.join("\n")).toContain(theme.getFgAnsi("toolPendingStatus"));
-		const surfaceLines = pendingLines.filter((line) => line.includes(theme.getBgAnsi("toolPendingBg")));
-		expect(surfaceLines.length).toBeGreaterThan(1);
-		for (const line of surfaceLines) {
-			expect(stripAnsi(line).startsWith("▎")).toBe(true);
-			expect(visibleWidth(line)).toBe(120);
-		}
-
-		component.markExecutionStarted();
-		expect(component.render(120).join("\n")).toContain(theme.getFgAnsi("toolRunningStatus"));
-
-		component.updateResult({ content: [{ type: "text", text: "done" }], details: {}, isError: false }, false);
-
-		expect(component.render(120).join("\n")).toContain(theme.getBgAnsi("toolPendingBg"));
-		expect(component.render(120).join("\n")).toContain(theme.getFgAnsi("toolSuccessStatus"));
-
-		component.updateResult({ content: [{ type: "text", text: "failed" }], details: {}, isError: true }, false);
-
-		expect(component.render(120).join("\n")).toContain(theme.getBgAnsi("toolPendingBg"));
-		expect(component.render(120).join("\n")).toContain(theme.getFgAnsi("toolErrorStatus"));
-	});
-
-	test("transitions bash surfaces while normal tool views remain violet", () => {
-		const component = new ToolExecutionComponent(
-			"bash",
-			"tool-bash-status-surface",
-			{ command: "echo ok" },
-			{},
-			createBaseToolDefinition("bash"),
-			createFakeTui(),
-			process.cwd(),
-		);
-
-		expect(component.render(120).join("\n")).toContain(theme.getBgAnsi("toolPendingBg"));
-		component.markExecutionStarted();
-		expect(component.render(120).join("\n")).toContain(theme.getBgAnsi("toolPendingBg"));
-		component.updateResult({ content: [{ type: "text", text: "ok" }], details: {}, isError: false }, false);
-		expect(component.render(120).join("\n")).toContain(theme.getBgAnsi("toolSuccessBg"));
-		component.updateResult({ content: [{ type: "text", text: "failed" }], details: {}, isError: true }, false);
-		expect(component.render(120).join("\n")).toContain(theme.getBgAnsi("toolErrorBg"));
-	});
+	for (const trueColor of [true, false]) {
+		const mode = trueColor ? "truecolor" : "ANSI-256";
+		test.each([
+			{
+				name: "normal default-shell tool",
+				create: () =>
+					new ToolExecutionComponent(
+						"custom_tool",
+						`tool-default-surface-${mode}`,
+						{},
+						{},
+						createBaseToolDefinition(),
+						createFakeTui(),
+						process.cwd(),
+					),
+			},
+			{
+				name: "bash",
+				create: () =>
+					new ToolExecutionComponent(
+						"bash",
+						`tool-bash-surface-${mode}`,
+						{ command: "echo ok" },
+						{},
+						createBaseToolDefinition("bash"),
+						createFakeTui(),
+						process.cwd(),
+					),
+			},
+			{
+				name: "edit self-rendered tool",
+				create: () =>
+					new ToolExecutionComponent(
+						"edit",
+						`tool-edit-surface-${mode}`,
+						{ path: "README.md", edits: [{ oldText: "before", newText: "after" }] },
+						{},
+						createEditToolDefinition(process.cwd()),
+						createFakeTui(),
+						process.cwd(),
+					),
+			},
+			{
+				name: "write self-rendered tool",
+				create: () =>
+					new ToolExecutionComponent(
+						"write",
+						`tool-write-surface-${mode}`,
+						{ path: "sample.ts", content: "const value = 1;\n" },
+						{},
+						createWriteToolDefinition(process.cwd()),
+						createFakeTui(),
+						process.cwd(),
+					),
+			},
+		])(`routes $name through the shared lifecycle in ${mode}`, ({ create }) => {
+			withColorMode(trueColor, () => expectToolLifecycle(create()));
+		});
+	}
 
 	test("self-rendered empty tool rows take no layout space", () => {
 		const toolDefinition: ToolDefinition = {
@@ -220,7 +269,7 @@ describe("ToolExecutionComponent parity", () => {
 		);
 		component.updateResult({ content: [], details: { diff: "+1 after", firstChangedLine: 1 }, isError: false });
 		const renderedWithAnsi = component.render(120).join("\n");
-		expect(renderedWithAnsi).toContain(theme.getBgAnsi("toolPendingBg"));
+		expect(renderedWithAnsi).toContain(theme.getBgAnsi("toolSuccessBg"));
 		const rendered = stripAnsi(renderedWithAnsi);
 		expect(rendered).toContain("edit");
 		expect(rendered).toContain("README.md");
@@ -472,7 +521,7 @@ describe("ToolExecutionComponent parity", () => {
 		expect(rendered).toContain("done");
 	});
 
-	test("renders write diagnostics outside the violet write preview surface", () => {
+	test("renders write diagnostics on the shared success surface", () => {
 		const component = new ToolExecutionComponent(
 			"write",
 			"tool-write-diagnostics",
@@ -501,8 +550,8 @@ describe("ToolExecutionComponent parity", () => {
 		const lines = component.render(120);
 		const writeLine = lines.find((line) => stripAnsi(line).includes("write sample.ts"));
 		const diagnosticLine = lines.find((line) => stripAnsi(line).includes("LSP: no issues"));
-		expect(writeLine).toContain(theme.getBgAnsi("toolPendingBg"));
-		expect(diagnosticLine).not.toContain(theme.getBgAnsi("toolPendingBg"));
+		expect(writeLine).toContain(theme.getBgAnsi("toolSuccessBg"));
+		expect(diagnosticLine).toContain(theme.getBgAnsi("toolSuccessBg"));
 	});
 
 	test("trims trailing blank display lines from write previews", () => {

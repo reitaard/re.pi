@@ -8,7 +8,7 @@
 import type { ImageContent, TextContent } from "@reitaard/repi-ai";
 import type { Component } from "@reitaard/repi-tui";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
-import type { ToolDefinition, ToolRenderContext } from "../extensions/types.ts";
+import { getToolSurfaceBg, type ToolDefinition, type ToolRenderContext } from "../extensions/types.ts";
 import { ansiLinesToHtml } from "./ansi-to-html.ts";
 
 export interface ToolHtmlRendererDeps {
@@ -92,6 +92,7 @@ export function createToolHtmlRenderer(deps: ToolHtmlRendererDeps): ToolHtmlRend
 			expanded,
 			showImages: false,
 			isError,
+			surfaceBg: getToolSurfaceBg(isPartial, isError),
 		};
 	};
 

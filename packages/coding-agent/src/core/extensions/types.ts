@@ -43,7 +43,7 @@ import type {
 	TUI,
 } from "@reitaard/repi-tui";
 import type { Static, TSchema } from "typebox";
-import type { Theme } from "../../modes/interactive/theme/theme.ts";
+import type { Theme, ThemeBg } from "../../modes/interactive/theme/theme.ts";
 import type { BashResult } from "../bash-executor.ts";
 import type { CompactionPreparation, CompactionResult } from "../compaction/index.ts";
 import type { EventBus } from "../event-bus.ts";
@@ -405,6 +405,12 @@ export interface ToolRenderResultOptions {
 	isPartial: boolean;
 }
 
+/** Resolve the shared terminal surface for a tool execution state. */
+export function getToolSurfaceBg(isPartial: boolean, isError: boolean): ThemeBg {
+	if (isPartial) return "toolPendingBg";
+	return isError ? "toolErrorBg" : "toolSuccessBg";
+}
+
 /** Context passed to tool renderers. */
 export interface ToolRenderContext<TState = any, TArgs = any> {
 	/** Current tool call arguments. Shared across call/result renders for the same tool call. */
@@ -431,6 +437,8 @@ export interface ToolRenderContext<TState = any, TArgs = any> {
 	showImages: boolean;
 	/** Whether the current result is an error. */
 	isError: boolean;
+	/** Shared surface color for the current tool execution state. */
+	surfaceBg: ThemeBg;
 }
 
 /**

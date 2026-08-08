@@ -1,5 +1,5 @@
 import { Box, type Component, Container, getCapabilities, Image, Spacer, Text, type TUI } from "@reitaard/repi-tui";
-import type { ToolDefinition, ToolRenderContext } from "../../../core/extensions/types.ts";
+import { getToolSurfaceBg, type ToolDefinition, type ToolRenderContext } from "../../../core/extensions/types.ts";
 import { createAllToolDefinitions, type ToolName } from "../../../core/tools/index.ts";
 import { getTextOutput as getRenderedTextOutput } from "../../../core/tools/render-utils.ts";
 import { convertToPng } from "../../../utils/image-convert.ts";
@@ -22,7 +22,7 @@ function humanizeIdentifier(value: string): string {
 export class ToolExecutionComponent extends Container {
 	private contentBox: Box;
 	private contentText: Text;
-	private selfRenderContainer: Container;
+	private selfRenderContainer: Box;
 	private callRendererComponent?: Component;
 	private resultRendererComponent?: Component;
 	private rendererState: any = {};
@@ -76,7 +76,7 @@ export class ToolExecutionComponent extends Container {
 		// contentText is reserved for generic fallback rendering when no tool definition exists.
 		this.contentBox = new Box(1, 1, (text: string) => theme.bg("toolPendingBg", text));
 		this.contentText = new Text("", 1, 1, (text: string) => theme.bg("toolPendingBg", text));
-		this.selfRenderContainer = new Container();
+		this.selfRenderContainer = new Box(0, 0);
 
 		if (this.hasRendererDefinition()) {
 			this.addChild(this.getRenderShell() === "self" ? this.selfRenderContainer : this.contentBox);
@@ -138,6 +138,7 @@ export class ToolExecutionComponent extends Container {
 			expanded: this.expanded,
 			showImages: this.showImages,
 			isError: this.result?.isError ?? false,
+			surfaceBg: this.getSurfaceBg(),
 		};
 	}
 
@@ -302,9 +303,7 @@ export class ToolExecutionComponent extends Container {
 	}
 
 	private getSurfaceBg(): ThemeBg {
-		if (this.toolName !== "bash") return "toolPendingBg";
-		if (this.isPartial) return "toolPendingBg";
-		return this.result?.isError ? "toolErrorBg" : "toolSuccessBg";
+		return getToolSurfaceBg(this.isPartial, this.result?.isError ?? false);
 	}
 
 	private getStatusColor(): ThemeColor {
@@ -317,10 +316,17 @@ export class ToolExecutionComponent extends Container {
 		const backgroundAnsi = theme.getBgAnsi(surfaceBg);
 		const marker = theme.fg(this.getStatusColor(), "▎");
 		return lines.map((line) => {
-			if (!line.includes(backgroundAnsi)) return line;
-			const markerIndex = line.indexOf(backgroundAnsi) + backgroundAnsi.length;
-			if (line[markerIndex] !== " ") return line;
-			return line.slice(0, markerIndex) + marker + line.slice(markerIndex + 1);
+			let searchFrom = 0;
+			while (searchFrom < line.length) {
+				const backgroundIndex = line.indexOf(backgroundAnsi, searchFrom);
+				if (backgroundIndex === -1) return line;
+				const markerIndex = backgroundIndex + backgroundAnsi.length;
+				if (line[markerIndex] === " ") {
+					return line.slice(0, markerIndex) + marker + line.slice(markerIndex + 1);
+				}
+				searchFrom = markerIndex;
+			}
+			return line;
 		});
 	}
 

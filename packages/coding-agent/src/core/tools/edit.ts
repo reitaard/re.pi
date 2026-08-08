@@ -10,7 +10,7 @@ import {
 	runLspWritethroughAfterMutation,
 } from "../../lsp/writethrough.ts";
 import { renderDiff } from "../../modes/interactive/components/diff.ts";
-import type { Theme } from "../../modes/interactive/theme/theme.ts";
+import type { Theme, ThemeBg } from "../../modes/interactive/theme/theme.ts";
 import type { ToolDefinition } from "../extensions/types.ts";
 import {
 	applyEditsToNormalizedContent,
@@ -239,8 +239,9 @@ function buildEditCallComponent(
 	args: RenderableEditArgs | undefined,
 	theme: Theme,
 	cwd: string,
+	surfaceBg: ThemeBg,
 ): EditCallRenderComponent {
-	component.setBgFn((text: string) => theme.bg("toolPendingBg", text));
+	component.setBgFn((text: string) => theme.bg(surfaceBg, text));
 	component.clear();
 	component.addChild(new Text(formatEditCall(args, theme, cwd), 0, 0));
 
@@ -389,7 +390,7 @@ export function createEditToolDefinition(
 				});
 			}
 
-			return buildEditCallComponent(component, args, theme, context.cwd);
+			return buildEditCallComponent(component, args, theme, context.cwd, context.surfaceBg);
 		},
 		renderResult(result, _options, theme, context) {
 			const callComponent = context.state.callComponent;
@@ -419,6 +420,7 @@ export function createEditToolDefinition(
 						context.args as RenderableEditArgs | undefined,
 						theme,
 						context.cwd,
+						context.surfaceBg,
 					);
 				}
 			}

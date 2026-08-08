@@ -264,7 +264,7 @@ export function createWriteToolDefinition(
 			const fileContent = str(renderArgs?.content);
 			const component =
 				(context.lastComponent as WriteCallRenderComponent | undefined) ?? new WriteCallRenderComponent();
-			component.setBgFn((text: string) => theme.bg("toolPendingBg", text));
+			component.setBgFn((text: string) => theme.bg(context.surfaceBg, text));
 			if (fileContent !== null) {
 				component.highlightCache = context.argsComplete
 					? rebuildWriteHighlightCacheFull(rawPath, fileContent)
