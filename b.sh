@@ -23,7 +23,7 @@ case "$(uname -s)" in
 	*) fail "Run b.sh from Git Bash, not WSL or PowerShell. Detected: $(uname -s)" ;;
 esac
 
-for command in git node npm cygpath tar sha256sum powershell.exe cmd.exe; do
+for command in git node npm cygpath tar sha256sum powershell.exe where.exe; do
 	command -v "$command" >/dev/null 2>&1 || fail "Required command is missing: $command"
 done
 
@@ -134,11 +134,12 @@ hash -r 2>/dev/null || true
 RESOLVED="$(command -v recode 2>/dev/null || true)"
 [[ "$RESOLVED" == "$GLOBAL_PREFIX/recode" || "$RESOLVED" == "$GLOBAL_PREFIX/recode.cmd" ]] || fail "Git Bash resolves an unexpected Recode launcher: $RESOLVED"
 
-POWERSHELL_RESOLVED="$(powershell.exe -NoProfile -NonInteractive -Command '(Get-Command recode -CommandType Application).Source' | tr -d '\r')"
+POWERSHELL_RESOLVED="$(powershell.exe -NoProfile -NonInteractive -Command '(Get-Command recode -CommandType Application | Select-Object -First 1).Source' | tr -d '\r')"
 [[ "$(cygpath -u "$POWERSHELL_RESOLVED")" == "$GLOBAL_LAUNCHER" ]] || fail "PowerShell resolves an unexpected Recode launcher: $POWERSHELL_RESOLVED"
 
-CMD_RESOLVED="$(cmd.exe /d /c where recode 2>/dev/null | tr -d '\r' | head -n 1)"
-[[ "$(cygpath -u "$CMD_RESOLVED")" == "$GLOBAL_LAUNCHER" ]] || fail "cmd.exe resolves an unexpected Recode launcher: $CMD_RESOLVED"
+CMD_RESOLVED="$(where.exe recode 2>/dev/null | tr -d '\r' | head -n 1)"
+CMD_RESOLVED="$(cygpath -u "$CMD_RESOLVED")"
+[[ "$CMD_RESOLVED" == "$GLOBAL_PREFIX/recode" || "$CMD_RESOLVED" == "$GLOBAL_LAUNCHER" ]] || fail "cmd.exe resolves an unexpected Recode launcher: $CMD_RESOLVED"
 
 log "Installed and verified the active global Node prefix"
 log "Source commit: $COMMIT"
