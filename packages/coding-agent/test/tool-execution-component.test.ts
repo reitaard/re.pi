@@ -1,5 +1,5 @@
 import { join, resolve } from "node:path";
-import { getCapabilities, setCapabilities, Text, type TUI } from "@reitaard/repi-tui";
+import { Text, type TUI } from "@reitaard/repi-tui";
 import { Type } from "typebox";
 import { beforeAll, describe, expect, test } from "vitest";
 import { getReadmePath } from "../src/config.ts";
@@ -62,13 +62,20 @@ function expectToolLifecycle(component: ToolExecutionComponent): void {
 }
 
 function withColorMode(trueColor: boolean, callback: () => void): void {
-	const previousCapabilities = getCapabilities();
-	setCapabilities({ ...previousCapabilities, trueColor });
+	const keys = ["TERM", "TERM_PROGRAM", "COLORTERM", "TMUX", "WT_SESSION"] as const;
+	const previousEnvironment = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+	for (const key of keys) delete process.env[key];
+	process.env.TERM = trueColor ? "xterm-256color" : "dumb";
+	if (trueColor) process.env.COLORTERM = "truecolor";
 	initTheme("dark");
 	try {
 		callback();
 	} finally {
-		setCapabilities(previousCapabilities);
+		for (const key of keys) {
+			const value = previousEnvironment[key];
+			if (value === undefined) delete process.env[key];
+			else process.env[key] = value;
+		}
 		initTheme("dark");
 	}
 }

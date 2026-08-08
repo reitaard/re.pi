@@ -209,6 +209,14 @@ describe("detectCapabilities", () => {
 		});
 	});
 
+	it("keeps unknown xterm image and hyperlink detection conservative", () => {
+		withEnv({ TERM: "xterm-256color" }, () => {
+			const caps = detectCapabilities();
+			assert.strictEqual(caps.hyperlinks, false);
+			assert.strictEqual(caps.images, null);
+		});
+	});
+
 	it("enables hyperlinks under tmux when the client forwards them", () => {
 		withEnv({ TMUX: "/tmp/tmux-1000/default,1234,0", TERM_PROGRAM: "ghostty" }, () => {
 			const caps = detectCapabilities(() => true);

@@ -1,14 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ThinkingLevel } from "@reitaard/repi-agent-core";
-import {
-	type EditorTheme,
-	getCapabilities,
-	type MarkdownTheme,
-	type RgbColor,
-	type SelectListTheme,
-	type SettingsListTheme,
-} from "@reitaard/repi-tui";
+import type { EditorTheme, MarkdownTheme, RgbColor, SelectListTheme, SettingsListTheme } from "@reitaard/repi-tui";
 import chalk from "chalk";
 import { type Static, Type } from "typebox";
 import { Compile } from "typebox/compile";
@@ -173,6 +166,61 @@ export type ThemeBg =
 	| "toolErrorBg";
 
 type ColorMode = "truecolor" | "256color";
+
+export interface ColorModeDetectionOptions {
+	env?: NodeJS.ProcessEnv;
+	platform?: NodeJS.Platform;
+}
+
+/**
+ * Detect color support independently from image and hyperlink capabilities.
+ *
+ * Modern terminal emulators generally support truecolor even when TERM only
+ * advertises 256 colors. Multiplexers remain conservative unless COLORTERM
+ * explicitly advertises truecolor because they may not pass RGB sequences
+ * through to the outer terminal.
+ */
+export function detectColorMode(options: ColorModeDetectionOptions = {}): ColorMode {
+	const env = options.env ?? process.env;
+	const platform = options.platform ?? process.platform;
+	const term = env.TERM?.toLowerCase() ?? "";
+	const termProgram = env.TERM_PROGRAM?.toLowerCase() ?? "";
+	const colorTerm = env.COLORTERM?.toLowerCase() ?? "";
+	const hasTrueColorHint = colorTerm === "truecolor" || colorTerm === "24bit";
+
+	// These TERM values identify terminals that cannot reliably render RGB.
+	if (term === "dumb" || term === "linux") {
+		return "256color";
+	}
+
+	// An explicit advertisement takes precedence over multiplexer heuristics.
+	if (hasTrueColorHint) {
+		return "truecolor";
+	}
+
+	// GNU Screen and tmux may not forward truecolor sequences unless explicitly
+	// configured, regardless of the outer terminal's capabilities.
+	if (term.startsWith("screen") || term.startsWith("tmux") || env.TMUX) {
+		return "256color";
+	}
+
+	// Keep the existing Terminal.app compatibility policy.
+	if (termProgram === "apple_terminal") {
+		return "256color";
+	}
+
+	// Known modern environments and modern Windows consoles support truecolor.
+	if (env.WT_SESSION || termProgram === "vscode" || platform === "win32") {
+		return "truecolor";
+	}
+
+	// An absent TERM is only considered incapable when there is no modern
+	// terminal signal. Unknown non-empty TERM values are modern-terminal safe.
+	if (!term) {
+		return "256color";
+	}
+	return "truecolor";
+}
 
 // ============================================================================
 // Color Utilities
@@ -611,7 +659,7 @@ function loadThemeJson(name: string): ThemeJson {
 }
 
 function createTheme(themeJson: ThemeJson, mode?: ColorMode, sourcePath?: string): Theme {
-	const colorMode = mode ?? (getCapabilities().trueColor ? "truecolor" : "256color");
+	const colorMode = mode ?? detectColorMode();
 	const resolvedColors = resolveThemeColors(withThemeColorFallbacks(themeJson.colors), themeJson.vars);
 	const fgColors: Record<ThemeColor, string | number> = {} as Record<ThemeColor, string | number>;
 	const bgColors: Record<ThemeBg, string | number> = {} as Record<ThemeBg, string | number>;

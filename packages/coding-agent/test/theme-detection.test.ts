@@ -1,18 +1,16 @@
 import { readFileSync } from "node:fs";
-import { type RgbColor, resetCapabilitiesCache, setCapabilities } from "@reitaard/repi-tui";
-import { afterEach, describe, expect, it } from "vitest";
+import { fileURLToPath } from "node:url";
+import type { RgbColor } from "@reitaard/repi-tui";
+import { describe, expect, it } from "vitest";
 import {
+	detectColorMode,
 	detectTerminalBackgroundFromEnv,
 	detectTerminalBackgroundTheme,
-	getThemeByName,
 	getThemeForRgbColor,
+	loadThemeFromPath,
 	parseAutoThemeSetting,
 	resolveThemeSetting,
 } from "../src/modes/interactive/theme/theme.ts";
-
-afterEach(() => {
-	resetCapabilitiesCache();
-});
 
 describe("detectTerminalBackgroundFromEnv", () => {
 	it("uses the COLORFGBG background color index", () => {
@@ -101,7 +99,37 @@ describe("detectTerminalBackgroundTheme", () => {
 });
 
 describe("theme color mode", () => {
-	it("keeps text teal while borders and successful tool surfaces use violet", () => {
+	it("detects truecolor independently from image and hyperlink capabilities", () => {
+		expect(detectColorMode({ env: { COLORTERM: "truecolor" }, platform: "linux" })).toBe("truecolor");
+		expect(detectColorMode({ env: { COLORTERM: "24bit" }, platform: "linux" })).toBe("truecolor");
+		expect(detectColorMode({ env: { TERM_PROGRAM: "vscode" }, platform: "linux" })).toBe("truecolor");
+		expect(detectColorMode({ env: { WT_SESSION: "session", TERM: "xterm-256color" }, platform: "win32" })).toBe(
+			"truecolor",
+		);
+		expect(detectColorMode({ env: { TERM: "xterm-256color" }, platform: "linux" })).toBe("truecolor");
+		expect(detectColorMode({ env: { TERM: "xterm-256color" }, platform: "win32" })).toBe("truecolor");
+		expect(detectColorMode({ env: {}, platform: "win32" })).toBe("truecolor");
+	});
+
+	it("keeps genuinely limited terminals in ANSI-256 mode", () => {
+		expect(detectColorMode({ env: { TERM: "dumb" }, platform: "linux" })).toBe("256color");
+		expect(detectColorMode({ env: {}, platform: "linux" })).toBe("256color");
+		expect(detectColorMode({ env: { TERM: "linux" }, platform: "linux" })).toBe("256color");
+		expect(detectColorMode({ env: { TERM: "screen-256color" }, platform: "linux" })).toBe("256color");
+		expect(detectColorMode({ env: { TERM: "screen-256color", COLORTERM: "truecolor" }, platform: "linux" })).toBe(
+			"truecolor",
+		);
+		expect(detectColorMode({ env: { TERM: "tmux-256color" }, platform: "linux" })).toBe("256color");
+		expect(detectColorMode({ env: { TERM: "tmux-256color", COLORTERM: "24bit" }, platform: "linux" })).toBe(
+			"truecolor",
+		);
+		expect(detectColorMode({ env: { TMUX: "/tmp/tmux" }, platform: "linux" })).toBe("256color");
+		expect(
+			detectColorMode({ env: { TERM_PROGRAM: "Apple_Terminal", TERM: "xterm-256color" }, platform: "darwin" }),
+		).toBe("256color");
+	});
+
+	it("keeps text teal and gives each tool lifecycle state a dedicated surface", () => {
 		const darkTheme = JSON.parse(
 			readFileSync(new URL("../src/modes/interactive/theme/dark.json", import.meta.url), "utf-8"),
 		) as {
@@ -130,16 +158,13 @@ describe("theme color mode", () => {
 		expect(darkTheme.colors.toolErrorStatus).toBe("errorStatus");
 	});
 
-	it("uses terminal capabilities", () => {
-		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
-		const ansi256Theme = getThemeByName("dark");
-		if (!ansi256Theme) throw new Error("dark theme not found");
+	it("renders explicit truecolor and ANSI-256 theme escape sequences", () => {
+		const themePath = fileURLToPath(new URL("../src/modes/interactive/theme/dark.json", import.meta.url));
+		const ansi256Theme = loadThemeFromPath(themePath, "256color");
 		expect(ansi256Theme.getColorMode()).toBe("256color");
 		expect(ansi256Theme.getFgAnsi("accent")).toMatch(/^\x1b\[38;5;\d+m$/);
 
-		setCapabilities({ images: null, trueColor: true, hyperlinks: false });
-		const truecolorTheme = getThemeByName("dark");
-		if (!truecolorTheme) throw new Error("dark theme not found");
+		const truecolorTheme = loadThemeFromPath(themePath, "truecolor");
 		expect(truecolorTheme.getColorMode()).toBe("truecolor");
 		expect(truecolorTheme.getFgAnsi("accent")).toMatch(/^\x1b\[38;2;\d+;\d+;\d+m$/);
 		expect(truecolorTheme.getBgAnsi("toolPendingBg")).toBe("\x1b[48;2;51;46;74m");
@@ -151,10 +176,30 @@ describe("theme color mode", () => {
 		expect(truecolorTheme.getFgAnsi("toolErrorStatus")).toBe("\x1b[38;2;239;68;68m");
 	});
 
+	it("uses the independent detector when loading a theme", () => {
+		const themePath = fileURLToPath(new URL("../src/modes/interactive/theme/dark.json", import.meta.url));
+		const keys = ["TERM", "TERM_PROGRAM", "COLORTERM", "TMUX", "WT_SESSION"] as const;
+		const previousEnvironment = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+		try {
+			for (const key of keys) delete process.env[key];
+			process.env.TERM = "xterm-256color";
+			expect(loadThemeFromPath(themePath).getColorMode()).toBe("truecolor");
+			process.env.TERM = "dumb";
+			expect(loadThemeFromPath(themePath).getColorMode()).toBe("256color");
+		} finally {
+			for (const key of keys) {
+				const value = previousEnvironment[key];
+				if (value === undefined) delete process.env[key];
+				else process.env[key] = value;
+			}
+		}
+	});
+
 	it("uses dedicated readable surfaces and statuses in light mode", () => {
-		setCapabilities({ images: null, trueColor: true, hyperlinks: false });
-		const lightTheme = getThemeByName("light");
-		if (!lightTheme) throw new Error("light theme not found");
+		const lightTheme = loadThemeFromPath(
+			fileURLToPath(new URL("../src/modes/interactive/theme/light.json", import.meta.url)),
+			"truecolor",
+		);
 
 		expect(lightTheme.getBgAnsi("toolPendingBg")).toBe("\x1b[48;2;238;242;255m");
 		expect(lightTheme.getBgAnsi("toolSuccessBg")).toBe("\x1b[48;2;234;245;236m");
