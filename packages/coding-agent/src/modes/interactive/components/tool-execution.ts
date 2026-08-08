@@ -303,6 +303,10 @@ export class ToolExecutionComponent extends Container {
 	}
 
 	private getSurfaceBg(): ThemeBg {
+		// Preserve RePi's established visual hierarchy: command execution owns
+		// success/error surfaces, while file, search, and language tools retain
+		// their violet card surface and communicate completion via the marker.
+		if (this.toolName !== "bash") return "toolPendingBg";
 		return getToolSurfaceBg(this.isPartial, this.result?.isError ?? false);
 	}
 

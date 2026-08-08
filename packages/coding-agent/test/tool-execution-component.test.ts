@@ -45,7 +45,7 @@ function expectToolSurface(component: ToolExecutionComponent, background: Surfac
 	).toBe(true);
 }
 
-function expectToolLifecycle(component: ToolExecutionComponent): void {
+function expectToolLifecycle(component: ToolExecutionComponent, usesOutcomeSurface: boolean): void {
 	expectToolSurface(component, "toolPendingBg", "toolPendingStatus");
 
 	component.markExecutionStarted();
@@ -55,10 +55,10 @@ function expectToolLifecycle(component: ToolExecutionComponent): void {
 	expectToolSurface(component, "toolPendingBg", "toolRunningStatus");
 
 	component.updateResult({ content: [{ type: "text", text: "done" }], details: {}, isError: false }, false);
-	expectToolSurface(component, "toolSuccessBg", "toolSuccessStatus");
+	expectToolSurface(component, usesOutcomeSurface ? "toolSuccessBg" : "toolPendingBg", "toolSuccessStatus");
 
 	component.updateResult({ content: [{ type: "text", text: "failed" }], details: {}, isError: true }, false);
-	expectToolSurface(component, "toolErrorBg", "toolErrorStatus");
+	expectToolSurface(component, usesOutcomeSurface ? "toolErrorBg" : "toolPendingBg", "toolErrorStatus");
 }
 
 function withColorMode(trueColor: boolean, callback: () => void): void {
@@ -224,8 +224,8 @@ describe("ToolExecutionComponent parity", () => {
 						process.cwd(),
 					),
 			},
-		])(`routes $name through the shared lifecycle in ${mode}`, ({ create }) => {
-			withColorMode(trueColor, () => expectToolLifecycle(create()));
+		])(`routes $name through the shared lifecycle in ${mode}`, ({ name, create }) => {
+			withColorMode(trueColor, () => expectToolLifecycle(create(), name === "bash"));
 		});
 	}
 
@@ -276,7 +276,8 @@ describe("ToolExecutionComponent parity", () => {
 		);
 		component.updateResult({ content: [], details: { diff: "+1 after", firstChangedLine: 1 }, isError: false });
 		const renderedWithAnsi = component.render(120).join("\n");
-		expect(renderedWithAnsi).toContain(theme.getBgAnsi("toolSuccessBg"));
+		expect(renderedWithAnsi).toContain(theme.getBgAnsi("toolPendingBg"));
+		expect(renderedWithAnsi).toContain(theme.getFgAnsi("toolSuccessStatus"));
 		const rendered = stripAnsi(renderedWithAnsi);
 		expect(rendered).toContain("edit");
 		expect(rendered).toContain("README.md");
@@ -528,7 +529,7 @@ describe("ToolExecutionComponent parity", () => {
 		expect(rendered).toContain("done");
 	});
 
-	test("renders write diagnostics on the shared success surface", () => {
+	test("keeps write diagnostics on the violet surface after success", () => {
 		const component = new ToolExecutionComponent(
 			"write",
 			"tool-write-diagnostics",
@@ -557,8 +558,9 @@ describe("ToolExecutionComponent parity", () => {
 		const lines = component.render(120);
 		const writeLine = lines.find((line) => stripAnsi(line).includes("write sample.ts"));
 		const diagnosticLine = lines.find((line) => stripAnsi(line).includes("LSP: no issues"));
-		expect(writeLine).toContain(theme.getBgAnsi("toolSuccessBg"));
-		expect(diagnosticLine).toContain(theme.getBgAnsi("toolSuccessBg"));
+		expect(writeLine).toContain(theme.getBgAnsi("toolPendingBg"));
+		expect(diagnosticLine).toContain(theme.getBgAnsi("toolPendingBg"));
+		expect(writeLine).toContain(theme.getFgAnsi("toolSuccessStatus"));
 	});
 
 	test("trims trailing blank display lines from write previews", () => {
