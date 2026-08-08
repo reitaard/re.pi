@@ -134,8 +134,23 @@ hash -r 2>/dev/null || true
 RESOLVED="$(command -v recode 2>/dev/null || true)"
 [[ "$RESOLVED" == "$GLOBAL_PREFIX/recode" || "$RESOLVED" == "$GLOBAL_PREFIX/recode.cmd" ]] || fail "Git Bash resolves an unexpected Recode launcher: $RESOLVED"
 
-POWERSHELL_RESOLVED="$(powershell.exe -NoProfile -NonInteractive -Command '(Get-Command recode -CommandType Application | Select-Object -First 1).Source' | tr -d '\r')"
-[[ "$(cygpath -u "$POWERSHELL_RESOLVED")" == "$GLOBAL_LAUNCHER" ]] || fail "PowerShell resolves an unexpected Recode launcher: $POWERSHELL_RESOLVED"
+# Verify a fresh interactive Bash session too. A profile function shadows PATH
+# and is not inherited by this script's child process.
+BASH_RESOLUTION="$(bash --login -i -c 'printf "%s|%s\\n" "$(type -t recode 2>/dev/null || true)" "$(type -P recode 2>/dev/null || true)"' 2>/dev/null | tr -d '\r')"
+BASH_TYPE="${BASH_RESOLUTION%%|*}"
+BASH_PATH="${BASH_RESOLUTION#*|}"
+[[ "$BASH_TYPE" == "file" && "$BASH_PATH" == "$GLOBAL_PREFIX/recode" ]] || fail "Fresh Git Bash resolves recode as type=$BASH_TYPE path=$BASH_PATH; remove the legacy recode wrapper from ~/.bashrc or ~/.bash_profile"
+
+# Do not use -CommandType Application: it hides a profile function or alias
+# that would win during normal PowerShell command resolution.
+POWERSHELL_RESOLUTION="$(powershell.exe -NoLogo -Command '$command = Get-Command recode -ErrorAction SilentlyContinue | Select-Object -First 1; if ($null -eq $command) { exit 1 }; "$($command.CommandType)|$($command.Source)"' 2>/dev/null | tr -d '\r' || true)"
+POWERSHELL_TYPE="${POWERSHELL_RESOLUTION%%|*}"
+POWERSHELL_SOURCE="${POWERSHELL_RESOLUTION#*|}"
+POWERSHELL_SOURCE_UNIX=""
+if [[ -n "$POWERSHELL_SOURCE" ]]; then
+    POWERSHELL_SOURCE_UNIX="$(cygpath -u "$POWERSHELL_SOURCE")"
+fi
+[[ "$POWERSHELL_TYPE" != "Function" && "$POWERSHELL_TYPE" != "Alias" && "$POWERSHELL_SOURCE_UNIX" == "$GLOBAL_PREFIX/"* ]] || fail "PowerShell resolves recode as type=$POWERSHELL_TYPE source=$POWERSHELL_SOURCE; remove the legacy recode wrapper from the PowerShell profile"
 
 CMD_RESOLVED="$(where.exe recode 2>/dev/null | tr -d '\r' | head -n 1)"
 CMD_RESOLVED="$(cygpath -u "$CMD_RESOLVED")"
