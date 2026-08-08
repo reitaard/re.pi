@@ -511,6 +511,18 @@ describe("matchesKey", () => {
 			assert.strictEqual(parseKey("\x1bn"), "alt+n");
 		});
 
+		it("should match VS Code's Alt+Up terminal encoding without remapping Alt+P", () => {
+			setKittyProtocolActive(true);
+			withEnv("TERM_PROGRAM", "vscode", () => {
+				assert.strictEqual(matchesKey("\x1b[1;5A", "alt+up"), true);
+				assert.strictEqual(matchesKey("\x1bp", "alt+up"), false);
+			});
+			withEnv("TERM_PROGRAM", undefined, () => {
+				assert.strictEqual(matchesKey("\x1b[1;5A", "alt+up"), false);
+			});
+			setKittyProtocolActive(false);
+		});
+
 		it("should match rxvt modifier sequences", () => {
 			assert.strictEqual(matchesKey("\x1b[a", "shift+up"), true);
 			assert.strictEqual(matchesKey("\x1bOa", "ctrl+up"), true);

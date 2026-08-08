@@ -716,6 +716,10 @@ function isWindowsTerminalSession(): boolean {
 	);
 }
 
+function isVscodeTerminalSession(): boolean {
+	return process.env.TERM_PROGRAM === "vscode";
+}
+
 /**
  * Raw 0x08 (BS) is ambiguous in legacy terminals.
  *
@@ -1041,7 +1045,10 @@ export function matchesKey(data: string, keyId: KeyId): boolean {
 
 		case "up":
 			if (modifier === MODIFIERS.alt) {
-				return matchesKittySequence(data, ARROW_CODEPOINTS.up, MODIFIERS.alt);
+				return (
+					(isVscodeTerminalSession() && data === "\x1b[1;5A") ||
+					matchesKittySequence(data, ARROW_CODEPOINTS.up, MODIFIERS.alt)
+				);
 			}
 			if (modifier === 0) {
 				return (

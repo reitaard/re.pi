@@ -9,6 +9,7 @@
 ### Fixed
 
 - Fixed `PI_TUI_WRITE_LOG` to create parent directories and capture all `ProcessTerminal` output helpers instead of only differential-render writes.
+- Matched VS Code's local Alt+Up terminal encoding without changing the authoritative Alt+Up binding or Alt+P parsing.
 
 ## [0.81.4] - 2026-07-22
 
