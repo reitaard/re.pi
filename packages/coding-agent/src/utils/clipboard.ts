@@ -32,18 +32,29 @@ function emitOsc52(text: string): boolean {
 	return true;
 }
 
-/** Read plain text from the system clipboard, if native clipboard access is available. */
-export async function readClipboardText(): Promise<string | null> {
+export type ClipboardTextReadResult =
+	| { status: "text"; text: string }
+	| { status: "empty" }
+	| { status: "unavailable" };
+
+/** Read plain text and preserve whether the clipboard was empty or unavailable. */
+export async function readClipboardTextWithStatus(): Promise<ClipboardTextReadResult> {
 	if (!clipboard) {
-		return null;
+		return { status: "unavailable" };
 	}
 
 	try {
 		const text = await clipboard.getText();
-		return text || null;
+		return text ? { status: "text", text } : { status: "empty" };
 	} catch {
-		return null;
+		return { status: "unavailable" };
 	}
+}
+
+/** Read plain text from the system clipboard, if native clipboard access is available. */
+export async function readClipboardText(): Promise<string | null> {
+	const result = await readClipboardTextWithStatus();
+	return result.status === "text" ? result.text : null;
 }
 
 export async function copyToClipboard(text: string): Promise<void> {

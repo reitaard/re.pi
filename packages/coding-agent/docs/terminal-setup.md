@@ -1,142 +1,76 @@
-# Terminal Setup
+# RePi Terminal Setup
 
-Pi uses the [Kitty keyboard protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/) for reliable modifier key detection. Most modern terminals support this protocol, but some require configuration.
+RePi uses the Kitty keyboard protocol when the terminal supports it, then falls back to xterm `modifyOtherKeys`, then legacy input. Run `/tui-setup` inside RePi to report the active protocol and which canonical sequences RePi has observed.
 
-## Kitty, iTerm2
+RePi never edits terminal settings silently. `/tui-setup apply windows-terminal` and `/tui-setup apply vscode` show a proposed diff, ask for confirmation, create a timestamped backup, and only then write the file. The setup changes only terminal-focus forwarding for RePi's modified keys:
 
-Work out of the box.
+| Key | Sequence |
+|---|---|
+| Shift+Enter | CSI-u `\u001b[13;2u` |
+| Alt+Enter | CSI-u `\u001b[13;3u` |
+| Alt+Up | xterm modified arrow `\u001b[1;3A` |
+| Ctrl+V | raw `\u0016` |
+| Ctrl+Z | raw `\u001a` |
 
-## Apple Terminal
+A terminal that cannot send distinct modified keys cannot be made universal by RePi. The report names each unconfirmed binding and points back to the opt-in setup command.
 
-Pi enables enhanced key reporting when available. If Terminal.app still sends plain Return for `Shift+Enter`, pi uses a local macOS modifier fallback to treat that Return as `Shift+Enter`.
-
-This fallback only works when pi runs on the same Mac as Terminal.app. It cannot detect the local keyboard over remote SSH.
-
-## Ghostty
-
-Add to your Ghostty config (`~/Library/Application Support/com.mitchellh.ghostty/config` on macOS, `~/.config/ghostty/config` on Linux):
-
-```
-keybind = alt+backspace=text:\x1b\x7f
-```
-
-Older Claude Code versions may have added this Ghostty mapping:
-
-```
-keybind = shift+enter=text:\n
-```
-
-That mapping sends a raw linefeed byte. Inside pi, that is indistinguishable from `Ctrl+J`, so tmux and pi no longer see a real `shift+enter` key event.
-
-If Claude Code 2.x or newer is the only reason you added that mapping, you can remove it, unless you want to use Claude Code in tmux, where it still requires that Ghostty mapping.
-
-Pi binds `Ctrl+J` as a default newline alias, so `Shift+Enter` keeps working in tmux via that remap without extra pi configuration.
-
-## WezTerm
-
-WezTerm usually works out of the box for `Shift+Enter` via xterm modifyOtherKeys. To use the Kitty keyboard protocol explicitly, create `~/.wezterm.lua`:
-
-```lua
-local wezterm = require 'wezterm'
-local config = wezterm.config_builder()
-config.enable_kitty_keyboard = true
-return config
-```
-
-On macOS, WezTerm binds `Option+Enter` to fullscreen by default. To use `Option+Enter` for pi follow-up queueing, add this key override:
-
-```lua
-local wezterm = require 'wezterm'
-local config = wezterm.config_builder()
-config.keys = {
-  {
-    key = 'Enter',
-    mods = 'ALT',
-    action = wezterm.action.SendString('\x1b[13;3u'),
-  },
-}
-return config
-```
-
-If you already have a `config.keys` table, add the entry to it.
-
-On WSL, WezTerm may require a visible hardware cursor for IME candidate window positioning. If CJK IME candidates do not follow the text cursor, set `PI_HARDWARE_CURSOR=1` before running pi or set `showHardwareCursor` to `true` in settings.
-
-## Alacritty
-
-Alacritty usually works out of the box for `Shift+Enter`. On macOS, `Option+Enter` may arrive as plain `Enter`. To use `Option+Enter` for pi follow-up queueing, add to `~/.config/alacritty/alacritty.toml`:
-
-```toml
-[[keyboard.bindings]]
-key = "Enter"
-mods = "Alt"
-chars = "\u001b[13;3u"
-```
-
-Restart Alacritty after changing the config.
-
-## VS Code (Integrated Terminal)
-
-VS Code 1.109.5 and newer enable Kitty keyboard protocol in the integrated terminal by default, so `Shift+Enter` should work out of the box.
-
-VS Code versions older than 1.109.5 need an explicit terminal keybinding for `Shift+Enter`.
-
-`keybindings.json` locations:
-- macOS: `~/Library/Application Support/Code/User/keybindings.json`
-- Linux: `~/.config/Code/User/keybindings.json`
-- Windows: `%APPDATA%\\Code\\User\\keybindings.json`
-
-Add to `keybindings.json`:
-
-```json
-{
-  "key": "shift+enter",
-  "command": "workbench.action.terminal.sendSequence",
-  "args": { "text": "\u001b[13;2u" },
-  "when": "terminalFocus"
-}
-```
+These mappings belong to the terminal application, not to the RePi process. After applying them, the listed shortcuts are forwarded this way in every focused terminal tab, including tabs running a normal shell or another TUI. In particular, Ctrl+V no longer invokes the terminal's normal paste action and Ctrl+Z is sent to the foreground program. Review the proposed diff before confirming.
 
 ## Windows Terminal
 
-Add to `settings.json` (Ctrl+Shift+, or Settings → Open JSON file) to forward the modified Enter keys pi uses:
+Run `/tui-setup apply windows-terminal`. RePi detects the packaged or unpackaged Windows Terminal `settings.json`, previews these `sendInput` actions, backs up the file, and applies them only after confirmation. Restart Windows Terminal if it does not reload the settings.
 
-```json
-{
-  "actions": [
-    {
-      "command": { "action": "sendInput", "input": "\u001b[13;2u" },
-      "keys": "shift+enter"
-    },
-    {
-      "command": { "action": "sendInput", "input": "\u001b[13;3u" },
-      "keys": "alt+enter"
-    }
-  ]
-}
-```
+Manual validation in Windows Terminal:
 
-- `Shift+Enter` inserts a new line.
-- Windows Terminal binds `Alt+Enter` to fullscreen by default. That prevents pi from receiving `Alt+Enter` for follow-up queueing.
-- Remapping `Alt+Enter` to `sendInput` forwards the real key chord to pi instead.
+1. Start RePi in a normal Windows Terminal tab.
+2. Press Shift+Enter and confirm that a newline is inserted, not submitted.
+3. Type a message, press Alt+Enter while a task is working, and confirm that it appears under **Follow-up**.
+4. Press Alt+Up and confirm that queued text returns to the editor.
+5. Type text, press Ctrl+Z, and confirm that the editor undoes the last edit rather than suspending RePi.
+6. Press Ctrl+V with text or an image in the Windows clipboard and confirm that text is inserted or an image path is attached.
+7. Run `/tui-setup` and confirm the protocol plus observed bindings.
 
-If you already have an `actions` array, add the objects to it. If the old fullscreen behavior persists, fully close and reopen Windows Terminal.
+Windows Terminal consumes some shortcuts by default, notably Alt+Enter fullscreen and often Ctrl+V paste. The opt-in setup is required when those host actions prevent RePi from receiving the key.
 
-## xfce4-terminal, terminator
+## VS Code Integrated Terminal
 
-These terminals have limited escape sequence support. Modified Enter keys like `Ctrl+Enter` and `Shift+Enter` cannot be distinguished from plain `Enter`, preventing custom keybindings such as `submit: ["ctrl+enter"]` from working.
+Run `/tui-setup apply vscode`. RePi detects the VS Code `keybindings.json`, previews `when: "terminalFocus"` `workbench.action.terminal.sendSequence` rules, backs up the file, and applies them only after confirmation. This is the supported way to prevent VS Code from consuming the keys while its integrated terminal is focused.
 
-For the best experience, use a terminal that supports the Kitty keyboard protocol:
-- [Kitty](https://sw.kovidgoyal.net/kitty/)
-- [Ghostty](https://ghostty.org/)
-- [WezTerm](https://wezfurlong.org/wezterm/)
-- [iTerm2](https://iterm2.com/)
-- [Alacritty](https://github.com/alacritty/alacritty) (requires compilation with Kitty protocol support)
+Manual validation in VS Code:
 
-## IntelliJ IDEA (Integrated Terminal)
+1. Open the integrated terminal and start RePi.
+2. Repeat the Windows Terminal checks for Shift+Enter, Alt+Enter, Alt+Up, Ctrl+Z, and Ctrl+V.
+3. Ensure the VS Code editor is not focused when testing; the rules intentionally apply only when `terminalFocus` is true.
+4. Run `/tui-setup` and confirm each expected sequence.
 
-The built-in terminal has limited escape sequence support. Shift+Enter cannot be distinguished from Enter in IntelliJ's terminal.
+Alt+Up is commonly intercepted by VS Code as terminal scroll/page movement. If it remains unconfirmed, use the setup flow and test again. Do not claim that Alt+Up works in VS Code merely because the shortcut is displayed.
 
-If you want the hardware cursor visible, set `PI_HARDWARE_CURSOR=1` before running pi (disabled by default for compatibility).
+## PowerShell
 
-Consider using a dedicated terminal emulator for the best experience.
+PowerShell does not decide whether RePi receives these sequences; the terminal host does. In Windows Terminal or VS Code Integrated Terminal, validate from the PowerShell prompt exactly as above. RePi's raw mode must receive raw Ctrl+V (`0x16`) and Ctrl+Z (`0x1a`) for those keys to reach the editor.
+
+If a PowerShell host consumes a key before raw mode, run `/tui-setup` to inspect the report and use the host's explicit terminal-focus forwarding configuration. RePi will report the exact binding that remains unconfirmed.
+
+## Bash
+
+In Bash, RePi enters raw mode and Ctrl+V (`0x16`) is the canonical clipboard trigger. Ctrl+Z (`0x1a`) is editor undo while RePi is running; RePi deliberately has no default suspend binding. Shift+Enter and Alt+Enter require a terminal that sends the distinct CSI-u sequences or a host mapping to those sequences.
+
+Validate from Bash by running RePi, testing each key, and then checking `/tui-setup`. Bash itself may provide no distinct modified-key sequence for older terminal emulators.
+
+## WSL
+
+Run RePi from WSL and validate the Linux-side terminal host, not only the WSL shell. Windows Terminal settings are configured on the Windows side, so use `/tui-setup apply windows-terminal` from a Windows RePi session or apply the same reviewed diff to the Windows Terminal settings file. WSL clipboard image support may use `wl-paste`, `xclip`, or PowerShell fallback; drag-and-drop remains a fallback when clipboard access or image decoding fails.
+
+Confirm that Ctrl+Z undoes editor text in WSL. Do not expect Unix job-control suspension from RePi's default Ctrl+Z policy.
+
+## SSH
+
+SSH transports terminal bytes but cannot access the local keyboard. RePi can recognize a sequence sent by the remote terminal, but it cannot repair a local terminal configuration over SSH and cannot use a local modifier fallback. Configure the terminal on the machine where the keyboard is pressed, then run `/tui-setup` on the remote RePi session and confirm the observed sequences.
+
+If the report shows legacy protocol or an unconfirmed binding, use a terminal or multiplexer that forwards CSI-u/modifyOtherKeys. RePi reports the exact failed binding instead of claiming universal support.
+
+## Other terminals
+
+Kitty, Ghostty, WezTerm, Alacritty, and iTerm2 may support the required protocols, but configuration and defaults vary by version. Use `/tui-setup` as the evidence source. RePi does not silently edit their files and does not claim support when a terminal cannot distinguish modified keys.
+
+Terminals or IDE terminals that collapse Shift+Enter, Alt+Enter, Alt+Up, Ctrl+V, or Ctrl+Z into another byte cannot provide the canonical RePi behavior without an explicit host mapping.

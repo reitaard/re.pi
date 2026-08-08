@@ -1,12 +1,12 @@
-# Keybindings
+# RePi Keybindings
 
-All keyboard shortcuts can be customized via `~/.pi/agent/keybindings.json`. Each action can be bound to one or more keys.
+All RePi keyboard shortcuts can be customized via `~/.pi/agent/keybindings.json`. Each action can be bound to one or more keys.
 
-The config file uses the same namespaced keybinding ids that pi uses internally and that extension authors use in `keyHint()` and injected `keybindings` managers.
+The config file uses the same namespaced keybinding ids that RePi uses internally and that extension authors use in `keyHint()` and injected `keybindings` managers.
 
 Older configs using pre-namespaced ids such as `cursorUp` or `expandTools` are migrated automatically to the namespaced ids on startup.
 
-After editing `keybindings.json`, run `/reload` in pi to apply the changes without restarting the session.
+After editing `keybindings.json`, run `/reload` in RePi to apply the changes without restarting the session.
 
 ## Key Format
 
@@ -64,7 +64,7 @@ Modifier combinations: `ctrl+shift+x`, `alt+ctrl+x`, `ctrl+shift+alt+x`, `ctrl+1
 |--------|---------|-------------|
 | `tui.editor.yank` | `ctrl+y` | Paste most recently deleted text |
 | `tui.editor.yankPop` | `alt+y` | Cycle through deleted text after yank |
-| `tui.editor.undo` | `ctrl+-` | Undo last edit |
+| `tui.editor.undo` | `ctrl+z`, `ctrl+-` | Undo last edit |
 
 ### TUI Clipboard and Selection
 
@@ -85,9 +85,9 @@ Modifier combinations: `ctrl+shift+x`, `alt+ctrl+x`, `ctrl+shift+alt+x`, `ctrl+1
 | `app.interrupt` | `escape` | Cancel / abort |
 | `app.clear` | `ctrl+c` | Clear editor |
 | `app.exit` | `ctrl+d` | Exit (when editor empty) |
-| `app.suspend` | `ctrl+z` (none on Windows) | Suspend to background |
+| `app.suspend` | *(none)* | Suspend to background; opt in with a manual binding only |
 | `app.editor.external` | `ctrl+g` | Open in external editor (`externalEditor`, `$VISUAL`, `$EDITOR`, Notepad on Windows, or `nano` elsewhere) |
-| `app.clipboard.pasteImage` | `ctrl+v` (`alt+v` on Windows) | Paste image from clipboard |
+| `app.clipboard.pasteImage` | `ctrl+v`, `alt+v` | Paste image or text from the clipboard. Ctrl+V works in RePi raw mode on Bash; Alt+V remains a Windows convenience alias. |
 
 ### Sessions
 
@@ -122,6 +122,13 @@ Modifier combinations: `ctrl+shift+x`, `alt+ctrl+x`, `ctrl+shift+alt+x`, `ctrl+1
 | `app.message.copy` | `ctrl+x` | Copy the last assistant message, or the selected message in `/tree` |
 | `app.message.followUp` | `alt+enter` | Queue follow-up message |
 | `app.message.dequeue` | `alt+up` | Restore queued messages to editor |
+
+Queue semantics:
+
+- **Enter while working = steering:** insert after the current tool batch, before the next model decision.
+- **Alt+Enter = follow-up:** hold until the current task has sent its final response.
+- **one-at-a-time:** take one queued message per next run.
+- **all:** take every queued message together.
 
 ### Tree Navigation
 
@@ -166,7 +173,7 @@ Create `~/.pi/agent/keybindings.json`:
 
 Each action can have a single key or an array of keys. User config overrides defaults.
 
-On native Windows, `app.suspend` has no default binding because Windows terminals do not support Unix job control. If you bind it manually, pi shows a status message instead of suspending. In WSL, the normal Linux `ctrl+z`/`fg` behavior still applies.
+RePi deliberately has no default `app.suspend` binding on any platform. `Ctrl+Z` is reserved for editor undo, including Bash, Linux, WSL, and SSH sessions. RePi does not silently suspend jobs; if you need Unix job control, stop RePi first and use the shell's normal `fg` workflow.
 
 ### Emacs Example
 

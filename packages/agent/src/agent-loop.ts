@@ -293,6 +293,10 @@ async function runLoop(
 		// Agent would stop here. Check for follow-up messages.
 		const followUpMessages = (await config.getFollowUpMessages?.()) || [];
 		if (followUpMessages.length > 0) {
+			// This boundary is after the final assistant response, all tool calls,
+			// and all steering messages. UI consumers can report the transition
+			// before the queued follow-up is injected on the next turn.
+			await emit({ type: "follow_up_start" });
 			// Set as pending so inner loop processes them
 			pendingMessages = followUpMessages;
 			continue;

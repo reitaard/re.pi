@@ -576,6 +576,9 @@ export class Agent {
 			case "agent_end":
 				this._state.streamingMessage = undefined;
 				break;
+
+			case "follow_up_start":
+				break;
 		}
 
 		const signal = this.activeRun?.abortController.signal;

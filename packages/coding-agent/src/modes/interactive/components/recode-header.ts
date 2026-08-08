@@ -12,6 +12,7 @@ export interface RecodeHeaderDetails {
 	model: string;
 	provider: string;
 	cwd: string;
+	toolOutputKey: string;
 	worker?: ActiveWorkerHeaderState;
 }
 
@@ -145,7 +146,7 @@ export class RecodeHeader implements Component {
 	constructor(version: string, getMode: () => RecodeHeaderMode, getDetails?: () => RecodeHeaderDetails) {
 		this.version = version;
 		this.getMode = getMode;
-		this.getDetails = getDetails ?? (() => ({ model: "unknown", provider: "unknown", cwd: "." }));
+		this.getDetails = getDetails ?? (() => ({ model: "unknown", provider: "unknown", cwd: ".", toolOutputKey: "" }));
 	}
 
 	invalidate(): void {
@@ -209,7 +210,7 @@ export class RecodeHeader implements Component {
 			: [
 					theme.bold(theme.fg("accent", " Tips for getting started")),
 					theme.fg("muted", " Type / for commands · ! for bash"),
-					theme.fg("dim", " Press Ctrl+O to expand startup help"),
+					theme.fg("dim", ` Press ${details.toolOutputKey} to expand startup help`),
 					"",
 					theme.bold(theme.fg("borderAccent", " Session")),
 					theme.fg("muted", " Fresh session · ready"),
@@ -242,7 +243,7 @@ export class RecodeHeader implements Component {
 			lineColor(0, "│") + padCell(theme.fg("muted", ` ${model}`), contentWidth) + lineColor(3, "│"),
 			lineColor(0, "│") + padCell(theme.fg("dim", ` ${details.cwd}`), contentWidth) + lineColor(3, "│"),
 			lineColor(0, "│") +
-				padCell(theme.fg("accent", " / commands · ! bash · Ctrl+O help"), contentWidth) +
+				padCell(theme.fg("accent", ` / commands · ! bash · ${details.toolOutputKey} help`), contentWidth) +
 				lineColor(3, "│"),
 			lineColor(0, "│") + " ".repeat(contentWidth) + lineColor(3, "│"),
 			this.renderBottomBorder(width),

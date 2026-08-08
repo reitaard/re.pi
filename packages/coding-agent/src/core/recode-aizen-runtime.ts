@@ -439,6 +439,7 @@ function isAgentLifecycleEvent(event: { type: string }): event is AgentEvent {
 	return (
 		event.type === "agent_start" ||
 		event.type === "agent_end" ||
+		event.type === "follow_up_start" ||
 		event.type === "turn_start" ||
 		event.type === "turn_end" ||
 		event.type === "message_start" ||

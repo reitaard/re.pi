@@ -217,6 +217,14 @@ describe("matchesKey", () => {
 			assert.strictEqual(parseKey("\x1b[27;5;122~"), "ctrl+z");
 		});
 
+		it("should match canonical Shift+Enter and Alt+Enter CSI-u sequences", () => {
+			setKittyProtocolActive(false);
+			assert.strictEqual(matchesKey("\x1b[13;2u", "shift+enter"), true);
+			assert.strictEqual(matchesKey("\x1b[13;3u", "alt+enter"), true);
+			assert.strictEqual(parseKey("\x1b[13;2u"), "shift+enter");
+			assert.strictEqual(parseKey("\x1b[13;3u"), "alt+enter");
+		});
+
 		it("should match xterm modifyOtherKeys Enter variants", () => {
 			setKittyProtocolActive(false);
 			assert.strictEqual(matchesKey("\x1b[27;5;13~", "ctrl+enter"), true);
@@ -297,6 +305,14 @@ describe("matchesKey", () => {
 	});
 
 	describe("Legacy key matching", () => {
+		it("should match canonical raw Ctrl+V and Ctrl+Z", () => {
+			setKittyProtocolActive(false);
+			assert.strictEqual(matchesKey("\x16", "ctrl+v"), true);
+			assert.strictEqual(matchesKey("\x1a", "ctrl+z"), true);
+			assert.strictEqual(parseKey("\x16"), "ctrl+v");
+			assert.strictEqual(parseKey("\x1a"), "ctrl+z");
+		});
+
 		it("should match legacy Ctrl+c", () => {
 			setKittyProtocolActive(false);
 			// Ctrl+c sends ASCII 3 (ETX)
@@ -487,8 +503,12 @@ describe("matchesKey", () => {
 		});
 
 		it("should match alt+arrows", () => {
-			assert.strictEqual(matchesKey("\x1bp", "alt+up"), true);
-			assert.strictEqual(matchesKey("\x1bp", "up"), false);
+			assert.strictEqual(matchesKey("\x1b[1;3A", "alt+up"), true);
+			assert.strictEqual(matchesKey("\x1b[1;3B", "alt+down"), true);
+			assert.strictEqual(parseKey("\x1b[1;3A"), "alt+up");
+			assert.strictEqual(parseKey("\x1b[1;3B"), "alt+down");
+			assert.strictEqual(parseKey("\x1bp"), "alt+p");
+			assert.strictEqual(parseKey("\x1bn"), "alt+n");
 		});
 
 		it("should match rxvt modifier sequences", () => {
@@ -612,7 +632,7 @@ describe("parseKey", () => {
 			assert.strictEqual(parseKey("\x1b[24~"), "f12");
 			assert.strictEqual(parseKey("\x1b[E"), "clear");
 			assert.strictEqual(parseKey("\x1b[2^"), "ctrl+insert");
-			assert.strictEqual(parseKey("\x1bp"), "alt+up");
+			assert.strictEqual(parseKey("\x1b[1;3A"), "alt+up");
 		});
 
 		it("should parse double bracket pageUp", () => {

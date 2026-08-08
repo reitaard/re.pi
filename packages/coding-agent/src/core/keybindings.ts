@@ -67,8 +67,8 @@ export const KEYBINDINGS = {
 	"app.clear": { defaultKeys: "ctrl+c", description: "Clear editor" },
 	"app.exit": { defaultKeys: "ctrl+d", description: "Exit when editor is empty" },
 	"app.suspend": {
-		defaultKeys: process.platform === "win32" ? [] : "ctrl+z",
-		description: "Suspend to background",
+		defaultKeys: [],
+		description: "Suspend to background (manual binding only)",
 	},
 	"app.thinking.cycle": {
 		defaultKeys: "shift+tab",
@@ -101,15 +101,15 @@ export const KEYBINDINGS = {
 		description: "Copy message to clipboard",
 	},
 	"app.message.followUp": {
-		defaultKeys: "alt+enter",
+		defaultKeys: ["alt+enter"],
 		description: "Queue follow-up message",
 	},
 	"app.message.dequeue": {
-		defaultKeys: ["alt+up", "ctrl+shift+j"],
+		defaultKeys: ["alt+up"],
 		description: "Restore queued messages",
 	},
 	"app.clipboard.pasteImage": {
-		defaultKeys: process.platform === "win32" ? "alt+v" : "ctrl+v",
+		defaultKeys: ["ctrl+v", "alt+v"],
 		description: "Paste image from clipboard (text fallback)",
 	},
 	"app.session.new": { defaultKeys: [], description: "Start a new session" },

@@ -4,6 +4,7 @@ import { type AutocompleteProvider, CombinedAutocompleteProvider } from "@reitaa
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import { type Component, Container, type Focusable, TUI } from "../../tui/src/tui.ts";
 import { VirtualTerminal } from "../../tui/test/virtual-terminal.ts";
+import type { AgentSessionEvent } from "../src/core/agent-session.ts";
 import type { AutocompleteProviderFactory } from "../src/core/extensions/types.ts";
 import type { SourceInfo } from "../src/core/source-info.ts";
 import type { AuthSelectorProvider } from "../src/modes/interactive/components/oauth-selector.ts";
@@ -69,6 +70,32 @@ type ExtensionFixture = {
 	path: string;
 	sourceInfo?: SourceInfo;
 };
+
+type FollowUpEventContext = {
+	isInitialized: boolean;
+	init: () => Promise<void>;
+	footer: { invalidate: () => void };
+	showStatus: (message: string) => void;
+};
+
+type HandleEventMethod = (this: FollowUpEventContext, event: AgentSessionEvent) => Promise<void>;
+const handleEvent = (InteractiveMode.prototype as unknown as { handleEvent: HandleEventMethod }).handleEvent;
+
+describe("InteractiveMode.follow-up boundary", () => {
+	test("reports the transition before queued follow-up processing", async () => {
+		const showStatus = vi.fn();
+		const fakeThis: FollowUpEventContext = {
+			isInitialized: true,
+			init: async () => {},
+			footer: { invalidate: vi.fn() },
+			showStatus,
+		};
+
+		await handleEvent.call(fakeThis, { type: "follow_up_start" });
+
+		expect(showStatus).toHaveBeenCalledWith("Current task completed — starting queued follow-up");
+	});
+});
 
 describe("InteractiveMode.showStatus", () => {
 	beforeAll(() => {

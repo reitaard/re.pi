@@ -1560,6 +1560,16 @@ describe("Editor component", () => {
 			assert.strictEqual(editor.getText(), "");
 		});
 
+		it("uses raw Ctrl+Z for undo instead of suspend", () => {
+			const editor = new Editor(createTestTUI(), defaultEditorTheme);
+
+			editor.handleInput("a");
+			editor.handleInput("b");
+			editor.handleInput("\x1a");
+
+			assert.strictEqual(editor.getText(), "");
+		});
+
 		it("coalesces consecutive word characters into one undo unit", () => {
 			const editor = new Editor(createTestTUI(), defaultEditorTheme);
 

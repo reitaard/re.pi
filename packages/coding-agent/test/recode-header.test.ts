@@ -15,6 +15,7 @@ describe("RecodeHeader", () => {
 				model: "qwen3.5-9b",
 				provider: "open-provider",
 				cwd: "re.pi",
+				toolOutputKey: "Ctrl+O",
 			}),
 		);
 
@@ -75,6 +76,7 @@ describe("RecodeHeader", () => {
 				model: "qwen3.5-9b",
 				provider: "open-provider",
 				cwd: "re.pi",
+				toolOutputKey: "Ctrl+O",
 				worker: {
 					workerId: "research",
 					workerName: "Mayuri (研究)",
@@ -109,6 +111,7 @@ describe("RecodeHeader", () => {
 				model: "qwen3.5-9b",
 				provider: "open-provider",
 				cwd: "re.pi",
+				toolOutputKey: "Ctrl+O",
 				worker: {
 					workerId: "audit",
 					workerName: "Levi (監査)",

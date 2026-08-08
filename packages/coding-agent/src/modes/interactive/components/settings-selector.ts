@@ -539,14 +539,14 @@ export class SettingsSelectorComponent extends Container {
 				id: "steering-mode",
 				label: "Steering mode",
 				description:
-					"Enter while streaming queues steering messages. 'one-at-a-time': deliver one, wait for response. 'all': deliver all at once.",
+					"Enter while working = steering: insert after the current tool batch, before the next model decision. one-at-a-time = take one queued message per next run; all = take every queued message together.",
 				currentValue: config.steeringMode,
 				values: ["one-at-a-time", "all"],
 			},
 			{
 				id: "follow-up-mode",
 				label: "Follow-up mode",
-				description: `${followUpKey} queues follow-up messages until agent stops. 'one-at-a-time': deliver one, wait for response. 'all': deliver all at once.`,
+				description: `${followUpKey} = follow-up: hold until the current task has sent its final response. one-at-a-time = take one queued message per next run; all = take every queued message together.`,
 				currentValue: config.followUpMode,
 				values: ["one-at-a-time", "all"],
 			},

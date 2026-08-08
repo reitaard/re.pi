@@ -1362,6 +1362,49 @@ describe("agentLoop with AgentMessage", () => {
 
 		expect(llmCalls).toBe(1);
 	});
+
+	it("emits the follow-up boundary after the final response and before injection", async () => {
+		const context: AgentContext = { systemPrompt: "", messages: [], tools: [] };
+		let followUpReturned = false;
+		let callIndex = 0;
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			getFollowUpMessages: async () => {
+				if (followUpReturned) return [];
+				followUpReturned = true;
+				return [createUserMessage("queued follow-up")];
+			},
+		};
+		const stream = agentLoop([createUserMessage("start")], context, config, undefined, () => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				callIndex++;
+				mockStream.push({
+					type: "done",
+					reason: "stop",
+					message: createAssistantMessage([{ type: "text", text: callIndex === 1 ? "done" : "followed" }]),
+				});
+			});
+			return mockStream;
+		});
+		const events: AgentEvent[] = [];
+		for await (const event of stream) events.push(event);
+
+		const boundaryIndex = events.findIndex((event) => event.type === "follow_up_start");
+		const finalResponseEndIndex = events.findIndex(
+			(event) => event.type === "message_end" && event.message.role === "assistant",
+		);
+		const queuedMessageIndex = events.findIndex(
+			(event) =>
+				event.type === "message_start" &&
+				event.message.role === "user" &&
+				event.message.content === "queued follow-up",
+		);
+		expect(finalResponseEndIndex).toBeGreaterThanOrEqual(0);
+		expect(boundaryIndex).toBeGreaterThan(finalResponseEndIndex);
+		expect(queuedMessageIndex).toBeGreaterThan(boundaryIndex);
+	});
 });
 
 describe("agentLoopContinue with AgentMessage", () => {

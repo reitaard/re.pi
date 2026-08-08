@@ -111,6 +111,12 @@ import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
 import { emitStartupMilestone, isStartupProbeEnabled } from "../../core/startup-probe.ts";
 import { isInstallTelemetryEnabled } from "../../core/telemetry.ts";
+import {
+	applyTerminalSetup,
+	createTerminalSetupPlan,
+	formatTerminalKeyboardReport,
+	type TerminalSetupTarget,
+} from "../../core/terminal-setup.ts";
 import type { TruncationResult } from "../../core/tools/truncate.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../../core/trust-manager.ts";
 import {
@@ -125,8 +131,12 @@ import {
 	subscribeLspLifecycle,
 } from "../../lsp/index.ts";
 import { getChangelogPath, getNewEntries, normalizeChangelogLinks, parseChangelog } from "../../utils/changelog.ts";
-import { copyToClipboard, readClipboardText } from "../../utils/clipboard.ts";
-import { extensionForImageMimeType, readClipboardImage } from "../../utils/clipboard-image.ts";
+import { copyToClipboard, readClipboardTextWithStatus } from "../../utils/clipboard.ts";
+import {
+	ClipboardImageDecodeError,
+	extensionForImageMimeType,
+	readClipboardImage,
+} from "../../utils/clipboard-image.ts";
 import { parseGitUrl } from "../../utils/git.ts";
 import { getCwdRelativePath } from "../../utils/paths.ts";
 import { getPiUserAgent } from "../../utils/pi-user-agent.ts";
@@ -1013,7 +1023,6 @@ export class InteractiveMode {
 				hint("app.clear", "to clear"),
 				rawKeyHint(`${keyText("app.clear")} twice`, "to exit"),
 				hint("app.exit", "to exit (empty)"),
-				hint("app.suspend", "to suspend"),
 				keyHint("tui.editor.deleteToLineEnd", "to delete to end"),
 				hint("app.thinking.cycle", "to cycle thinking level"),
 				rawKeyHint(`${keyText("app.model.cycleForward")}/${keyText("app.model.cycleBackward")}`, "to cycle models"),
@@ -1031,7 +1040,7 @@ export class InteractiveMode {
 			].join("\n");
 			const onboarding = theme.fg(
 				"dim",
-				`Pi can explain its own features and look up its docs. Ask it how to use or extend Pi.`,
+				`RePi can explain its own features and look up its docs. Ask it how to use or extend Recode.`,
 			);
 			this.builtInHeader = new ExpandableText(
 				() => "",
@@ -1051,6 +1060,7 @@ export class InteractiveMode {
 						model: this.session.model?.id ?? "No model selected",
 						provider: this.session.model?.provider ?? "unknown",
 						cwd: path.basename(this.sessionManager.getCwd()) || ".",
+						toolOutputKey: keyDisplayText("app.tools.expand"),
 						worker: getActiveWorkerHeaderState(),
 					}),
 				),
@@ -1253,7 +1263,7 @@ export class InteractiveMode {
 		}
 
 		if (extendedKeysFormat === "xterm") {
-			return "tmux extended-keys-format is xterm. Pi works best with csi-u. Add `set -g extended-keys-format csi-u` to ~/.tmux.conf and restart tmux.";
+			return "tmux extended-keys-format is xterm. RePi works best with csi-u. Add `set -g extended-keys-format csi-u` to ~/.tmux.conf and restart tmux.";
 		}
 
 		return undefined;
@@ -3066,7 +3076,7 @@ export class InteractiveMode {
 			if (image) {
 				const tmpDir = os.tmpdir();
 				const ext = extensionForImageMimeType(image.mimeType) ?? "png";
-				const fileName = `pi-clipboard-${crypto.randomUUID()}.${ext}`;
+				const fileName = `recode-clipboard-${crypto.randomUUID()}.${ext}`;
 				const filePath = path.join(tmpDir, fileName);
 				fs.writeFileSync(filePath, Buffer.from(image.bytes));
 
@@ -3075,13 +3085,27 @@ export class InteractiveMode {
 				return;
 			}
 
-			const text = await readClipboardText();
-			if (text) {
-				this.editor.insertTextAtCursor?.(text);
+			const text = await readClipboardTextWithStatus();
+			if (text.status === "text") {
+				this.editor.insertTextAtCursor?.(text.text);
 				this.ui.requestRender();
+				return;
 			}
-		} catch {
-			// Silently ignore clipboard errors (may not have permission, etc.)
+			this.showError(
+				text.status === "unavailable"
+					? "Could not read the clipboard. You can still attach an image or file by dragging it into RePi."
+					: "RePi found no image or text in the clipboard. You can still attach an image or file by dragging it into RePi.",
+			);
+		} catch (error) {
+			if (error instanceof ClipboardImageDecodeError) {
+				this.showError(
+					"Could not decode the clipboard image. You can still attach an image or file by dragging it into RePi.",
+				);
+			} else {
+				this.showError(
+					"Could not read the clipboard. You can still attach an image or file by dragging it into RePi.",
+				);
+			}
 		}
 	}
 
@@ -3150,6 +3174,12 @@ export class InteractiveMode {
 			if (text === "/hotkeys") {
 				this.handleHotkeysCommand();
 				this.editor.setText("");
+				return;
+			}
+			if (text === "/tui-setup" || text.startsWith("/tui-setup ")) {
+				const setupArgs = text.slice("/tui-setup".length).trim();
+				this.editor.setText("");
+				await this.handleTerminalSetupCommand(setupArgs);
 				return;
 			}
 			if (text === "/fork") {
@@ -3303,6 +3333,13 @@ export class InteractiveMode {
 		}
 
 		this.footer.invalidate();
+
+		// Keep the queue-boundary event compatible with older built agent artifacts;
+		// the event is intentionally handled by its string discriminator.
+		if ((event as { type: string }).type === "follow_up_start") {
+			this.showStatus("Current task completed — starting queued follow-up");
+			return;
+		}
 
 		switch (event.type) {
 			case "agent_start":
@@ -4329,7 +4366,7 @@ export class InteractiveMode {
 			// Split by space to support editor arguments (e.g., "code --wait")
 			const [editor, ...editorArgs] = editorCmd.split(" ");
 
-			process.stdout.write(`Launching external editor: ${editorCmd}\nPi will resume when the editor exits.\n`);
+			process.stdout.write(`Launching external editor: ${editorCmd}\nRePi will resume when the editor exits.\n`);
 
 			// Do not use spawnSync here. On Windows, synchronous child_process calls can keep
 			// Node/libuv's console input read active after ui.stop() pauses stdin, racing
@@ -6292,6 +6329,60 @@ export class InteractiveMode {
 		}
 	}
 
+	private parseTerminalSetupTarget(value: string): TerminalSetupTarget | undefined {
+		if (value === "windows-terminal" || value === "vscode") return value;
+		return undefined;
+	}
+
+	private async handleTerminalSetupCommand(args: string): Promise<void> {
+		const parts = args.split(/\s+/).filter(Boolean);
+		const apply = parts[0] === "apply";
+		const report = parts[0] === "report";
+		const target = this.parseTerminalSetupTarget(
+			apply ? (parts[1] ?? "") : report ? (parts[1] ?? "") : (parts[0] ?? ""),
+		);
+		if (parts.length > (apply ? 2 : report ? 2 : 1) || (parts.length > 0 && !apply && !report && !target)) {
+			this.showError("Usage: /tui-setup [report|apply] [windows-terminal|vscode]");
+			return;
+		}
+
+		if (!apply) {
+			this.showStatus(formatTerminalKeyboardReport(this.ui.terminal));
+			return;
+		}
+
+		const selectedTarget = target ?? (process.platform === "win32" ? "windows-terminal" : "vscode");
+		const plan = createTerminalSetupPlan(selectedTarget);
+		if (!plan.supported) {
+			this.showWarning(plan.message);
+			return;
+		}
+		if (plan.before === plan.after) {
+			this.showStatus(`No ${selectedTarget} terminal setup changes are needed.`);
+			return;
+		}
+
+		this.showStatus(`Proposed ${selectedTarget} terminal changes:\n${plan.diff}`);
+		const confirmed = await this.showExtensionConfirm(
+			"Apply RePi terminal setup",
+			`Create a backup of ${plan.configPath}, then apply these bindings to every focused terminal tab? This changes Ctrl+V paste and Ctrl+Z behavior outside RePi too.`,
+		);
+		if (!confirmed) {
+			this.showStatus("Terminal setup cancelled; no settings were changed.");
+			return;
+		}
+		try {
+			const result = applyTerminalSetup(plan);
+			this.showStatus(
+				result.backupPath
+					? `Terminal setup applied. Backup: ${result.backupPath}`
+					: `Terminal setup already applied: ${result.configPath}`,
+			);
+		} catch (error) {
+			this.showError(`Terminal setup failed: ${error instanceof Error ? error.message : String(error)}`);
+		}
+	}
+
 	private async handleCopyCommand(): Promise<void> {
 		const text = this.session.getLastAssistantText();
 		if (!text) {
@@ -6480,7 +6571,6 @@ export class InteractiveMode {
 		const interrupt = this.getAppKeyDisplay("app.interrupt");
 		const clear = this.getAppKeyDisplay("app.clear");
 		const exit = this.getAppKeyDisplay("app.exit");
-		const suspend = this.getAppKeyDisplay("app.suspend");
 		const cycleThinkingLevel = this.getAppKeyDisplay("app.thinking.cycle");
 		const cycleModelForward = this.getAppKeyDisplay("app.model.cycleForward");
 		const selectModel = this.getAppKeyDisplay("app.model.select");
@@ -6509,7 +6599,7 @@ export class InteractiveMode {
 | Key | Action |
 |-----|--------|
 | \`${submit}\` | Send message |
-| \`${newLine}\` | New line${process.platform === "win32" ? " (Ctrl+Enter on Windows Terminal)" : ""} |
+| \`${newLine}\` | New line (Shift+Enter primary; Ctrl+J alias) |
 | \`${deleteWordBackward}\` | Delete word backwards |
 | \`${deleteWordForward}\` | Delete word forwards |
 | \`${deleteToLineStart}\` | Delete to start of line |
@@ -6525,7 +6615,6 @@ export class InteractiveMode {
 | \`${interrupt}\` | Cancel autocomplete / abort streaming |
 | \`${clear}\` | Clear editor (first) / exit (second) |
 | \`${exit}\` | Exit (when editor is empty) |
-| \`${suspend}\` | Suspend to background |
 | \`${cycleThinkingLevel}\` | Cycle thinking level |
 | \`${cycleModelForward}\` / \`${cycleModelBackward}\` | Cycle models |
 | \`${selectModel}\` | Open model selector |

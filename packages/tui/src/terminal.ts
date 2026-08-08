@@ -12,6 +12,31 @@ const TERMINAL_PROGRESS_KEEPALIVE_MS = 1000;
 const TERMINAL_PROGRESS_ACTIVE_SEQUENCE = "\x1b]9;4;3\x07";
 const TERMINAL_PROGRESS_CLEAR_SEQUENCE = "\x1b]9;4;0;\x07";
 const APPLE_TERMINAL_SHIFT_ENTER_SEQUENCE = "\x1b[13;2u";
+
+/** Canonical modified sequences used by RePi terminal setup and capability checks. */
+export const REPI_TERMINAL_BINDING_SEQUENCES = {
+	shiftEnter: "\x1b[13;2u",
+	altEnter: "\x1b[13;3u",
+	altUp: "\x1b[1;3A",
+	ctrlV: "\x16",
+	ctrlZ: "\x1a",
+} as const;
+
+export type RepiTerminalBinding = keyof typeof REPI_TERMINAL_BINDING_SEQUENCES;
+export type TerminalKeyboardProtocol = "kitty" | "modifyOtherKeys" | "legacy";
+
+export interface KeyboardProtocolStatus {
+	protocol: TerminalKeyboardProtocol;
+	confirmed: Record<RepiTerminalBinding, boolean>;
+}
+
+const REPI_TERMINAL_BINDING_BY_SEQUENCE = new Map<string, RepiTerminalBinding>(
+	Object.entries(REPI_TERMINAL_BINDING_SEQUENCES).map(([binding, sequence]) => [
+		sequence,
+		binding as RepiTerminalBinding,
+	]),
+);
+
 const DESIRED_KITTY_KEYBOARD_PROTOCOL_FLAGS = 7;
 const KEYBOARD_PROTOCOL_RESPONSE_FRAGMENT_TIMEOUT_MS = 150;
 const KITTY_KEYBOARD_PROTOCOL_QUERY = `\x1b[>${DESIRED_KITTY_KEYBOARD_PROTOCOL_FLAGS}u\x1b[?u\x1b[c`;
@@ -74,6 +99,12 @@ export interface Terminal {
 	// Whether Kitty keyboard protocol is active
 	get kittyProtocolActive(): boolean;
 
+	// Whether xterm modifyOtherKeys mode 2 is active
+	readonly modifyOtherKeysActive?: boolean;
+
+	// Current keyboard protocol and observed canonical RePi sequences
+	getKeyboardProtocolStatus?(): KeyboardProtocolStatus;
+
 	// Cursor positioning (relative to current position)
 	moveBy(lines: number): void; // Move cursor up (negative) or down (positive) by N lines
 
@@ -121,6 +152,7 @@ export class ProcessTerminal implements Terminal {
 	private resizeHandler?: () => void;
 	private _kittyProtocolActive = false;
 	private _modifyOtherKeysActive = false;
+	private readonly confirmedTerminalBindings = new Set<RepiTerminalBinding>();
 	private keyboardProtocolPushed = false;
 	private keyboardProtocolNegotiationBuffer = "";
 	private keyboardProtocolBufferFlushTimer?: ReturnType<typeof setTimeout>;
@@ -142,7 +174,21 @@ export class ProcessTerminal implements Terminal {
 		return this._modifyOtherKeysActive;
 	}
 
+	getKeyboardProtocolStatus(): KeyboardProtocolStatus {
+		const protocol: TerminalKeyboardProtocol = this._kittyProtocolActive
+			? "kitty"
+			: this._modifyOtherKeysActive
+				? "modifyOtherKeys"
+				: "legacy";
+		const confirmed = {} as Record<RepiTerminalBinding, boolean>;
+		for (const binding of Object.keys(REPI_TERMINAL_BINDING_SEQUENCES) as RepiTerminalBinding[]) {
+			confirmed[binding] = this.confirmedTerminalBindings.has(binding);
+		}
+		return { protocol, confirmed };
+	}
+
 	start(onInput: (data: string) => void, onResize: () => void): void {
+		this.confirmedTerminalBindings.clear();
 		this.inputHandler = onInput;
 		this.resizeHandler = onResize;
 
@@ -318,6 +364,8 @@ export class ProcessTerminal implements Terminal {
 	}
 
 	private forwardInputSequence(sequence: string): void {
+		const confirmedBinding = REPI_TERMINAL_BINDING_BY_SEQUENCE.get(sequence);
+		if (confirmedBinding) this.confirmedTerminalBindings.add(confirmedBinding);
 		if (!this.inputHandler) return;
 		const isAppleTerminal = sequence === "\r" && isAppleTerminalSession();
 		const input = normalizeAppleTerminalInput(

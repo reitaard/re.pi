@@ -774,14 +774,7 @@ export class Editor implements Component, Focusable {
 		}
 
 		// New line
-		if (
-			kb.matches(data, "tui.input.newLine") ||
-			(data.charCodeAt(0) === 10 && data.length > 1) ||
-			data === "\x1b\r" ||
-			data === "\x1b[13;2~" ||
-			(data.length > 1 && data.includes("\x1b") && data.includes("\r")) ||
-			(data === "\n" && data.length === 1)
-		) {
+		if (kb.matches(data, "tui.input.newLine")) {
 			if (this.shouldSubmitOnBackslashEnter(data, kb)) {
 				this.handleBackspace();
 				this.submitValue();

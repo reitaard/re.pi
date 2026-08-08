@@ -12,6 +12,15 @@ export type ClipboardImage = {
 	mimeType: string;
 };
 
+export class ClipboardImageDecodeError extends Error {
+	readonly kind = "decode-error" as const;
+
+	constructor() {
+		super("Clipboard image could not be decoded");
+		this.name = "ClipboardImageDecodeError";
+	}
+}
+
 const SUPPORTED_IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"] as const;
 
 const DEFAULT_LIST_TIMEOUT_MS = 1000;
@@ -291,7 +300,7 @@ export async function readClipboardImage(options?: {
 	if (!isSupportedImageMimeType(image.mimeType)) {
 		const pngBytes = await convertToPng(image.bytes);
 		if (!pngBytes) {
-			return null;
+			throw new ClipboardImageDecodeError();
 		}
 		return { bytes: pngBytes, mimeType: "image/png" };
 	}

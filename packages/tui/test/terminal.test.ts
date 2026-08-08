@@ -140,6 +140,31 @@ describe("ProcessTerminal Kitty keyboard protocol negotiation", () => {
 		}
 	});
 
+	it("confirms canonical modified sequences when they reach RePi", () => {
+		const harness = setupNegotiation();
+		try {
+			harness.send("\x1b[?7u");
+			harness.send("\x1b[13;2u");
+			harness.send("\x1b[13;3u");
+			harness.send("\x1b[1;3A");
+			harness.send("\x16");
+			harness.send("\x1a");
+
+			assert.deepEqual(harness.terminal.getKeyboardProtocolStatus(), {
+				protocol: "kitty",
+				confirmed: {
+					shiftEnter: true,
+					altEnter: true,
+					altUp: true,
+					ctrlV: true,
+					ctrlZ: true,
+				},
+			});
+		} finally {
+			harness.cleanup();
+		}
+	});
+
 	it("forwards normal input while waiting for Kitty response", () => {
 		const harness = setupNegotiation();
 		try {

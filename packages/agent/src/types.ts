@@ -428,6 +428,8 @@ export type AgentEvent =
 	// Agent lifecycle
 	| { type: "agent_start" }
 	| { type: "agent_end"; messages: AgentMessage[] }
+	// Emitted after the current final assistant response and before a queued follow-up starts.
+	| { type: "follow_up_start" }
 	// Turn lifecycle - a turn is one assistant response + any tool calls/results
 	| { type: "turn_start" }
 	| { type: "turn_end"; message: AgentMessage; toolResults: ToolResultMessage[] }
