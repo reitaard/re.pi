@@ -11,6 +11,7 @@ import llamaExtension from "../src/extensions/llama/index.ts";
 import { createLlamaProvider, LLAMA_PROVIDER_ID } from "../src/extensions/llama/provider.ts";
 
 const servers: Server[] = [];
+const signal = new AbortController().signal;
 
 async function listen(handler: RequestListener): Promise<{ server: Server; url: string }> {
 	const server = createServer(handler);
@@ -113,8 +114,15 @@ describe("llama.cpp extension", () => {
 		const first = createLlamaProvider();
 		await first.provider.refreshModels?.({
 			credential: { type: "api_key", key: "local", env: { LLAMA_BASE_URL: url } },
-			store,
+			stored: await store.read(),
+			publish: async (publication) => {
+				if (publication.persist === null) await store.delete();
+				else if (publication.persist !== undefined) await store.write(publication.persist);
+				publication.update?.();
+				return true;
+			},
 			allowNetwork: true,
+			signal,
 		});
 		expect(first.provider.getModels().map((model) => model.id)).toEqual(["loaded"]);
 		expect(cachedEntry?.models.map((model) => model.id)).toEqual(["loaded"]);
@@ -122,8 +130,15 @@ describe("llama.cpp extension", () => {
 		const second = createLlamaProvider();
 		await second.provider.refreshModels?.({
 			credential: { type: "api_key", key: "local", env: { LLAMA_BASE_URL: url } },
-			store,
+			stored: await store.read(),
+			publish: async (publication) => {
+				if (publication.persist === null) await store.delete();
+				else if (publication.persist !== undefined) await store.write(publication.persist);
+				publication.update?.();
+				return true;
+			},
 			allowNetwork: false,
+			signal,
 		});
 		expect(second.provider.getModels()).toEqual([
 			expect.objectContaining({ id: "loaded", baseUrl: `${url}/v1`, contextWindow: 32768 }),
@@ -137,8 +152,8 @@ describe("llama.cpp extension", () => {
 			env: async () => undefined,
 			fileExists: async () => false,
 		};
-		expect(await auth.check?.({ ctx: emptyContext })).toBeUndefined();
-		expect(await auth.resolve({ ctx: emptyContext })).toBeUndefined();
+		expect(await auth.check?.({ ctx: emptyContext, signal })).toBeUndefined();
+		expect(await auth.resolve({ ctx: emptyContext, signal })).toBeUndefined();
 
 		const { url } = await listen((request, response) => {
 			expect(request.headers.authorization).toBe("Bearer secret");
@@ -148,13 +163,14 @@ describe("llama.cpp extension", () => {
 		const credential = await auth.login!({
 			prompt: async (_prompt: AuthPrompt) => answers.shift()!,
 			notify: () => {},
+			signal,
 		});
 		expect(credential).toEqual({
 			type: "api_key",
 			key: "secret",
 			env: { LLAMA_BASE_URL: url },
 		});
-		expect(await auth.resolve({ ctx: emptyContext, credential })).toEqual({
+		expect(await auth.resolve({ ctx: emptyContext, credential, signal })).toEqual({
 			auth: { apiKey: "secret", baseUrl: `${url}/v1` },
 			env: { LLAMA_BASE_URL: url },
 			source: "stored credential",

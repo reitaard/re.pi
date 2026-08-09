@@ -41,6 +41,7 @@ const ThemeJsonSchema = Type.Object({
 		thinkingText: ColorValueSchema,
 		// Backgrounds & Content Text (11 colors)
 		selectedBg: ColorValueSchema,
+		scrollbarThumb: Type.Optional(ColorValueSchema),
 		userMessageBg: ColorValueSchema,
 		userMessageText: ColorValueSchema,
 		customMessageBg: ColorValueSchema,
@@ -159,6 +160,7 @@ export type ThemeColor =
 
 export type ThemeBg =
 	| "selectedBg"
+	| "scrollbarThumb"
 	| "userMessageBg"
 	| "customMessageBg"
 	| "toolPendingBg"
@@ -379,11 +381,12 @@ function resolveThemeColors<T extends Record<string, ColorValue>>(
 
 function withThemeColorFallbacks(
 	colors: ThemeJson["colors"],
-): ThemeJson["colors"] & { footer: ColorValue; thinkingMax: ColorValue } {
+): ThemeJson["colors"] & { footer: ColorValue; thinkingMax: ColorValue; scrollbarThumb: ColorValue } {
 	return {
 		...colors,
 		footer: colors.footer ?? colors.dim,
 		thinkingMax: colors.thinkingMax ?? colors.thinkingXhigh,
+		scrollbarThumb: colors.scrollbarThumb ?? colors.selectedBg,
 	};
 }
 
@@ -665,6 +668,7 @@ function createTheme(themeJson: ThemeJson, mode?: ColorMode, sourcePath?: string
 	const bgColors: Record<ThemeBg, string | number> = {} as Record<ThemeBg, string | number>;
 	const bgColorKeys: Set<string> = new Set([
 		"selectedBg",
+		"scrollbarThumb",
 		"userMessageBg",
 		"customMessageBg",
 		"toolPendingBg",

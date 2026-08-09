@@ -14,6 +14,7 @@ import type { ModelRegistry } from "./model-registry.ts";
 export const defaultModelPerProvider: Record<KnownProvider, string> = {
 	"amazon-bedrock": "us.anthropic.claude-opus-4-6-v1",
 	"ant-ling": "Ring-2.6-1T",
+	baseten: "zai-org/GLM-5.2",
 	anthropic: "claude-opus-4-8",
 	openai: "gpt-5.5",
 	"azure-openai-responses": "gpt-5.4",
@@ -42,8 +43,9 @@ export const defaultModelPerProvider: Record<KnownProvider, string> = {
 	opencode: "kimi-k2.6",
 	"opencode-go": "kimi-k2.6",
 	"kimi-coding": "kimi-for-coding",
-	"qwen-token-plan": "qwen3.8-max-preview",
-	"qwen-token-plan-cn": "qwen3.8-max-preview",
+	"qwen-token-plan": "qwen3.8-max",
+	"qwen-token-plan-cn": "qwen3.8-max",
+	"qwen-token-plan-individual": "qwen3.8-max",
 	"cloudflare-workers-ai": "@cf/moonshotai/kimi-k2.6",
 	"cloudflare-ai-gateway": "workers-ai/@cf/moonshotai/kimi-k2.6",
 	xiaomi: "mimo-v2.5-pro",
@@ -367,7 +369,10 @@ export function resolveCliModel(options: {
 	cliProvider?: string;
 	cliModel?: string;
 	cliThinking?: ThinkingLevel;
-	modelRegistry: ModelRegistry;
+	modelRegistry: {
+		getAll(): Model<Api>[];
+		hasConfiguredAuth(model: Model<Api>): boolean;
+	};
 }): ResolveCliModelResult {
 	const { cliProvider, cliModel, cliThinking, modelRegistry } = options;
 

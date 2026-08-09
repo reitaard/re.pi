@@ -282,6 +282,17 @@ The repository already has one intended release path: `scripts/local-release.mjs
 - [ ] Termux rollout only from the certified Termux archive.
 - [ ] Never clone/build independently on deployment machines unless performing an explicitly approved source-development task.
 
+## Upstream v0.84.1 direct port
+
+- [x] Establish exact old-upstream/current-Recode/new-upstream comparison and isolated integration worktree.
+- [x] Preserve active V3 JSONL runtime and retain clean upstream V4 as inactive library source.
+- [x] Resolve shared Agent Core, AI, Coding Agent, and TUI source overlaps while retaining Recode identity and protected runtime behavior.
+- [x] Retain telemetry as a Recode-namespaced package and retain deferred upstream facilities as inactive source material.
+- [x] Make deferred package workspace/build participation explicit without removing source files.
+- [ ] Reconcile manifests, dependencies, lockfile, shrinkwrap, and install lock.
+- [ ] Run focused suites, `./test.sh`, `npm run check`, smoke tests, and final patch review.
+- [ ] With explicit Creator approval, prepare lockstep `0.83.0`, merge/commit to clean `agent-harness`, then build/install through `b.sh`.
+
 ## Immediate next step
 
 V1 and the exact Recode `0.81.6` Windows/VPS checkpoint are complete. Hidden Windows Maestro startup, authenticated readiness and VPS rollback/rollforward are certified. V2-C and the Creator-bounded three-cycle optimization are complete; self-update discovery remains disabled until Recode-owned metadata exists.

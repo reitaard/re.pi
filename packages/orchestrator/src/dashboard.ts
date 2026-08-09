@@ -7,7 +7,7 @@ import {
 	type KeyId,
 	matchesKey,
 	ProcessTerminal,
-	TUI,
+	TuiMainScreen,
 	truncateToWidth,
 	visibleWidth,
 } from "@reitaard/repi-tui";
@@ -498,7 +498,7 @@ export async function runMaestroDashboard(
 ): Promise<void> {
 	if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error("Maestro TUI requires an interactive terminal");
 	const terminal = new ProcessTerminal();
-	const tui = new TUI(terminal);
+	const tui = new TuiMainScreen(terminal);
 	let stopped = false;
 	const dashboard = new MaestroDashboard({
 		client,

@@ -13,13 +13,7 @@ async function loadMigrationSql(relativePath: string): Promise<string> {
 }
 
 export async function loadMigrations(): Promise<SqliteMigration[]> {
-	return [
-		{
-			id: "001_initial.sql",
-			order: 1,
-			sql: await loadMigrationSql("./migrations/001_initial.sql"),
-		},
-	];
+	return [{ id: "001_initial.sql", order: 1, sql: await loadMigrationSql("./migrations/001_initial.sql") }];
 }
 
 async function ensureMigrationsTable(db: SqliteDatabase): Promise<void> {
@@ -41,9 +35,7 @@ export async function applyMigrations(db: SqliteDatabase): Promise<void> {
 		if (applied.has(migration.id)) continue;
 		await db.transaction(async () => {
 			await db.exec(migration.sql);
-			await db
-				.prepare("INSERT INTO migrations (id, applied_at) VALUES (?, ?)")
-				.run(migration.id, new Date().toISOString());
+			await db.prepare("INSERT INTO migrations (id, applied_at) VALUES (?, ?)").run(migration.id, new Date().toISOString());
 		});
 		applied.add(migration.id);
 	}

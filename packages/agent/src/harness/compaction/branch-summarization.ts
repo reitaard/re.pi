@@ -8,6 +8,9 @@ import {
 	createCustomMessage,
 } from "../messages.ts";
 import type { BranchSummaryResult, Session, SessionTreeEntry } from "../types.ts";
+
+export type { BranchSummaryResult } from "../types.ts";
+
 import { BranchSummaryError, err, ok, type Result, SessionError } from "../types.ts";
 import { completeSimpleWithRetries, estimateTokens, SUMMARIZATION_SYSTEM_PROMPT } from "./compaction.ts";
 import {

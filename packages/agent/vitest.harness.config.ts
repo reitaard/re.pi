@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
+const telemetrySrcIndex = fileURLToPath(new URL("../telemetry/src/index.ts", import.meta.url));
 const aiSrcIndex = fileURLToPath(new URL("../ai/src/index.ts", import.meta.url));
 const aiSrcCompat = fileURLToPath(new URL("../ai/src/compat.ts", import.meta.url));
 const agentSrcIndex = fileURLToPath(new URL("../agent/src/index.ts", import.meta.url));
@@ -22,9 +23,10 @@ export default defineConfig({
 	},
 	resolve: {
 		alias: [
-			{ find: /^@earendil-works\/pi-agent-core$/, replacement: agentSrcIndex },
-			{ find: /^@earendil-works\/pi-ai$/, replacement: aiSrcIndex },
-			{ find: /^@earendil-works\/pi-ai\/compat$/, replacement: aiSrcCompat },
+			{ find: /^@reitaard\/repi-telemetry$/, replacement: telemetrySrcIndex },
+			{ find: /^@reitaard\/repi-agent-core$/, replacement: agentSrcIndex },
+			{ find: /^@reitaard\/repi-ai$/, replacement: aiSrcIndex },
+			{ find: /^@reitaard\/repi-ai\/compat$/, replacement: aiSrcCompat },
 		],
 	},
 });
