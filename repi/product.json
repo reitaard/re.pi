@@ -3,6 +3,6 @@
 	"productName": "RePi",
 	"appName": "recode",
 	"packageName": "@reitaard/repi-coding-agent",
-	"nextStableVersion": "0.82.1",
+	"nextStableVersion": "0.83.0",
 	"upstreamRemote": "upstream"
 }

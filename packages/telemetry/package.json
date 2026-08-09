@@ -1,6 +1,6 @@
 {
 	"name": "@reitaard/repi-telemetry",
-	"version": "0.82.1",
+	"version": "0.83.0",
 	"description": "Vendor-neutral telemetry contracts and typed schema utilities for pi",
 	"type": "module",
 	"main": "./dist/index.js",
