@@ -72,6 +72,7 @@ function validatePack(directory) {
 function isPublished(name, version) {
 	const result = spawnSync(commandForPlatform("npm"), ["view", `${name}@${version}`, "version", "--json"], {
 		encoding: "utf8",
+		shell: process.platform === "win32",
 		stdio: ["inherit", "pipe", "pipe"],
 	});
 
