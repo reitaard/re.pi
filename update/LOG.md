@@ -1,5 +1,13 @@
 # Update Work Log
 
+## 2026-08-10 — Recode v0.83.0 direct-port checkpoint
+
+- Merged the upstream v0.84.1 direct port into `agent-harness` while preserving the active V3 JSONL runtime and inactive Session V4/SQLite/protocol/server source surfaces.
+- Set the publishable workspace packages and `repi/product.json` to lockstep `0.83.0`.
+- Restored the SQLite backend build inputs and made the local packer bundle the unpublished `@reitaard/repi-telemetry` workspace tarball.
+- `npm run check` passed, and the full local package pack/install smoke produced `reitaard-repi-coding-agent-0.83.0.tgz` from source commit `9f2fcd4d`.
+- npm publication, release tagging, and remote installation remain separate gated operations.
+
 ## 2026-08-09 — Upstream v0.84.1 TUI renderer reconciliation
 
 - Replaced standalone startup and configuration-selector construction of the removed `TUI` class with `TuiMainScreen`.
