@@ -14,8 +14,17 @@ import { getTextOutput, invalidArgText, shortenPath, str } from "./render-utils.
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 import { DEFAULT_MAX_BYTES, formatSize, type TruncationResult, truncateHead } from "./truncate.ts";
 
-function toPosixPath(value: string): string {
-	return value.replace(/\\/g, "/");
+/** Relativize a find result against the search root and normalize it to posix separators. */
+export function relativizeFindResultPath(
+	resultPath: string,
+	searchPath: string,
+	pathModule: path.PlatformPath = path,
+): string {
+	const hadTrailingSeparator =
+		resultPath.endsWith(pathModule.sep) || (pathModule.sep === "\\" && resultPath.endsWith("/"));
+	const relativePath = pathModule.isAbsolute(resultPath) ? pathModule.relative(searchPath, resultPath) : resultPath;
+	const posixPath = relativePath.split(pathModule.sep).join("/");
+	return hadTrailingSeparator && !posixPath.endsWith("/") ? `${posixPath}/` : posixPath;
 }
 
 const findSchema = Type.Object({
@@ -25,6 +34,11 @@ const findSchema = Type.Object({
 	path: Type.Optional(Type.String({ description: "Directory to search in (default: current directory)" })),
 	limit: Type.Optional(Type.Number({ description: "Maximum number of results (default: 1000)" })),
 });
+
+export const findToolSystemPromptContribution = {
+	snippet: "Find files by glob pattern (respects .gitignore)",
+	guidelines: [],
+} as const;
 
 export type FindToolInput = Static<typeof findSchema>;
 
@@ -116,7 +130,7 @@ export function createFindToolDefinition(
 		name: "find",
 		label: "find",
 		description: `Search for files by glob pattern. Returns matching file paths relative to the search directory. Respects .gitignore. Output is truncated to ${DEFAULT_LIMIT} results or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first).`,
-		promptSnippet: "Find files by glob pattern (respects .gitignore)",
+		promptSnippet: findToolSystemPromptContribution.snippet,
 		parameters: findSchema,
 		async execute(
 			_toolCallId,
@@ -181,10 +195,7 @@ export function createFindToolDefinition(
 							}
 
 							// Relativize paths against the search root for stable output.
-							const relativized = results.map((p) => {
-								if (p.startsWith(searchPath)) return toPosixPath(p.slice(searchPath.length + 1));
-								return toPosixPath(path.relative(searchPath, p));
-							});
+							const relativized = results.map((p) => relativizeFindResultPath(p, searchPath));
 							const resultLimitReached = relativized.length >= effectiveLimit;
 							const rawOutput = relativized.join("\n");
 							const truncation = truncateHead(rawOutput, { maxLines: Number.MAX_SAFE_INTEGER });
@@ -241,12 +252,19 @@ export function createFindToolDefinition(
 						if (!insideGitRepo) args.push("--no-require-git");
 						args.push("--max-results", String(effectiveLimit));
 
-						// fd matches only basenames by default. For path-containing patterns, use the
-						// basename as a broad candidate filter, then apply the complete pattern to
-						// normalized relative paths so Windows path separators do not affect matching.
-						const normalizedPattern = pattern.replace(/[\\/]+/g, "/");
-						const pathPattern = normalizedPattern.includes("/") ? normalizedPattern : undefined;
-						const effectivePattern = pathPattern ? path.posix.basename(pathPattern) || "*" : normalizedPattern;
+						// fd --glob matches against the basename unless --full-path is set; in --full-path
+						// mode it matches against the absolute candidate path, so a path-containing
+						// pattern like 'src/**/*.spec.ts' needs a leading '**/' to match anything.
+						let effectivePattern = pattern;
+						if (pattern.includes("/")) {
+							args.push("--full-path");
+							if (!pattern.startsWith("/") && !pattern.startsWith("**/") && pattern !== "**") {
+								effectivePattern = `**/${pattern}`;
+							}
+							// fd matches full paths using native separators on Windows.
+							if (process.platform === "win32")
+								effectivePattern = effectivePattern.replaceAll("/", String.raw`[/\\]`);
+						}
 						args.push("--", effectivePattern, searchPath);
 
 						const child = spawn(fdPath, args, { stdio: ["ignore", "pipe", "pipe"] });
@@ -301,33 +319,23 @@ export function createFindToolDefinition(
 								return;
 							}
 
+							const normalizedPattern = pattern.replace(/[\\/]+/g, "/");
+							const pathPattern = normalizedPattern.includes("/") ? normalizedPattern : undefined;
 							const relativized: string[] = [];
 							for (const rawLine of lines) {
 								const line = rawLine.replace(/\r$/, "").trim();
 								if (!line) continue;
-								const hadTrailingSlash = line.endsWith("/") || line.endsWith("\\");
-								const candidatePath = path.isAbsolute(line) ? line : path.resolve(searchPath, line);
-								const relative = path.relative(searchPath, candidatePath);
-								const isOutside =
-									relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
-								let relativePath = isOutside ? candidatePath : relative;
-								if (!relativePath) relativePath = path.basename(candidatePath);
-								const normalizedRelativePath = toPosixPath(relativePath);
+								const relativePath = relativizeFindResultPath(line, searchPath);
 								if (
 									pathPattern &&
-									!minimatch(
-										path.isAbsolute(pattern) ? toPosixPath(candidatePath) : normalizedRelativePath,
-										pathPattern,
-										{ dot: true, nocase: process.platform === "win32" },
-									)
+									!minimatch(path.isAbsolute(pattern) ? line.replace(/\\/g, "/") : relativePath, pathPattern, {
+										dot: true,
+										nocase: process.platform === "win32",
+									})
 								) {
 									continue;
 								}
-								if (hadTrailingSlash && !normalizedRelativePath.endsWith("/")) {
-									relativized.push(`${normalizedRelativePath}/`);
-								} else {
-									relativized.push(normalizedRelativePath);
-								}
+								relativized.push(relativePath);
 							}
 
 							const resultLimitReached = relativized.length >= effectiveLimit;

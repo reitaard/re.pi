@@ -202,6 +202,14 @@ Recode uses the upstream root `CredentialStore` and `ModelRuntime` architecture 
 
 **Reason:** A single serialized credential authority prevents duplicate refreshes and lets built-in, native, local, and extension providers share the same authentication lifecycle without removing Recode provider capabilities.
 
+## D-028 — v0.84.1 retains V3 runtime and inactive upstream facilities
+
+**Status:** Accepted
+
+The v0.84.1 direct port preserves Recode's V3 JSONL runtime. Clean upstream Session V4 source is retained only as the inactive `@reitaard/repi-agent-core/session-v4` library API; adapters, dual journals, V4 application migration, and SQLite activation are excluded. Telemetry is adopted as a Recode-namespaced passive contract package. Protocol, client, server implementation, evals, and SQLite-backend sources remain in the repository but are not wired into active runtime, CLI, workspace build, manifests, or release artifacts without explicit Creator approval. The intended completed-port release is lockstep Recode `0.83.0`.
+
+**Reason:** This preserves Recode behavior and user sessions while retaining upstream work for separately scoped adoption.
+
 ## Pending decisions
 
 - Final package identity and initial version for the future standalone `recode` repository

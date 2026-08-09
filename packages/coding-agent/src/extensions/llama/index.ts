@@ -48,9 +48,10 @@ export default function llamaExtension(pi: ExtensionAPI): void {
 		client: LlamaClient,
 		catalog?: LlamaModelInfo[],
 	): Promise<LlamaModelInfo[]> => {
-		const current = catalog ?? (await client.list());
+		const signal = AbortSignal.timeout(15_000);
+		const current = catalog ?? (await client.list({ signal }));
 		provider.setCatalog(current, client.serverUrl);
-		await ctx.modelRegistry.refresh();
+		ctx.modelRegistry.refresh();
 		return current;
 	};
 

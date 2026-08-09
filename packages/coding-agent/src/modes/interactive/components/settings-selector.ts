@@ -4,6 +4,7 @@ import {
 	type Component,
 	Container,
 	getCapabilities,
+	type ScrollViewScrollbar,
 	type SelectItem,
 	SelectList,
 	type SelectListLayoutOptions,
@@ -11,9 +12,10 @@ import {
 	SettingsList,
 	Spacer,
 	Text,
+	type TuiMode,
 } from "@reitaard/repi-tui";
 import { formatHttpIdleTimeoutMs, HTTP_IDLE_TIMEOUT_CHOICES } from "../../../core/http-dispatcher.ts";
-import type { DefaultProjectTrust, WarningSettings } from "../../../core/settings-manager.ts";
+import type { DefaultProjectTrust, MermaidRenderingMode, WarningSettings } from "../../../core/settings-manager.ts";
 import {
 	getSelectListTheme,
 	getSettingsListTheme,
@@ -70,6 +72,7 @@ export interface SettingsConfig {
 	terminalTheme: TerminalTheme;
 	availableThemes: string[];
 	hideThinkingBlock: boolean;
+	mermaidRenderingMode: MermaidRenderingMode;
 	aizenRuntime: boolean;
 	showCacheMissNotices: boolean;
 	collapseChangelog: boolean;
@@ -84,6 +87,8 @@ export interface SettingsConfig {
 	defaultProjectTrust: DefaultProjectTrust;
 	clearOnShrink: boolean;
 	showTerminalProgress: boolean;
+	tuiMode: TuiMode;
+	fullscreenScrollbar: ScrollViewScrollbar;
 	warnings: WarningSettings;
 }
 
@@ -104,6 +109,7 @@ export interface SettingsCallbacks {
 	onThemeChange: (theme: string) => void;
 	onThemePreview?: (theme: string) => void;
 	onHideThinkingBlockChange: (hidden: boolean) => void;
+	onMermaidRenderingModeChange: (mode: MermaidRenderingMode) => void;
 	onAizenRuntimeChange: (enabled: boolean) => void;
 	onShowCacheMissNoticesChange: (shown: boolean) => void;
 	onCollapseChangelogChange: (collapsed: boolean) => void;
@@ -118,6 +124,8 @@ export interface SettingsCallbacks {
 	onDefaultProjectTrustChange: (defaultProjectTrust: DefaultProjectTrust) => void;
 	onClearOnShrinkChange: (enabled: boolean) => void;
 	onShowTerminalProgressChange: (enabled: boolean) => void;
+	onTuiModeChange: (mode: TuiMode) => void;
+	onFullscreenScrollbarChange: (mode: ScrollViewScrollbar) => void;
 	onWarningsChange: (warnings: WarningSettings) => void;
 	onCancel: () => void;
 }
@@ -580,6 +588,13 @@ export class SettingsSelectorComponent extends Container {
 				values: ["true", "false"],
 			},
 			{
+				id: "mermaid-rendering",
+				label: "Mermaid diagrams",
+				description: "Render Mermaid code blocks as Unicode diagrams",
+				currentValue: config.mermaidRenderingMode,
+				values: ["off", "final", "streaming"],
+			},
+			{
 				id: "cache-miss-notices",
 				label: "Cache miss notices",
 				description: "Show transcript notices for significant prompt-cache misses",
@@ -783,6 +798,26 @@ export class SettingsSelectorComponent extends Container {
 			values: ["true", "false"],
 		});
 
+		const terminalProgressIndex = items.findIndex((item) => item.id === "terminal-progress");
+		items.splice(
+			terminalProgressIndex + 1,
+			0,
+			{
+				id: "tui-mode",
+				label: "TUI mode",
+				description: "Interface layout; fullscreen mode is experimental",
+				currentValue: config.tuiMode,
+				values: ["regular", "fullscreen"],
+			},
+			{
+				id: "fullscreen-scrollbar",
+				label: "Fullscreen scrollbar",
+				description: "Scrollbar behavior in fullscreen mode",
+				currentValue: config.fullscreenScrollbar,
+				values: ["auto", "always", "hidden"],
+			},
+		);
+
 		// Add borders
 		this.addChild(new DynamicBorder());
 
@@ -828,6 +863,9 @@ export class SettingsSelectorComponent extends Container {
 					}
 					case "hide-thinking":
 						callbacks.onHideThinkingBlockChange(newValue === "true");
+						break;
+					case "mermaid-rendering":
+						callbacks.onMermaidRenderingModeChange(newValue as MermaidRenderingMode);
 						break;
 					case "aizen-runtime":
 						callbacks.onAizenRuntimeChange(newValue === "true");
@@ -876,6 +914,12 @@ export class SettingsSelectorComponent extends Container {
 						break;
 					case "terminal-progress":
 						callbacks.onShowTerminalProgressChange(newValue === "true");
+						break;
+					case "tui-mode":
+						callbacks.onTuiModeChange(newValue as TuiMode);
+						break;
+					case "fullscreen-scrollbar":
+						callbacks.onFullscreenScrollbarChange(newValue as ScrollViewScrollbar);
 						break;
 					case "theme":
 						callbacks.onThemeChange(newValue);

@@ -1,5 +1,22 @@
 # Update Work Log
 
+## 2026-08-09 — Upstream v0.84.1 TUI renderer reconciliation
+
+- Replaced standalone startup and configuration-selector construction of the removed `TUI` class with `TuiMainScreen`.
+- Restored the Recode TUI diagnostics public export while retaining its bounded JSONL crash/slow-render logging implementation.
+- Added the upstream `tuiMode`, fullscreen-scrollbar, and Mermaid rendering settings contracts to Recode settings.
+- Began the interactive renderer composition: `InteractiveMode` now owns a replaceable `TuiMainScreen`/`TuiAltScreen` renderer, stable UI reference, regular/fullscreen component layout, Recode terminal setup, raw capture, Maestro footer status, and right-click paste callback. Terminal setup remains attached to the shared `TUI` interface and therefore survives renderer replacement.
+- Validation remains incomplete. Focused settings tests passed, but interactive/terminal-setup tests cannot resolve the unbuilt local `@reitaard/repi-tui` package; `npm run check` reaches TypeScript and reports remaining TUI caller migrations plus pre-existing AI, extension, and optional SQLite reconciliation errors.
+
+## 2026-08-09 — Upstream v0.84.1 direct-port slices
+
+- Created the exact three-way integration worktree for upstream `v0.84.1` (`53fa77ccd8a279eb87e92294ef3687b03ff80112`) from Recode `agent-harness` base `3be0ded8b9e6880650caae05a6314a7d01ccbe42`.
+- Retained active V3 `SessionManager` JSONL persistence and moved clean upstream Session V4 source/tests to inactive `harness/session-v4`, without adapters, dual persistence, journals, runtime wiring, or SQLite activation.
+- Resolved shared Agent Core, AI, Coding Agent, and TUI source overlaps while preserving Recode namespaces, catastrophic-command safeguards, Windows path behavior, and the V3 Recode session-storage bridge.
+- Added complete upstream telemetry as `@reitaard/repi-telemetry`; retained protocol, client, server implementation, evals, and SQLite backend source files without activating them.
+- Restored existing Recode documentation, optional SQLite files/tests, and TUI test configuration that upstream removed. The Creator selected lockstep `0.83.0`; dependency reconciliation, validation, release preparation, commit/merge, and installation remain pending explicit gates.
+
+
 ## 2026-08-06 — Recode build and release runbook
 
 - Added `docs/RECODE_BUILD_RELEASE.md` as the detailed procedure for development builds, small-model smoke tests, isolated release candidates, version bumps, GitHub assets, npm boundaries, rollback, and failure recovery.

@@ -4,7 +4,9 @@
 		"outDir": "./dist",
 		"paths": {
 			"@reitaard/repi-ai": ["../ai/dist/index.d.ts"],
-			"@reitaard/repi-ai/*": ["../ai/dist/*.d.ts", "../ai/dist/providers/*.d.ts"]
+			"@reitaard/repi-ai/*": ["../ai/dist/*.d.ts", "../ai/dist/providers/*.d.ts"],
+			"@reitaard/repi-telemetry": ["../telemetry/dist/index.d.ts"],
+			"@reitaard/repi-telemetry/*": ["../telemetry/dist/*.d.ts", "../telemetry/dist/testing/*.d.ts"]
 		},
 		"rootDir": "./src"
 	},

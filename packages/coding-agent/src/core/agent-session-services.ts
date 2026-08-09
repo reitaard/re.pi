@@ -98,6 +98,7 @@ function createWorkerExtensionContext(options: CreateAgentSessionFromServicesOpt
 		sessionManager: options.sessionManager,
 		modelRegistry: options.services.modelRegistry,
 		model: resolveCurrentModel(options),
+		scopedModels: options.scopedModels ?? [],
 		isIdle: () => true,
 		isProjectTrusted: () => options.services.settingsManager.isProjectTrusted(),
 		signal: undefined,

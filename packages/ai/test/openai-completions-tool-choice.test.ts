@@ -196,7 +196,7 @@ describe("openai-completions tool_choice", () => {
 	});
 
 	it("maps groq qwen3 reasoning levels to default reasoning_effort", async () => {
-		const model = getModel("groq", "qwen/qwen3-32b")!;
+		const model = getModel("groq", "qwen/qwen3.6-27b")!;
 		let payload: unknown;
 
 		await streamSimple(
@@ -1246,6 +1246,8 @@ describe("openai-completions tool_choice", () => {
 			},
 			{
 				...model.compat,
+				supportsFinishReason: model.compat?.supportsFinishReason ?? false,
+				chatTemplateArgs: model.compat?.chatTemplateArgs ?? {},
 				supportsStore: false,
 				supportsDeveloperRole: false,
 				supportsReasoningEffort: true,
@@ -1366,11 +1368,11 @@ describe("openai-completions tool_choice", () => {
 	});
 
 	it("sends max_tokens for OpenCode completions models", async () => {
-		const cases = [getModel("opencode-go", "kimi-k2.6")!, getModel("opencode", "grok-build-0.1")!] as const;
+		const cases = [getModel("opencode-go", "kimi-k2.6")!, getModel("opencode", "kimi-k2.6")!] as const;
 
 		for (const model of cases) {
 			let payload: unknown;
-			expect(model.compat?.maxTokensField).toBe("max_tokens");
+			expect((model.compat as { maxTokensField?: string } | undefined)?.maxTokensField).toBe("max_tokens");
 
 			await streamSimple(
 				model,

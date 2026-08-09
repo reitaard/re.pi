@@ -2,15 +2,16 @@
  * Print mode (single-shot): Send prompts, output result, exit.
  *
  * Used for:
- * - `recode -p "prompt"` - text output
- * - `recode --mode json "prompt"` - JSON event stream
+ * - `pi -p "prompt"` - text output
+ * - `pi --mode json "prompt"` - JSON event stream
  */
 
 import type { AssistantMessage, ImageContent } from "@reitaard/repi-ai";
 import type { AgentSessionRuntime } from "../core/agent-session-runtime.ts";
-import { flushRawStdout, writeRawStdout } from "../core/output-guard.ts";
+import { flushRawStdout, waitForRawStdoutBackpressure, writeRawStdout } from "../core/output-guard.ts";
 import { createAizenRuntime } from "../core/recode-aizen-runtime.ts";
 import { killTrackedDetachedChildren } from "../utils/shell.ts";
+import { toJsonEvent } from "./json-event.ts";
 
 /**
  * Options for print mode.
@@ -18,7 +19,7 @@ import { killTrackedDetachedChildren } from "../utils/shell.ts";
 export interface PrintModeOptions {
 	/** Output mode: "text" for final response only, "json" for all events */
 	mode: "text" | "json";
-	/** Experimental: route this print or JSON run through Aizen's AgentHarness. */
+	/** Route this print or JSON run through Aizen's AgentHarness. */
 	aizenRuntime?: boolean;
 	/** Array of additional prompts to send after initialMessage */
 	messages?: string[];
@@ -41,9 +42,7 @@ function writeAssistantMessage(message: AssistantMessage): number {
 	}
 
 	for (const content of message.content) {
-		if (content.type === "text") {
-			writeRawStdout(`${content.text}\n`);
-		}
+		if (content.type === "text") writeRawStdout(`${content.text}\n`);
 	}
 	return 0;
 }
@@ -61,6 +60,7 @@ export async function runPrintMode(
 	let exitCode = 0;
 	let session = runtimeHost.session;
 	let unsubscribe: (() => void) | undefined;
+	let unsubscribeBackpressure: (() => void) | undefined;
 	let abortAizenRuntime: (() => Promise<unknown>) | undefined;
 	let disposed = false;
 	const signalCleanupHandlers: Array<() => void> = [];
@@ -69,6 +69,7 @@ export async function runPrintMode(
 		if (disposed) return;
 		disposed = true;
 		unsubscribe?.();
+		unsubscribeBackpressure?.();
 		await runtimeHost.dispose();
 	};
 
@@ -132,11 +133,18 @@ export async function runPrintMode(
 		});
 
 		unsubscribe?.();
+		unsubscribeBackpressure?.();
 		unsubscribe = session.subscribe((event) => {
 			if (mode === "json") {
-				writeRawStdout(`${JSON.stringify(event)}\n`);
+				writeRawStdout(`${JSON.stringify(toJsonEvent(event))}\n`);
 			}
 		});
+		unsubscribeBackpressure =
+			mode === "json"
+				? session.agent.subscribe(async () => {
+						await waitForRawStdoutBackpressure();
+					})
+				: undefined;
 	};
 
 	try {
@@ -152,14 +160,8 @@ export async function runPrintMode(
 				unsubscribe = runtime.subscribe((event) => writeRawStdout(`${JSON.stringify(event)}\n`));
 			}
 			let response: AssistantMessage | undefined;
-
-			if (initialMessage) {
-				response = await runtime.prompt(initialMessage, { images: initialImages });
-			}
-			for (const message of messages) {
-				response = await runtime.prompt(message);
-			}
-
+			if (initialMessage) response = await runtime.prompt(initialMessage, { images: initialImages });
+			for (const message of messages) response = await runtime.prompt(message);
 			return mode === "text" && response ? writeAssistantMessage(response) : 0;
 		}
 

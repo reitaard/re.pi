@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import { writeTuiDiagnostic } from "../src/diagnostics.ts";
 import { ProcessTerminal } from "../src/terminal.ts";
-import { type Component, TUI } from "../src/tui.ts";
+import type { Component } from "../src/tui.ts";
+import { TuiMainScreen } from "../src/tui-main-screen.ts";
 import { VirtualTerminal } from "./virtual-terminal.ts";
 
 class TestComponent implements Component {
@@ -59,7 +60,7 @@ describe("TUI diagnostics", () => {
 	it("records slow render metadata without rendered content", async () => {
 		const root = mkdtempSync(join(tmpdir(), "recode-tui-render-"));
 		const terminal = new VirtualTerminal(40, 10);
-		const tui = new TUI(terminal, undefined, {
+		const tui = new TuiMainScreen(terminal, undefined, {
 			logPath: join(root, "diagnostics.jsonl"),
 			slowRenderThresholdMs: 0,
 		});

@@ -14,6 +14,7 @@ import { handleRepiUpstreamCommand } from "./recode/update/upstream-plan.ts";
 
 process.title = APP_NAME;
 process.env.PI_CODING_AGENT = "true";
+process.env.AI_AGENT = "pi";
 process.emitWarning = (() => {}) as typeof process.emitWarning;
 
 const args = process.argv.slice(2);

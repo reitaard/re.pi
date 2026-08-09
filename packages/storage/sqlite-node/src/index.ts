@@ -3,9 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import type { SqliteDatabase, SqliteDatabaseFactory, SqliteRunResult, SqliteStatement } from "./sqlite/types.ts";
 
 function isNamedParameters(value: unknown): value is Record<string, SQLInputValue> {
-	if (value === null || typeof value !== "object") return false;
-	if (Array.isArray(value) || ArrayBuffer.isView(value)) return false;
-	return true;
+	return value !== null && typeof value === "object" && !Array.isArray(value) && !ArrayBuffer.isView(value);
 }
 
 class NodeSqliteStatement implements SqliteStatement {
@@ -28,20 +26,16 @@ class NodeSqliteStatement implements SqliteStatement {
 
 	async get<TRow extends object>(...params: unknown[]): Promise<TRow | undefined> {
 		const [first, ...rest] = params;
-		return (
-			isNamedParameters(first)
-				? this.statement.get(first, ...(rest as SQLInputValue[]))
-				: this.statement.get(...(params as SQLInputValue[]))
-		) as TRow | undefined;
+		return (isNamedParameters(first)
+			? this.statement.get(first, ...(rest as SQLInputValue[]))
+			: this.statement.get(...(params as SQLInputValue[]))) as TRow | undefined;
 	}
 
 	async all<TRow extends object>(...params: unknown[]): Promise<TRow[]> {
 		const [first, ...rest] = params;
-		return (
-			isNamedParameters(first)
-				? this.statement.all(first, ...(rest as SQLInputValue[]))
-				: this.statement.all(...(params as SQLInputValue[]))
-		) as TRow[];
+		return (isNamedParameters(first)
+			? this.statement.all(first, ...(rest as SQLInputValue[]))
+			: this.statement.all(...(params as SQLInputValue[]))) as TRow[];
 	}
 }
 
@@ -61,7 +55,7 @@ class NodeSqliteDatabase implements SqliteDatabase {
 	}
 
 	async transaction<T>(fn: () => Promise<T>): Promise<T> {
-		this.db.exec("BEGIN");
+		this.db.exec("BEGIN IMMEDIATE");
 		try {
 			const result = await fn();
 			this.db.exec("COMMIT");
@@ -70,7 +64,7 @@ class NodeSqliteDatabase implements SqliteDatabase {
 			try {
 				this.db.exec("ROLLBACK");
 			} catch {
-				// Ignore rollback errors to rethrow original error.
+				// Preserve the transaction error.
 			}
 			throw error;
 		}
@@ -81,17 +75,12 @@ class NodeSqliteDatabase implements SqliteDatabase {
 	}
 }
 
-export function wrapNodeSqliteDatabase(db: DatabaseSync): SqliteDatabase {
-	return new NodeSqliteDatabase(db);
-}
-
 export function createNodeSqliteFactory(): SqliteDatabaseFactory {
 	return {
-		async open(path: string): Promise<SqliteDatabase> {
-			return new NodeSqliteDatabase(new DatabaseSync(path));
+		async open(databasePath: string): Promise<SqliteDatabase> {
+			return new NodeSqliteDatabase(new DatabaseSync(databasePath));
 		},
 	};
 }
 
-// Re-export the SQLite session storage backend and types so this package is a complete node-sqlite backend.
 export * from "./sqlite/index.ts";

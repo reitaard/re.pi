@@ -68,7 +68,7 @@ describe("#6647 compaction retries transient summarization failures", () => {
 				} else {
 					stream.push({
 						type: "done",
-						reason: message.stopReason,
+						reason: message.stopReason === "pending" ? "stop" : message.stopReason,
 						message: { ...message, api: model.api, provider: model.provider, model: model.id },
 					});
 				}

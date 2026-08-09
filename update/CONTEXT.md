@@ -153,6 +153,13 @@ Project MCP configuration is stored in `.mcp.json`.
 - GitHub MCP is connected and exposes repository, code, issue, PR, commit, and release tools.
 - Web research is available independently through web-search and librarian tooling.
 
+## Upstream v0.84.1 direct-port context
+
+- The active port worktree is `C:\Users\re_Lax\Desktop\chat7\re.pi-upstream-0841-direct` on `integrate/upstream-v0.84.1-direct`, based on `agent-harness` commit `3be0ded8b9e6880650caae05a6314a7d01ccbe42` and targeting upstream `v0.84.1` commit `53fa77ccd8a279eb87e92294ef3687b03ff80112`.
+- Recode retains the active V3 `SessionManager` JSONL runtime. Upstream Session V4 is retained only as the inactive `@reitaard/repi-agent-core/session-v4` library surface; no adapter, dual persistence, V4 migration, or SQLite activation is part of this port.
+- Upstream telemetry is retained as the full Recode-namespaced passive contract package. Protocol, client, server implementation, evals, and SQLite-backend sources remain present but inactive until separately approved.
+- The Creator selected lockstep Recode version `0.83.0` for the completed port. Version/changelog changes, release preparation, and global installation remain deferred pending dependency reconciliation, validation, review, and explicit approval.
+
 ## Validation constraints
 
 Repository rules require:

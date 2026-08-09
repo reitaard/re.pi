@@ -1,5 +1,45 @@
 // Core Agent
+
 export { uuidv7 } from "@reitaard/repi-ai";
+export type {
+	AttributeValue,
+	ExactTelemetryAttributes,
+	InferEventAttributes,
+	InferOptionalAttributes,
+	InferRequiredAndOptionalAttributes,
+	InferStartAttributes,
+	RecordedTelemetryEvent,
+	RecordedTelemetrySpan,
+	SchemaTelemetrySpan,
+	SpanAttributes,
+	SpanAttributes as TelemetrySpanAttributes,
+	SpanOptions,
+	SpanStatus,
+	TelemetryAttributeDefinition,
+	TelemetryAttributeMetadata,
+	TelemetryAttributeType,
+	TelemetryContext,
+	TelemetryEventAttributeDefinition,
+	TelemetryEventDefinition,
+	TelemetryParentDefinition,
+	TelemetrySchemaDefinition,
+	TelemetrySchemaSpanEndAttributes,
+	TelemetrySchemaSpanEventAttributes,
+	TelemetrySchemaSpanEventName,
+	TelemetrySchemaSpanName,
+	TelemetrySchemaSpanStartAttributes,
+	TelemetrySchemaSpanUnion,
+	TelemetrySpan,
+	TelemetrySpanDefinition,
+	TelemetryStartAttributeDefinition,
+	TypedSpanStarter,
+} from "@reitaard/repi-telemetry";
+export {
+	createTypedSpanStarter,
+	defineTelemetrySchema,
+	InMemoryTelemetryContext,
+	NOOP_TELEMETRY_CONTEXT,
+} from "@reitaard/repi-telemetry";
 export * from "./agent.ts";
 // Loop functions
 export * from "./agent-loop.ts";
@@ -7,12 +47,18 @@ export * from "./harness/agent-harness.ts";
 export {
 	type BranchPreparation,
 	type BranchSummaryDetails,
+	type BranchSummaryResult,
 	type CollectEntriesResult,
 	collectEntriesForBranchSummary,
+	type FileOperations,
+	type GenerateBranchSummaryOptions,
 	generateBranchSummary,
 	prepareBranchEntries,
 } from "./harness/compaction/branch-summarization.ts";
 export {
+	type CompactionPreparation,
+	type CompactionResult,
+	type CompactionSettings,
 	calculateContextTokens,
 	compact,
 	DEFAULT_COMPACTION_SETTINGS,
@@ -29,6 +75,7 @@ export {
 } from "./harness/compaction/compaction.ts";
 export * from "./harness/messages.ts";
 export * from "./harness/prompt-templates.ts";
+// Harness
 export * from "./harness/session/jsonl-repo.ts";
 export * from "./harness/session/jsonl-storage.ts";
 export * from "./harness/session/memory-repo.ts";
@@ -37,8 +84,32 @@ export * from "./harness/session/repo-utils.ts";
 export * from "./harness/session/session.ts";
 export * from "./harness/skills.ts";
 export * from "./harness/system-prompt.ts";
+export type {
+	AiSpan,
+	AiSpanAttributes,
+	AiSpanEndAttributes,
+	AiSpanEventAttributes,
+	AiSpanEventName,
+	AiSpanName,
+	AiSpanStartAttributes,
+	AiTelemetrySpan,
+	HarnessSpan,
+	HarnessSpanAttributes,
+	HarnessSpanEndAttributes,
+	HarnessSpanEventAttributes,
+	HarnessSpanEventName,
+	HarnessSpanName,
+	HarnessSpanStartAttributes,
+	HarnessTelemetrySpan,
+} from "./harness/telemetry.ts";
+export {
+	AGENT_TELEMETRY_SCHEMAS,
+	AI_TELEMETRY_SCHEMA,
+	HARNESS_TELEMETRY_SCHEMA,
+	startAiSpan,
+	startHarnessSpan,
+} from "./harness/telemetry.ts";
 export * from "./harness/tools/index.ts";
-// Harness
 export * from "./harness/types.ts";
 export * from "./harness/utils/shell-output.ts";
 export * from "./harness/utils/truncate.ts";

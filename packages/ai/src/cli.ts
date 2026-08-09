@@ -48,6 +48,7 @@ async function login(providerId: string): Promise<void> {
 	const rl = createInterface({ input: process.stdin, output: process.stdout });
 	try {
 		const credential = await provider.auth.oauth.login({
+			signal: new AbortController().signal,
 			prompt: (authPrompt) => answerPrompt(rl, authPrompt),
 			notify: (event) => {
 				switch (event.type) {
@@ -80,20 +81,9 @@ async function main(): Promise<void> {
 	const command = args[0];
 	if (!command || command === "help" || command === "--help" || command === "-h") {
 		const providerList = PROVIDERS.map((provider) => `  ${provider.id.padEnd(20)} ${provider.name}`).join("\n");
-		console.log(`Usage: npx @reitaard/repi-ai <command> [provider]
-
-Commands:
-  login [provider]  Login to an OAuth provider
-  list              List available providers
-
-Providers:
-${providerList}
-
-Examples:
-  npx @reitaard/repi-ai login              # interactive provider selection
-  npx @reitaard/repi-ai login anthropic    # login to specific provider
-  npx @reitaard/repi-ai list               # list providers
-`);
+		console.log(
+			`Usage: npx @reitaard/repi-ai <command> [provider]\n\nCommands:\n  login [provider]  Login to an OAuth provider\n  list              List available providers\n\nProviders:\n${providerList}`,
+		);
 		return;
 	}
 	if (command === "list") {

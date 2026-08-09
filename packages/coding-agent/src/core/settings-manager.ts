@@ -1,5 +1,6 @@
 import type { ThinkingLevel } from "@reitaard/repi-agent-core";
 import type { Transport } from "@reitaard/repi-ai";
+import type { ScrollViewScrollbar, TuiMode } from "@reitaard/repi-tui";
 import { randomUUID } from "crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
@@ -53,8 +54,13 @@ export interface ThinkingBudgetsSettings {
 	high?: number;
 }
 
+export type { TuiMode } from "@reitaard/repi-tui";
+
+export type MermaidRenderingMode = "off" | "final" | "streaming";
+
 export interface MarkdownSettings {
 	codeBlockIndent?: string; // default: "  "
+	mermaid?: MermaidRenderingMode; // default: "streaming"
 }
 
 export interface WarningSettings {
@@ -137,6 +143,8 @@ export interface Settings {
 	httpProxy?: string; // Proxy URL applied as HTTP_PROXY and HTTPS_PROXY for Pi-managed HTTP clients
 	httpIdleTimeoutMs?: number; // HTTP header/body idle timeout in milliseconds; 0 disables it
 	websocketConnectTimeoutMs?: number; // WebSocket connect/open handshake timeout in milliseconds; 0 disables it
+	tuiMode?: TuiMode; // default: "regular"
+	fullscreenScrollbar?: ScrollViewScrollbar; // default: "auto"; no effect in regular TUI mode
 }
 
 /** Deep merge settings: project/overrides take precedence, nested objects merge recursively */
@@ -1214,6 +1222,27 @@ export class SettingsManager {
 		this.save();
 	}
 
+	getTuiMode(): TuiMode {
+		return this.settings.tuiMode === "fullscreen" ? "fullscreen" : "regular";
+	}
+
+	setTuiMode(mode: TuiMode): void {
+		this.globalSettings.tuiMode = mode;
+		this.markModified("tuiMode");
+		this.save();
+	}
+
+	getFullscreenScrollbar(): ScrollViewScrollbar {
+		const mode = this.settings.fullscreenScrollbar;
+		return mode === "always" || mode === "hidden" ? mode : "auto";
+	}
+
+	setFullscreenScrollbar(mode: ScrollViewScrollbar): void {
+		this.globalSettings.fullscreenScrollbar = mode;
+		this.markModified("fullscreenScrollbar");
+		this.save();
+	}
+
 	getImageAutoResize(): boolean {
 		return this.settings.images?.autoResize ?? true;
 	}
@@ -1314,6 +1343,18 @@ export class SettingsManager {
 
 	getCodeBlockIndent(): string {
 		return this.settings.markdown?.codeBlockIndent ?? "  ";
+	}
+
+	getMermaidRenderingMode(): MermaidRenderingMode {
+		const mode = this.settings.markdown?.mermaid;
+		return mode === "off" || mode === "final" ? mode : "streaming";
+	}
+
+	setMermaidRenderingMode(mode: MermaidRenderingMode): void {
+		this.globalSettings.markdown ??= {};
+		this.globalSettings.markdown.mermaid = mode;
+		this.markModified("markdown", "mermaid");
+		this.save();
 	}
 
 	getWarnings(): WarningSettings {

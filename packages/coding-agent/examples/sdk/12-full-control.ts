@@ -45,7 +45,9 @@ const resourceLoader: ResourceLoader = {
 	getAgentsFiles: () => ({ agentsFiles: [] }),
 	getSystemPrompt: () => `You are a minimal assistant.
 Available: read, bash. Be concise.`,
+	getSystemPromptSource: () => undefined,
 	getAppendSystemPrompt: () => [],
+	getAppendSystemPromptSources: () => [],
 	extendResources: () => {},
 	reload: async () => {},
 };

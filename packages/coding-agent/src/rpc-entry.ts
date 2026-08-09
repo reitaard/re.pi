@@ -10,6 +10,7 @@ import { recodeOpenAIOAuth } from "./recode-openai-oauth.ts";
 
 process.title = `${APP_NAME}-rpc`;
 process.env.PI_CODING_AGENT = "true";
+process.env.AI_AGENT = "pi";
 process.emitWarning = (() => {}) as typeof process.emitWarning;
 
 await installPiPackageCompatibilityHooks();

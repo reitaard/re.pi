@@ -89,6 +89,7 @@ describe("ExtensionRunner", () => {
 
 	const extensionContextActions: ExtensionContextActions = {
 		getModel: () => undefined,
+		getScopedModels: () => [],
 		isIdle: () => true,
 		isProjectTrusted: () => true,
 		getSignal: () => undefined,

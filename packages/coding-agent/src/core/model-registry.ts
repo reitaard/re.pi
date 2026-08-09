@@ -28,7 +28,9 @@ import { getAgentDir } from "../config.ts";
 import { stripJsonComments } from "../utils/json.ts";
 import { normalizePath } from "../utils/paths.ts";
 import { type AuthStatus, AuthStorage } from "./auth-storage.ts";
+import type { ProviderConfig } from "./extensions/types.ts";
 import type { ModelRuntime } from "./model-runtime.ts";
+import type { ProviderConfigInput as RuntimeProviderConfigInput } from "./provider-composer.ts";
 import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "./provider-display-names.ts";
 import { registerCustomRadiusOAuthProvider } from "./radius.ts";
 import {
@@ -907,6 +909,7 @@ export class ModelRegistry {
 		return apiKeyAuth.resolve({
 			ctx: defaultProviderAuthContext(),
 			credential: credential?.type === "api_key" ? credential : undefined,
+			signal: new AbortController().signal,
 		});
 	}
 
@@ -939,11 +942,12 @@ export class ModelRegistry {
 	 */
 	registerProvider(provider: Provider): void;
 	registerProvider(providerName: string, config: ProviderConfigInput): void;
-	registerProvider(providerOrName: Provider | string, config?: ProviderConfigInput): void {
+	registerProvider(providerName: string, config: ProviderConfig): void;
+	registerProvider(providerOrName: Provider | string, config?: ProviderConfigInput | ProviderConfig): void {
 		if (this.runtime) {
 			if (typeof providerOrName === "string") {
 				if (!config) throw new Error("Provider config is required when registering by name");
-				this.runtime.registerProvider(providerOrName, config);
+				this.runtime.registerProvider(providerOrName, config as RuntimeProviderConfigInput);
 			} else {
 				this.runtime.registerNativeProvider(providerOrName);
 			}
@@ -956,9 +960,10 @@ export class ModelRegistry {
 			return;
 		}
 		if (!config) throw new Error("Provider config is required when registering by name");
-		this.validateProviderConfig(providerOrName, config);
-		this.applyProviderConfig(providerOrName, config);
-		this.upsertRegisteredProvider(providerOrName, config);
+		const legacyConfig = config as ProviderConfigInput;
+		this.validateProviderConfig(providerOrName, legacyConfig);
+		this.applyProviderConfig(providerOrName, legacyConfig);
+		this.upsertRegisteredProvider(providerOrName, legacyConfig);
 	}
 
 	/**
