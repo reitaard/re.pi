@@ -7,6 +7,7 @@ import { createReleaseManifest, RELEASE_MANIFEST_FILENAME, writeReleaseManifest 
 import { assertReleaseIdentity } from "./release-identity.mjs";
 
 const packages = [
+	{ directory: "packages/telemetry", name: "@reitaard/repi-telemetry" },
 	{ directory: "packages/ai", name: "@reitaard/repi-ai" },
 	{ directory: "packages/agent", name: "@reitaard/repi-agent-core" },
 	{ directory: "packages/tui", name: "@reitaard/repi-tui" },
