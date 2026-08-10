@@ -6,6 +6,10 @@
 
 - Added bounded persistent TUI diagnostics for slow renders and render-width invariant failures, plus portable detailed render-debug paths and complete terminal-write capture options.
 
+### Changed
+
+- Increased the default fullscreen mouse-wheel scroll distance from one to three logical lines per event; explicit `wheelScrollLines` overrides remain supported.
+
 ### Fixed
 
 - Fixed `PI_TUI_WRITE_LOG` to create parent directories and capture all `ProcessTerminal` output helpers instead of only differential-render writes.

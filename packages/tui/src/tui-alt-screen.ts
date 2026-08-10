@@ -175,7 +175,7 @@ export class TuiAltScreen extends TuiBase implements ViewportTUI {
 		};
 		this.implicitScrollView = new ScrollView(this.implicitDocument, { follow: "end", primary: true });
 		this.flashes = new AltScreenFlashContainer(() => this.requestRender());
-		this.wheelScrollLines = Math.max(1, Math.floor(options.wheelScrollLines ?? 1));
+		this.wheelScrollLines = Math.max(1, Math.floor(options.wheelScrollLines ?? 3));
 		this.mouseEnabled = options.mouse ?? true;
 		this.openUrl = options.openUrl;
 		this.onRightClickPaste = options.onRightClickPaste;
