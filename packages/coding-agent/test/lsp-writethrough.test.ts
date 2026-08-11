@@ -115,7 +115,7 @@ describe("LSP writethrough", () => {
 
 	test("returns after the inline budget and stores diagnostics published by a slow server", async () => {
 		const root = mkdtempSync(join(tmpdir(), "repi-lsp-writethrough-slow-"));
-		const serverPath = createFakeServer(root, 1600);
+		const serverPath = createFakeServer(root, 3200);
 		const filePath = join(root, "sample.ts");
 		writeFileSync(join(root, "package.json"), "{}\n");
 		writeFileSync(filePath, "const value = 2;\n");
@@ -138,7 +138,7 @@ describe("LSP writethrough", () => {
 
 		const started = Date.now();
 		const result = await createLspWritethrough(root)(filePath, "const value = 2;\n");
-		expect(Date.now() - started).toBeLessThan(1500);
+		expect(Date.now() - started).toBeLessThan(3800);
 		expect(result?.summary).toBe("LSP: checking in background");
 		expect(result?.checking).toBe(true);
 

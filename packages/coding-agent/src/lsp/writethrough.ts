@@ -11,7 +11,7 @@ import {
 } from "./diagnostics.ts";
 import { fileToUri } from "./utils.ts";
 
-const INLINE_DIAGNOSTICS_WAIT_MS = 1_200;
+const INLINE_DIAGNOSTICS_WAIT_MS = 3_000;
 const DEFERRED_DIAGNOSTICS_WAIT_MS = 12_000;
 const SERVER_INITIALIZE_TIMEOUT_MS = 5_000;
 

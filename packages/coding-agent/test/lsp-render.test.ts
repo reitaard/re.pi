@@ -8,7 +8,7 @@ initTheme("dark");
 
 function expectLspMarker(
 	rendered: string[],
-	color: "toolRunningStatus" | "toolSuccessStatus" | "toolErrorStatus",
+	color: "toolPendingStatus" | "toolRunningStatus" | "toolSuccessStatus" | "toolErrorStatus",
 ): void {
 	expect(rendered.every((line) => stripAnsi(line).startsWith("▎"))).toBe(true);
 	expect(rendered.join("\n")).toContain(theme.fg(color, "▎"));
@@ -47,6 +47,7 @@ describe("LSP renderer", () => {
 		expect(output).toContain("const value = 1;");
 		expect(output).toContain("└─ src/consumer.ts 2 results");
 		expect(output).toContain("… 1 more");
+		expectLspMarker(rendered, "toolSuccessStatus");
 	});
 
 	test("renders partial arguments immediately and animates while running", () => {
@@ -79,6 +80,42 @@ describe("LSP renderer", () => {
 		formatLspCall({ action: "references" } as never, theme, { ...baseContext, isPartial: false } as never);
 		expect(state.spinnerInterval).toBeUndefined();
 		vi.useRealTimers();
+	});
+
+	test("renders pending and running full LSP results with matching markers", () => {
+		const result = {
+			content: [{ type: "text", text: "checking" }],
+			details: { action: "diagnostics" as const, servers: [] },
+		};
+		const pending = renderLspResult(result, { expanded: false, isPartial: true }, theme, {
+			args: { action: "diagnostics" },
+			isPartial: true,
+			executionStarted: false,
+			isError: false,
+		} as never).render(80);
+		expectLspMarker(pending, "toolPendingStatus");
+
+		const running = renderLspResult(result, { expanded: false, isPartial: true }, theme, {
+			args: { action: "diagnostics" },
+			isPartial: true,
+			executionStarted: true,
+			isError: false,
+		} as never).render(80);
+		expectLspMarker(running, "toolRunningStatus");
+	});
+
+	test("renders a failed full LSP result with an error marker", () => {
+		const rendered = renderLspResult(
+			{
+				content: [{ type: "text", text: "request failed" }],
+				details: { action: "diagnostics", servers: [] },
+			},
+			{ expanded: false, isPartial: false },
+			theme,
+			{ args: { action: "diagnostics" }, isError: true } as never,
+		).render(80);
+
+		expectLspMarker(rendered, "toolErrorStatus");
 	});
 
 	test("shows the exact character offset used by a completed request", () => {

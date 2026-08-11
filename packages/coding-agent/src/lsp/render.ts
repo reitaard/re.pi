@@ -164,20 +164,30 @@ export function renderLspResult(
 	if (request.query) requestLines.push(theme.fg("dim", `query: ${request.query}`));
 	const stateIcon = context.isError ? theme.fg("toolErrorStatus", "×") : theme.fg("toolSuccessStatus", "✓");
 	const body = formatLspResultLines(result, options, theme, context.isError).split("\n");
+	const statusColor = context.isPartial
+		? context.executionStarted
+			? "toolRunningStatus"
+			: "toolPendingStatus"
+		: context.isError
+			? "toolErrorStatus"
+			: "toolSuccessStatus";
+	const marker = theme.fg(statusColor, "▎");
 	return {
 		render(width: number): string[] {
-			return block.render(
-				{
-					header: `${stateIcon} ${theme.fg("mdLink", "LSP")} ${theme.fg("accent", action)}`,
-					sections: [
-						...(requestLines.length > 0 ? [{ lines: requestLines }] : []),
-						{ label: theme.fg("toolTitle", "Response"), lines: body },
-					],
-					width,
-					borderColor: context.isError ? "toolErrorStatus" : "borderMuted",
-				},
-				theme,
-			);
+			return block
+				.render(
+					{
+						header: `${stateIcon} ${theme.fg("mdLink", "LSP")} ${theme.fg("accent", action)}`,
+						sections: [
+							...(requestLines.length > 0 ? [{ lines: requestLines }] : []),
+							{ label: theme.fg("toolTitle", "Response"), lines: body },
+						],
+						width: Math.max(12, width - 1),
+						borderColor: context.isError ? "toolErrorStatus" : "borderMuted",
+					},
+					theme,
+				)
+				.map((line) => marker + line);
 		},
 		invalidate(): void {
 			block.invalidate();
