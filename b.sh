@@ -51,6 +51,9 @@ if [[ -n "$RUNNING_PROCESSES" ]]; then
 	exit 1
 fi
 
+log "Reinstalling workspace dependencies from package-lock.json"
+npm ci --ignore-scripts
+
 npm run check
 
 TEMP_DIR="${TEMP:-${TMPDIR:-/tmp}}"
