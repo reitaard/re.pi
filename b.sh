@@ -51,6 +51,7 @@ if [[ -n "$RUNNING_PROCESSES" ]]; then
 	exit 1
 fi
 
+export RECODE_WORKSPACE_BIOME_EXE="$(cygpath -w "$ROOT/node_modules/@biomejs/cli-win32-x64/biome.exe")"
 STOPPED_BIOME="$(powershell.exe -NoProfile -NonInteractive -Command '
 $processes = Get-Process -Name biome -ErrorAction SilentlyContinue
 $processes | Stop-Process -Force
