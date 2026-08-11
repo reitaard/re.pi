@@ -51,6 +51,30 @@ if [[ -n "$RUNNING_PROCESSES" ]]; then
 	exit 1
 fi
 
+STOPPED_BIOME="$(powershell.exe -NoProfile -NonInteractive -Command '
+$processes = Get-Process -Name biome -ErrorAction SilentlyContinue
+$processes | Stop-Process -Force
+$target = [IO.Path]::GetFullPath($env:RECODE_WORKSPACE_BIOME_EXE)
+$deadline = [DateTime]::UtcNow.AddSeconds(10)
+while ($true) {
+  try {
+    $stream = [IO.File]::Open($target, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+    $stream.Dispose()
+    break
+  } catch {
+    if ([DateTime]::UtcNow -ge $deadline) {
+      Write-Error "Timed out waiting for Windows to release $target"
+      exit 1
+    }
+    Start-Sleep -Seconds 1
+  }
+}
+$processes.Count
+' | tr -d '\r')"
+if [[ "$STOPPED_BIOME" != "0" ]]; then
+	log "Stopped $STOPPED_BIOME Biome worker(s) before the clean dependency install"
+fi
+
 log "Reinstalling workspace dependencies from package-lock.json"
 npm ci --ignore-scripts
 
