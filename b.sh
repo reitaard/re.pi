@@ -45,10 +45,38 @@ log "Node: $NODE_VERSION"
 
 node scripts/release-identity.mjs --mode branch
 
-RUNNING_PROCESSES="$(powershell.exe -NoProfile -Command 'Get-Process -Name recode,recode-maestro -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Id) $($_.Path)" }' 2>/dev/null || true)"
-if [[ -n "$RUNNING_PROCESSES" ]]; then
-	printf 'b.sh: ERROR: Close running Recode processes before installation:\n%s\n' "$RUNNING_PROCESSES" >&2
-	exit 1
+GLOBAL_ROOT_WIN="$(npm root --global)"
+export RECODE_GLOBAL_CLIPBOARD="${GLOBAL_ROOT_WIN}\\@reitaard\\repi-coding-agent\\node_modules\\@mariozechner\\clipboard-win32-x64-msvc\\clipboard.win32-x64-msvc.node"
+STOPPED_RECODE="$(powershell.exe -NoProfile -NonInteractive -Command '
+$clipboard = $env:RECODE_GLOBAL_CLIPBOARD
+$processes = @(Get-Process -Name recode,recode-maestro -ErrorAction SilentlyContinue)
+if (Test-Path -LiteralPath $clipboard) {
+  $processes += @(Get-Process -Name node -ErrorAction SilentlyContinue | Where-Object {
+    try { $_.Modules | Where-Object { $_.FileName -eq $clipboard } } catch { $false }
+  })
+}
+$processes = @($processes | Sort-Object Id -Unique)
+$processes | Stop-Process -Force
+if (Test-Path -LiteralPath $clipboard) {
+  $deadline = [DateTime]::UtcNow.AddSeconds(10)
+  while ($true) {
+    try {
+      $stream = [IO.File]::Open($clipboard, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+      $stream.Dispose()
+      break
+    } catch {
+      if ([DateTime]::UtcNow -ge $deadline) {
+        Write-Error "Timed out waiting for Windows to release $clipboard"
+        exit 1
+      }
+      Start-Sleep -Seconds 1
+    }
+  }
+}
+$processes.Count
+' | tr -d '\r')"
+if [[ "$STOPPED_RECODE" != "0" ]]; then
+	log "Stopped $STOPPED_RECODE active Recode worker(s) before installation"
 fi
 
 export RECODE_WORKSPACE_BIOME_EXE="$(cygpath -w "$ROOT/node_modules/@biomejs/cli-win32-x64/biome.exe")"
@@ -117,7 +145,6 @@ SMOKE_LAUNCHER="$SMOKE_PREFIX/recode.cmd"
 "$SMOKE_LAUNCHER" --list-models >/dev/null
 
 GLOBAL_PREFIX_WIN="$(npm prefix --global)"
-GLOBAL_ROOT_WIN="$(npm root --global)"
 GLOBAL_PREFIX="$(cygpath -u "$GLOBAL_PREFIX_WIN")"
 GLOBAL_ROOT="$(cygpath -u "$GLOBAL_ROOT_WIN")"
 [[ -d "$GLOBAL_PREFIX" ]] || fail "Windows npm global prefix does not exist: $GLOBAL_PREFIX_WIN"
