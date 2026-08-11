@@ -56,9 +56,9 @@ describe("TuiAltScreen", () => {
 		await terminal.waitForRender();
 		assert.deepStrictEqual(
 			terminal.getViewport().map((line) => line.trimEnd()),
-			["line 4", "line 5", "line 6", "line 7"],
+			["line 2", "line 3", "line 4", "line 5"],
 		);
-		assert.strictEqual(tui.viewportTop, 3);
+		assert.strictEqual(tui.viewportTop, 1);
 		assert.strictEqual(tui.isFollowingOutput, false);
 
 		text.setText(Array.from({ length: 12 }, (_, index) => `line ${index + 1}`).join("\n"));
@@ -66,7 +66,7 @@ describe("TuiAltScreen", () => {
 		await terminal.waitForRender();
 		assert.deepStrictEqual(
 			terminal.getViewport().map((line) => line.trimEnd()),
-			["line 4", "line 5", "line 6", "line 7"],
+			["line 2", "line 3", "line 4", "line 5"],
 		);
 
 		tui.stop();
@@ -97,7 +97,7 @@ describe("TuiAltScreen", () => {
 		await terminal.waitForRender();
 		assert.deepStrictEqual(
 			terminal.getViewport().map((line) => line.trimEnd()),
-			["line 2", "line 3", "line 4", "line 5", "editor", "footer"],
+			["line 1", "line 2", "line 3", "line 4", "editor", "footer"],
 		);
 		assert.strictEqual(transcript.isFollowingEnd, false);
 
@@ -106,7 +106,7 @@ describe("TuiAltScreen", () => {
 		await terminal.waitForRender();
 		assert.deepStrictEqual(
 			terminal.getViewport().map((line) => line.trimEnd()),
-			["line 2", "line 3", "line 4", "line 5", "editor", "footer"],
+			["line 1", "line 2", "line 3", "line 4", "editor", "footer"],
 		);
 
 		tui.scrollToBottom();
@@ -153,11 +153,11 @@ describe("TuiAltScreen", () => {
 
 		terminal.sendInput("\x1b[<64;15;1M");
 		await terminal.waitForRender();
-		assert.strictEqual(left.scrollTop, 3);
+		assert.strictEqual(left.scrollTop, 1);
 		assert.strictEqual(right.scrollTop, 0);
 		assert.deepStrictEqual(
 			terminal.getViewport().map((line) => line.trimEnd()),
-			["a4        b1", "a5        b2", "a6        b3", "a7        b4"],
+			["a2        b1", "a3        b2", "a4        b3", "a5        b4"],
 		);
 		tui.stop();
 	});
@@ -253,7 +253,7 @@ describe("TuiAltScreen", () => {
 
 		terminal.sendInput("\x1b[<65;10;1M");
 		await terminal.waitForRender();
-		assert.strictEqual(scrollView.scrollTop, 3);
+		assert.strictEqual(scrollView.scrollTop, 5);
 		assert.strictEqual(scrollView.isScrollbarVisible, true);
 
 		terminal.sendInput("\x1b[<0;10;2M");
@@ -280,7 +280,7 @@ describe("TuiAltScreen", () => {
 
 		terminal.sendInput("\x1b[<64;10;4M");
 		await terminal.waitForRender();
-		assert.strictEqual(scrollView.scrollTop, 12);
+		assert.strictEqual(scrollView.scrollTop, 10);
 		await new Promise((resolve) => setTimeout(resolve, 70));
 		assert.strictEqual(scrollView.isScrollbarVisible, true);
 		terminal.sendInput("\x1b[<35;9;5M");

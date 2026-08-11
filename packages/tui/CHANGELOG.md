@@ -8,7 +8,7 @@
 
 ### Changed
 
-- Increased the default fullscreen mouse-wheel scroll distance from one to three logical lines per event; explicit `wheelScrollLines` overrides remain supported.
+- Increased the default fullscreen mouse-wheel scroll distance from three to five logical lines per event; explicit `wheelScrollLines` overrides remain supported.
 
 ### Fixed
 
