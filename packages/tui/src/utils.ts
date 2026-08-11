@@ -1013,9 +1013,22 @@ export function applyBackgroundToLine(line: string, width: number, bgFn: (text: 
 	const paddingNeeded = Math.max(0, width - visibleLen);
 	const padding = " ".repeat(paddingNeeded);
 
-	// Apply background to content + padding
 	const withPadding = line + padding;
-	return bgFn(withPadding);
+	if (!withPadding.includes("\x1b[m") && !withPadding.includes("\x1b[0m") && !withPadding.includes("\x1b[49m")) {
+		return bgFn(withPadding);
+	}
+
+	// A child may contain a full SGR reset or background reset. Reapply the
+	// container's background after either reset so it remains active through the
+	// rest of the content and its padding without changing child foregrounds.
+	const marker = "\0";
+	const sample = bgFn(marker);
+	const markerIndex = sample.indexOf(marker);
+	const backgroundPrefix = markerIndex === -1 ? "" : sample.slice(0, markerIndex);
+	const backgroundSafeLine = backgroundPrefix
+		? withPadding.replace(/\x1b\[(?:0?|49)m/g, (reset) => `${reset}${backgroundPrefix}`)
+		: withPadding;
+	return bgFn(backgroundSafeLine);
 }
 
 /**

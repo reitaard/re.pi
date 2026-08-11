@@ -1,6 +1,21 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { visibleWidth, wrapTextWithAnsi } from "../src/utils.ts";
+import { applyBackgroundToLine, visibleWidth, wrapTextWithAnsi } from "../src/utils.ts";
+
+describe("applyBackgroundToLine", () => {
+	it("reapplies the container background after child SGR resets", () => {
+		const background = "\x1b[48;2;40;80;50m";
+		const resetBackground = "\x1b[49m";
+		const bgFn = (text: string) => `${background}${text}${resetBackground}`;
+		const line = "before \x1b[31mred\x1b[0m after \x1b[44mblue background\x1b[49m end";
+
+		const rendered = applyBackgroundToLine(line, 60, bgFn);
+
+		assert.ok(rendered.includes(`\x1b[0m${background} after`));
+		assert.ok(rendered.includes(`\x1b[49m${background} end`));
+		assert.ok(rendered.endsWith(resetBackground));
+	});
+});
 
 describe("wrapTextWithAnsi", () => {
 	describe("underline styling", () => {
