@@ -63,6 +63,31 @@ export function getTextOutput(
 	return output;
 }
 
+/**
+ * Return text tool output for terminal display while retaining only SGR styling.
+ * Other terminal control sequences remain stripped so captured commands cannot
+ * move the cursor, clear the screen, or otherwise alter the Recode TUI.
+ */
+export function getTextDisplayOutput(result: { content: Array<{ type: string; text?: string }> } | undefined): string {
+	if (!result) return "";
+
+	return result.content
+		.filter((content) => content.type === "text")
+		.map((content) => {
+			const text = content.text || "";
+			const sgr = /\x1b\[[\d;]*m/g;
+			let output = "";
+			let cursor = 0;
+			for (const match of text.matchAll(sgr)) {
+				output += sanitizeBinaryOutput(stripAnsi(text.slice(cursor, match.index))).replace(/\r/g, "");
+				output += match[0];
+				cursor = (match.index ?? 0) + match[0].length;
+			}
+			return output + sanitizeBinaryOutput(stripAnsi(text.slice(cursor))).replace(/\r/g, "");
+		})
+		.join("\n");
+}
+
 export type ToolRenderResultLike<TDetails> = {
 	content: (TextContent | ImageContent)[];
 	details: TDetails;

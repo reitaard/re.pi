@@ -356,6 +356,35 @@ describe("ToolExecutionComponent parity", () => {
 		expect(rendered).not.toContain("[Showing lines 2001-4000 of 4000. Full output:");
 	});
 
+	test("preserves captured Bash SGR colours while stripping other terminal controls", () => {
+		const tool = createBashToolDefinition(process.cwd());
+		const component = new ToolExecutionComponent(
+			"bash",
+			"tool-bash-ansi",
+			{ command: "rg --color=always name package.json" },
+			{},
+			tool,
+			createFakeTui(),
+			process.cwd(),
+		);
+		component.setExpanded(true);
+		component.updateResult(
+			{
+				content: [{ type: "text", text: "\u001b[31mred\u001b[0m \u001b[2Jclear" }],
+				details: undefined,
+				isError: false,
+			},
+			false,
+		);
+
+		const rendered = component.render(120).join("\n");
+		expect(rendered).toContain("\u001b[31mred\u001b[0m");
+		expect(rendered).not.toContain("\u001b[2J");
+		expect(rendered).toContain(theme.getBgAnsi("toolSuccessBg"));
+		expect(rendered).toContain(theme.getFgAnsi("toolSuccessStatus"));
+		expect(stripAnsi(rendered)).toContain("red clear");
+	});
+
 	test("does not duplicate built-in headers when passed the active built-in definition", () => {
 		const component = new ToolExecutionComponent(
 			"read",
