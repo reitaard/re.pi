@@ -6,6 +6,14 @@ import { stripAnsi } from "../src/utils/ansi.ts";
 
 initTheme("dark");
 
+function expectLspMarker(
+	rendered: string[],
+	color: "toolRunningStatus" | "toolSuccessStatus" | "toolErrorStatus",
+): void {
+	expect(rendered.every((line) => stripAnsi(line).startsWith("▎"))).toBe(true);
+	expect(rendered.join("\n")).toContain(theme.fg(color, "▎"));
+}
+
 describe("LSP renderer", () => {
 	test("groups references into a collapsed tree card", () => {
 		const component = renderLspResult(
@@ -108,6 +116,7 @@ describe("LSP renderer", () => {
 		expect(output).toContain("Response");
 		expect(rendered.join("\n")).toContain(theme.fg("borderMuted", theme.bold("LSP")));
 		expect(rendered.join("\n")).toContain(theme.fg("accent", "Response"));
+		expectLspMarker(rendered, "toolRunningStatus");
 		expect(rendered.join("\n")).toContain(`${theme.fg("accent", "LSP:")}${theme.fg("warning", " 2 warnings")}`);
 	});
 
@@ -122,6 +131,7 @@ describe("LSP renderer", () => {
 			theme,
 		).render(80);
 		expect(rendered.join("\n")).toContain(`${theme.fg("accent", "LSP:")}${theme.fg("error", " 1 error")}`);
+		expectLspMarker(rendered, "toolErrorStatus");
 	});
 
 	test("renders a successful post-mutation status with a pink prefix and default text", () => {
@@ -135,6 +145,7 @@ describe("LSP renderer", () => {
 			theme,
 		).render(80);
 		expect(rendered.join("\n")).toContain(`${theme.fg("accent", "LSP:")}${theme.fg("toolOutput", " no issues")}`);
+		expectLspMarker(rendered, "toolSuccessStatus");
 	});
 
 	test("renders a pending post-mutation status in yellow", () => {
@@ -151,6 +162,7 @@ describe("LSP renderer", () => {
 		expect(rendered.join("\n")).toContain(
 			`${theme.fg("accent", "LSP:")}${theme.fg("warning", " checking in background")}`,
 		);
+		expectLspMarker(rendered, "toolRunningStatus");
 	});
 
 	test("caches identical card layouts and invalidates explicitly", () => {
