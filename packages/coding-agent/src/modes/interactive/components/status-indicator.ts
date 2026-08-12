@@ -25,6 +25,10 @@ export class StatusIndicator extends Loader {
 	dispose(): void {
 		this.stop();
 	}
+
+	override render(width: number): string[] {
+		return super.render(width).slice(1);
+	}
 }
 
 export class WorkingStatusIndicator extends StatusIndicator {
@@ -78,7 +82,7 @@ export class WorkingStatusIndicator extends StatusIndicator {
 
 	override render(width: number): string[] {
 		const lines = super.render(width);
-		if (this.usesCustomIndicator || lines.length < 2) return lines;
+		if (this.usesCustomIndicator || lines.length === 0) return lines;
 
 		const elapsed = recodeSpinner(this.elapsedRuntime);
 		const elapsedWidth = visibleWidth(elapsed);
@@ -146,7 +150,7 @@ export class SettledStatus implements Component {
 		const availableLeftWidth = Math.max(0, width - visibleWidth(right) - 1);
 		const clippedLeft = truncateToWidth(left, availableLeftWidth, "");
 		const gap = Math.max(1, width - visibleWidth(clippedLeft) - visibleWidth(right));
-		return ["", `${clippedLeft}${" ".repeat(gap)}${right}`];
+		return [`${clippedLeft}${" ".repeat(gap)}${right}`];
 	}
 }
 

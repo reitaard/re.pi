@@ -90,12 +90,12 @@ describe("status indicators", () => {
 		const indicator = new WorkingStatusIndicator(tui, "Working...");
 
 		const initialLines = indicator.render(80).map(stripAnsi);
+		expect(initialLines).toHaveLength(1);
 		expect(initialLines.at(-1)?.endsWith("· 0s")).toBe(true);
-		expect(initialLines.at(-2)).toBe("");
 		vi.advanceTimersByTime(61_000);
 		const elapsedLines = indicator.render(80).map(stripAnsi);
+		expect(elapsedLines).toHaveLength(1);
 		expect(elapsedLines.at(-1)?.endsWith("· 1m 01s")).toBe(true);
-		expect(elapsedLines.at(-2)).toBe("");
 
 		indicator.dispose();
 	});
