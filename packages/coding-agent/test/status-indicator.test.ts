@@ -89,11 +89,13 @@ describe("status indicators", () => {
 		const tui = { requestRender: vi.fn() } as unknown as TUI;
 		const indicator = new WorkingStatusIndicator(tui, "Working...");
 
-		const initialLine = stripAnsi(indicator.render(80).at(-1) ?? "");
-		expect(initialLine.endsWith("· 0s")).toBe(true);
+		const initialLines = indicator.render(80).map(stripAnsi);
+		expect(initialLines.at(-2)?.endsWith("· 0s")).toBe(true);
+		expect(initialLines.at(-1)).toBe("");
 		vi.advanceTimersByTime(61_000);
-		const elapsedLine = stripAnsi(indicator.render(80).at(-1) ?? "");
-		expect(elapsedLine.endsWith("· 1m 01s")).toBe(true);
+		const elapsedLines = indicator.render(80).map(stripAnsi);
+		expect(elapsedLines.at(-2)?.endsWith("· 1m 01s")).toBe(true);
+		expect(elapsedLines.at(-1)).toBe("");
 
 		indicator.dispose();
 	});
