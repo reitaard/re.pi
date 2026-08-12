@@ -77,19 +77,15 @@ export class WorkingStatusIndicator extends StatusIndicator {
 	}
 
 	override render(width: number): string[] {
-		const lines = super.render(width).slice(1);
-		if (lines.length === 0) return lines;
+		const lines = super.render(width);
+		if (this.usesCustomIndicator || lines.length < 2) return lines;
 
-		if (!this.usesCustomIndicator) {
-			const elapsed = recodeSpinner(this.elapsedRuntime);
-			const elapsedWidth = visibleWidth(elapsed);
-			const availableLeftWidth = Math.max(0, width - elapsedWidth - 1);
-			const left = truncateToWidth(lines[lines.length - 1] ?? "", availableLeftWidth, "");
-			const gap = Math.max(1, width - visibleWidth(left) - elapsedWidth);
-			lines[lines.length - 1] = `${left}${" ".repeat(gap)}${elapsed}`;
-		}
-
-		lines.push("");
+		const elapsed = recodeSpinner(this.elapsedRuntime);
+		const elapsedWidth = visibleWidth(elapsed);
+		const availableLeftWidth = Math.max(0, width - elapsedWidth - 1);
+		const left = truncateToWidth(lines[lines.length - 1] ?? "", availableLeftWidth, "");
+		const gap = Math.max(1, width - visibleWidth(left) - elapsedWidth);
+		lines[lines.length - 1] = `${left}${" ".repeat(gap)}${elapsed}`;
 		return lines;
 	}
 
@@ -150,7 +146,7 @@ export class SettledStatus implements Component {
 		const availableLeftWidth = Math.max(0, width - visibleWidth(right) - 1);
 		const clippedLeft = truncateToWidth(left, availableLeftWidth, "");
 		const gap = Math.max(1, width - visibleWidth(clippedLeft) - visibleWidth(right));
-		return [`${clippedLeft}${" ".repeat(gap)}${right}`, ""];
+		return ["", `${clippedLeft}${" ".repeat(gap)}${right}`];
 	}
 }
 
