@@ -40,17 +40,11 @@ describe("re.code generating animation", () => {
 		expect(frames.slice(80, loader.loopFromFrame).some((frame) => !frame.includes("Nucleating"))).toBe(true);
 	});
 
-	it("loops a five-shade lime encrypted band without a Generating label", () => {
+	it("loops a three-shade lime encrypted band without a Generating label", () => {
 		const loop = createRecodeGeneratingLoop(() => 0.25);
 		const frames = loop.frames?.map((frame) => stripAnsi(frame)) ?? [];
 
-		expect(RECODE_LIME_PALETTE.map((color) => color.hex)).toEqual([
-			"#B7F7D1",
-			"#8AF0B1",
-			"#45ED7A",
-			"#34AD61",
-			"#257B4A",
-		]);
+		expect(RECODE_LIME_PALETTE.map((color) => color.hex)).toEqual(["#45ED7A", "#34AD61", "#257B4A"]);
 		expect(loop.intervalMs).toBe(50);
 		expect(frames).toHaveLength(32);
 		for (const frame of frames) {
@@ -67,13 +61,7 @@ describe("re.code generating animation", () => {
 		setCapabilities({ images: null, trueColor: true, hyperlinks: false });
 		initTheme("light", false);
 
-		expect(RECODE_LIGHT_LIME_PALETTE.map((color) => color.hex)).toEqual([
-			"#0F5F55",
-			"#146B55",
-			"#1B754E",
-			"#247A45",
-			"#2F6B3D",
-		]);
+		expect(RECODE_LIGHT_LIME_PALETTE.map((color) => color.hex)).toEqual(["#1B754E", "#247A45", "#2F6B3D"]);
 		expect(recodeSpinner("x")).toContain("\x1b[38;2;27;117;78m");
 	});
 });

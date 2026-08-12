@@ -65,16 +65,12 @@ export const RECODE_SPINNER_VERBS = [
 let previousSpinnerVerb = -1;
 
 export const RECODE_LIME_PALETTE = [
-	{ hex: "#B7F7D1", ansi256: 194 },
-	{ hex: "#8AF0B1", ansi256: 157 },
 	{ hex: "#45ED7A", ansi256: 114 },
 	{ hex: "#34AD61", ansi256: 71 },
 	{ hex: "#257B4A", ansi256: 29 },
 ] as const;
 
 export const RECODE_LIGHT_LIME_PALETTE = [
-	{ hex: "#0F5F55", ansi256: 23 },
-	{ hex: "#146B55", ansi256: 23 },
 	{ hex: "#1B754E", ansi256: 29 },
 	{ hex: "#247A45", ansi256: 29 },
 	{ hex: "#2F6B3D", ansi256: 22 },
@@ -148,7 +144,7 @@ function colorEncryptedCharacters(characters: string[], paletteOffset: number): 
 }
 
 export function recodeSpinner(text: string): string {
-	return limeFg(text, 2);
+	return limeFg(text, 0);
 }
 
 function limeText(text: string, paletteOffset: number): string {

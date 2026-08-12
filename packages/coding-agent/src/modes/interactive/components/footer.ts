@@ -83,10 +83,14 @@ export function formatCwdForFooter(cwd: string, home: string | undefined): strin
 export class FooterComponent implements Component {
 	private session: AgentSession;
 	private footerData: ReadonlyFooterDataProvider;
+	private clockRefreshTimer: ReturnType<typeof setInterval> | undefined;
 
-	constructor(session: AgentSession, footerData: ReadonlyFooterDataProvider) {
+	constructor(session: AgentSession, footerData: ReadonlyFooterDataProvider, requestRender?: () => void) {
 		this.session = session;
 		this.footerData = footerData;
+		if (requestRender) {
+			this.clockRefreshTimer = setInterval(requestRender, 1000);
+		}
 	}
 
 	setSession(session: AgentSession): void {
@@ -110,7 +114,10 @@ export class FooterComponent implements Component {
 	 * Git watcher cleanup now handled by provider.
 	 */
 	dispose(): void {
-		// Git watcher cleanup handled by provider
+		if (this.clockRefreshTimer) {
+			clearInterval(this.clockRefreshTimer);
+			this.clockRefreshTimer = undefined;
+		}
 	}
 
 	render(width: number): string[] {
@@ -260,24 +267,33 @@ export class FooterComponent implements Component {
 		// Add core statuses before extension-controlled statuses; extension cleanup cannot erase core state.
 		const coreStatuses = Array.from(this.footerData.getCoreStatuses?.().entries() ?? []);
 		const extensionStatuses = Array.from(this.footerData.getExtensionStatuses().entries());
-		if (coreStatuses.length > 0 || extensionStatuses.length > 0) {
-			const sortedStatuses = [
-				...coreStatuses,
-				...extensionStatuses.sort(([a], [b]) => {
-					const priorityA = FOOTER_STATUS_PRIORITIES.get(a) ?? Number.MAX_SAFE_INTEGER;
-					const priorityB = FOOTER_STATUS_PRIORITIES.get(b) ?? Number.MAX_SAFE_INTEGER;
-					return priorityA - priorityB || a.localeCompare(b);
-				}),
-			].map(([key, text]) => {
-				const formatted = formatFooterStatus(key, text);
-				if (key === "maestro" && formatted.startsWith("MAESTRO")) {
-					return theme.fg("borderMuted", formatted.replace(" ◆ ", ": "));
-				}
-				return formatted;
-			});
-			const statusLine = sortedStatuses.join("  ");
-			lines.push(truncateToWidth(statusLine, width, theme.fg("footer", "...")));
+		const sortedStatuses = [
+			...coreStatuses,
+			...extensionStatuses.sort(([a], [b]) => {
+				const priorityA = FOOTER_STATUS_PRIORITIES.get(a) ?? Number.MAX_SAFE_INTEGER;
+				const priorityB = FOOTER_STATUS_PRIORITIES.get(b) ?? Number.MAX_SAFE_INTEGER;
+				return priorityA - priorityB || a.localeCompare(b);
+			}),
+		].map(([key, text]) => {
+			const formatted = formatFooterStatus(key, text);
+			if (key === "maestro" && formatted.startsWith("MAESTRO")) {
+				return theme.fg("borderMuted", formatted.replace(" ◆ ", ": "));
+			}
+			return formatted;
+		});
+		const statusLine = sortedStatuses.join("  ");
+		let clock = theme.fg(
+			"muted",
+			new Date().toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" }),
+		);
+		if (visibleWidth(clock) > width) {
+			clock = truncateToWidth(clock, width, "");
 		}
+		const clockWidth = visibleWidth(clock);
+		const availableStatusWidth = Math.max(0, width - clockWidth - (statusLine ? 1 : 0));
+		const leftStatus = truncateToWidth(statusLine, availableStatusWidth, theme.fg("footer", "..."));
+		const gap = Math.max(0, width - visibleWidth(leftStatus) - clockWidth);
+		lines.push(`${leftStatus}${" ".repeat(gap)}${clock}`);
 
 		return lines;
 	}
